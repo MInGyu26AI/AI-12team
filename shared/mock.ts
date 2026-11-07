@@ -1,7 +1,8 @@
 // docs/classification.md "3. 분류 예시 22개"를 그대로 옮긴 목업.
 // 한 문장을 나누는 예시 2개(API 가격, 복합)는 카드 2장씩 → 22문장 = 24장.
 // 팀 종류(해커톤/수업 팀플/공통)가 섞여 있지만 목업에서는 한 팀으로 본다.
-// 기준표에 없는 값(source 시각, "내가"의 실제 이름, confidence)은 목업용으로 채움.
+// 기준표에 없는 값(source 시각, 결정자·"내가"의 실제 이름, confidence)은 목업용으로 채움.
+// 팀원: 김동균·김민규·김단비·김하은. 문장에 이름이 나오는 예시(서준이, 유나)만 기준표대로 이서준·최유나.
 import type { Card, Conflict, PersonalCard, RelatedCard } from "./types";
 
 export const MOCK_TEAM_CODE = "SYNC-2026";
@@ -35,15 +36,15 @@ const personal = (source: string, masked = false, confidence = 0.9): PersonalCar
   status: "candidate",
 });
 
-// 충돌 데모용 기존 결정. 예시 5번 이유에 나오는 '브라우저 확장은 행사 이후' (22개 외 추가)
+// 충돌 데모용 기존 결정 "브라우저 확장은 행사 이후로" (22개 외 추가, 결정자 김하은)
 export const priorMvpDecision: RelatedCard = rel({
-  sentence: "브라우저 확장은 행사 이후에 하자.",
+  sentence: "브라우저 확장은 행사 이후로 하자.",
   subtopic: "작업·결과물",
   tag: "decision",
   topic_key: "MVP 범위",
   is_new_topic: true,
   content: "브라우저 확장 = 행사 이후",
-  owner: "김동균",
+  owner: "김하은",
   source: "ChatGPT, 2026-11-05 20:40",
   status: "approved",
 });
@@ -61,7 +62,7 @@ export const mockCards: Card[] = [
   rel({ sentence: "승인 화면은 카드 형태로 하자.", subtopic: "작업·결과물", tag: "decision", topic_key: "화면 구성", is_new_topic: true,
     content: "승인 화면 = 카드 형태", owner: "김민규", source: at("20:31"), confidence: 0.9, status: "approved" }), // 해커톤 · 확정 표현
   rel({ sentence: "브라우저 확장도 MVP에 넣자.", subtopic: "작업·결과물", tag: "decision", topic_key: "MVP 범위",
-    content: "브라우저 확장 = MVP 포함", owner: "이서준", is_change: true, source: at("21:10"), confidence: 0.85, status: "approved" }), // (헷갈림) 기존 결정과 같은 세부 주제 → 충돌 확인
+    content: "브라우저 확장 = MVP 포함", owner: "김단비", is_change: true, source: at("21:10"), confidence: 0.85, status: "approved" }), // (헷갈림) 기존 결정과 같은 세부 주제 → 충돌 확인
   rel({ sentence: "주제를 청년 주거로 하면 어때?", tag: "none",
     content: "주제를 청년 주거로 제안", source: at("21:14"), confidence: 0.8 }), // (헷갈림) 수업 팀플 · 확정 표현 없음 → 공유 후보 제외
   rel({ sentence: "Claude가 싱크업이라는 이름을 추천했어.", subtopic: "주제·목표", tag: "research", topic_key: "서비스명",

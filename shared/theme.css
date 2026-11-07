@@ -1,0 +1,29 @@
+/* 싱크업 디자인 토큰: 색·간격을 여기 모아둔다. Figma 시안이 나오면 이 값만 바꾼다.
+   Tailwind v4 @theme → bg-subtopic-soft, text-tag-decision, px-page, max-w-page 같은 클래스가 생김.
+   색 규칙(docs/classification.md): 초록=관련성, 보라=소주제, 파랑 계열=표시, 빨강=민감정보 */
+@theme {
+  --color-relevance: #15803d;
+  --color-relevance-soft: #dcfce7;
+  --color-subtopic: #7e22ce;
+  --color-subtopic-soft: #f3e8ff;
+
+  /* 표시(tag): 결정·할 일·조사 각각 다른 색 */
+  --color-tag-decision: #1d4ed8;
+  --color-tag-decision-soft: #dbeafe;
+  --color-tag-todo: #0f766e;
+  --color-tag-todo-soft: #ccfbf1;
+  --color-tag-research: #475569;
+  --color-tag-research-soft: #f1f5f9;
+
+  --color-sensitive: #b91c1c;
+  --color-sensitive-soft: #fee2e2;
+  --color-warn: #a16207; /* 확인 필요 */
+  --color-warn-soft: #fef9c3;
+  --color-change: #c2410c; /* 변경 */
+  --color-change-soft: #ffedd5;
+
+  /* 간격·폭 */
+  --spacing-page: 1rem; /* 화면 좌우 여백 (px-page) */
+  --spacing-section: 2rem; /* 섹션 사이 (space-y-section) */
+  --container-page: 56rem; /* 본문 최대 폭 (max-w-page) */
+}

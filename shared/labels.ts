@@ -1,5 +1,5 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
-// Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록돼 있음.
+// 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
 import type { Card, RelatedCard, Relevance, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
@@ -14,13 +14,19 @@ export const RELEVANCE_LABEL: Record<Relevance, string> = {
   personal: "개인",
 };
 
+export const TAG_COLOR: Record<Tag, string> = {
+  decision: "bg-tag-decision-soft text-tag-decision border-tag-decision/20",
+  todo: "bg-tag-todo-soft text-tag-todo border-tag-todo/20",
+  research: "bg-tag-research-soft text-tag-research border-tag-research/20",
+  none: "bg-muted text-muted-foreground border-border",
+};
+
 export const BADGE_COLOR = {
-  relevance: "bg-green-100 text-green-800 border-green-200", // 관련성=초록
-  subtopic: "bg-purple-100 text-purple-800 border-purple-200", // 소주제=보라
-  tag: "bg-blue-100 text-blue-800 border-blue-200", // 표시=파랑
-  masked: "bg-red-100 text-red-800 border-red-200", // 민감정보=빨강
-  lowConfidence: "bg-amber-100 text-amber-800 border-amber-200",
-  change: "bg-orange-100 text-orange-800 border-orange-200",
+  relevance: "bg-relevance-soft text-relevance border-relevance/20", // 관련성=초록
+  subtopic: "bg-subtopic-soft text-subtopic border-subtopic/20", // 소주제=보라
+  masked: "bg-sensitive-soft text-sensitive border-sensitive/20", // 민감정보=빨강
+  lowConfidence: "bg-warn-soft text-warn border-warn/20",
+  change: "bg-change-soft text-change border-change/20",
 } as const;
 
 export const LOW_CONFIDENCE = 0.6;
