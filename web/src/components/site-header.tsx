@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Inbox, LayoutList } from "lucide-react";
+import { Download, Inbox, LayoutList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/review", label: "개인 검토함", icon: Inbox },
   { href: "/board", label: "팀 보드", icon: LayoutList },
+  { href: "/install", label: "확장 설치", icon: Download },
 ];
 
 export function SiteHeader() {
@@ -18,17 +19,17 @@ export function SiteHeader() {
         <Link href="/board" className="text-lg font-bold tracking-tight">
           싱크업
         </Link>
-        <nav className="flex gap-1">
+        <nav className="flex gap-0.5 sm:gap-1">
           {NAV.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
+                "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground sm:px-2.5",
                 pathname.startsWith(href) && "bg-muted font-medium text-foreground",
               )}
             >
-              <Icon className="size-4" />
+              <Icon className="hidden size-4 sm:block" />
               {label}
             </Link>
           ))}

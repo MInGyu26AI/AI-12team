@@ -8,22 +8,29 @@ import type { RelatedCard } from "@shared/types";
 
 interface BridgeState {
   available: boolean;
+  checked: boolean; // 응답을 충분히 기다렸는지 (false 동안은 "확장 없음"으로 단정하지 않음)
   cards: RelatedCard[];
   userName: string | null;
 }
 
+const WAIT_MS = 1200;
+
 export function useExtensionBridge() {
-  const [state, setState] = useState<BridgeState>({ available: false, cards: [], userName: null });
+  const [state, setState] = useState<BridgeState>({ available: false, checked: false, cards: [], userName: null });
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== window || e.origin !== window.location.origin || !isExtToWeb(e.data)) return;
-      setState({ available: true, cards: e.data.cards, userName: e.data.userName || null });
+      setState({ available: true, checked: true, cards: e.data.cards, userName: e.data.userName || null });
     };
     window.addEventListener("message", onMessage);
     const hello: WebToExt = { source: BRIDGE_FROM_WEB, type: "hello" };
     window.postMessage(hello, window.location.origin);
-    return () => window.removeEventListener("message", onMessage);
+    const timer = setTimeout(() => setState((s) => ({ ...s, checked: true })), WAIT_MS);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      clearTimeout(timer);
+    };
   }, []);
 
   /** 승인·버린 카드를 확장의 검토 대기에서 지움 */

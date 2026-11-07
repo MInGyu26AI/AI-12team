@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { EyeOff, Puzzle, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -163,6 +164,16 @@ export default function ReviewPage() {
           나만 보는 화면이에요. 분류된 후보 중 체크한 카드만 팀 보드에 올라가요.
         </p>
       </div>
+
+      {ext.checked && !ext.available && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
+          <Puzzle className="size-4" />
+          싱크업 확장 프로그램을 설치하면 ChatGPT 대화를 자동으로 가져와요.
+          <Link href="/install" className="font-medium text-foreground underline">
+            설치 방법 보기
+          </Link>
+        </p>
+      )}
 
       <Tabs value={activeTab} onValueChange={(v) => setTab(String(v))} className="gap-3">
         <TabsList className="h-auto w-full flex-wrap sm:w-fit">

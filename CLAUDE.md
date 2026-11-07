@@ -30,6 +30,7 @@
 - 팀 웹: Next.js(App Router), TypeScript, Tailwind, shadcn/ui, lucide-react, Pretendard 폰트, sonner(토스트)
 - 파일 처리: JSZip (ChatGPT 내보내기 zip을 브라우저 안에서 열기)
 - 배포: 웹은 Vercel(Root Directory = web, 환경변수 NEXT_PUBLIC_USE_MOCK·NEXT_PUBLIC_API_URL), 확장 프로그램은 개발자 모드로 직접 설치해 시연(팝업 설정의 "개인 검토함 주소"에 Vercel 주소 입력)
+- 확장 배포: https://syncup-ashen.vercel.app/install 에서 zip 내려받기 → 개발자 모드 설치. 확장을 고치면 extension/package.json 버전을 올리고 `cd extension && npm run zip:web` 후 웹 재배포
 
 ## 5. 폴더 구조
 - /extension : WXT 확장 프로그램
