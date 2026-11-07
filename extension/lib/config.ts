@@ -1,6 +1,8 @@
-// 개인 검토함 웹 주소 기본값. 팝업 설정에서 바꿀 수 있고(우선), 빌드 시 .env 의 WXT_WEB_URL 로도 바꿀 수 있다.
+// 개인 검토함 웹 주소. 우선순위: 팝업 설정 > 빌드 시 .env 의 WXT_WEB_URL > 배포 주소
 export const LOCAL_WEB_URL = 'http://localhost:3000';
-export const DEFAULT_WEB_URL: string = normalizeWebUrl(import.meta.env.WXT_WEB_URL || LOCAL_WEB_URL) ?? LOCAL_WEB_URL;
+export const PRODUCTION_WEB_URL = 'https://syncup-ashen.vercel.app'; // Vercel 배포 (soonsim1007/syncup)
+export const DEFAULT_WEB_URL: string =
+  normalizeWebUrl(import.meta.env.WXT_WEB_URL || PRODUCTION_WEB_URL) ?? PRODUCTION_WEB_URL;
 
 /** "https://x.vercel.app/review/" → "https://x.vercel.app" (잘못된 주소면 null) */
 export function normalizeWebUrl(input: string): string | null {

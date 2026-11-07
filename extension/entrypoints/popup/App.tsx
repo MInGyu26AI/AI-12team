@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SUBTOPICS, type Subtopic } from '@shared/types';
-import { LOCAL_WEB_URL, bridgeSupported, normalizeWebUrl } from '@/lib/config';
+import { LOCAL_WEB_URL, PRODUCTION_WEB_URL, bridgeSupported, normalizeWebUrl } from '@/lib/config';
 import { READ_FAIL_GUIDE, type TabPingResult } from '@/lib/messages';
 import {
   collectStateItem,
@@ -224,7 +224,10 @@ function Setup({
           onChange={setWebUrlInput}
           placeholder="https://syncup-xxxx.vercel.app"
         />
-        <div className="flex gap-2 text-xs">
+        <div className="flex gap-3 text-xs">
+          <button type="button" className="text-gray-500 underline" onClick={() => setWebUrlInput(PRODUCTION_WEB_URL)}>
+            배포 주소 쓰기
+          </button>
           <button type="button" className="text-gray-500 underline" onClick={() => setWebUrlInput(LOCAL_WEB_URL)}>
             로컬 개발 주소 쓰기
           </button>
