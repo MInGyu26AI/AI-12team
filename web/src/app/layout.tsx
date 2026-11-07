@@ -19,7 +19,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="flex min-h-full flex-col bg-muted/30">
         <SiteHeader />
-        <main className="mx-auto w-full max-w-page flex-1 px-page py-6">{children}</main>
+        <main className="mx-auto w-full max-w-content flex-1 px-gutter py-6">{children}</main>
         <Toaster richColors position="top-center" />
       </body>
     </html>

@@ -14,7 +14,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-page items-center justify-between gap-3 px-page">
+      <div className="mx-auto flex h-14 max-w-content items-center justify-between gap-3 px-gutter">
         <Link href="/board" className="text-lg font-bold tracking-tight">
           싱크업
         </Link>

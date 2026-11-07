@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EyeOff, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -21,29 +21,27 @@ export default function ReviewPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [classifying, setClassifying] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [topicKeys, setTopicKeys] = useState<string[]>([]);
-
-  // 기존 세부 주제 목록 (분류기가 "기존 이름 먼저" 쓰도록). 실패해도 분류는 가능
+  // 기존 세부 주제 목록 (분류기가 "기존 이름 먼저" 쓰도록). 실패해도 분류는 가능.
+  // 분류 버튼을 목록 로딩 전에 눌러도 기다렸다가 쓰도록 Promise 로 보관
+  const topicKeysRef = useRef<Promise<string[]> | null>(null);
   useEffect(() => {
-    api
+    topicKeysRef.current = api
       .getBoard()
-      .then((b) => setTopicKeys([...new Set(b.map((c) => c.topic_key).filter((k): k is string => !!k))]))
-      .catch(() => {});
+      .then((b) => [...new Set(b.map((c) => c.topic_key).filter((k): k is string => !!k))])
+      .catch(() => []);
   }, []);
 
-  const classify = (utterances: Utterance[]) => {
+  const classify = async (utterances: Utterance[]) => {
     setClassifying(true);
-    // 목업 분류기는 즉시 끝나지만, 실제 로컬 수집기는 시간이 걸리므로 비동기 흐름 유지
-    setTimeout(() => {
-      try {
-        setCards(mockClassify(utterances, topicKeys));
-        setPicked(new Set());
-      } catch (e) {
-        toast.error(`분류 실패: ${(e as Error).message}`);
-      } finally {
-        setClassifying(false);
-      }
-    }, 300);
+    try {
+      const topicKeys = (await topicKeysRef.current) ?? [];
+      setCards(mockClassify(utterances, topicKeys));
+      setPicked(new Set());
+    } catch (e) {
+      toast.error(`분류 실패: ${(e as Error).message}`);
+    } finally {
+      setClassifying(false);
+    }
   };
 
   const { related, personalCount } = useMemo(() => {
@@ -85,7 +83,7 @@ export default function ReviewPage() {
   };
 
   return (
-    <div className="space-y-section pb-24">
+    <div className="space-y-gap-section pb-24">
       <div>
         <h1 className="text-2xl font-bold">개인 검토함</h1>
         <p className="text-sm text-muted-foreground">
@@ -157,7 +155,7 @@ export default function ReviewPage() {
 
       {/* 하단 고정 공유 바 */}
       <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-page items-center justify-between gap-3 px-page py-3">
+        <div className="mx-auto flex max-w-content items-center justify-between gap-3 px-gutter py-3">
           <p className="text-sm text-muted-foreground">
             <b className="text-foreground">{selected.length}장</b> 선택됨
           </p>

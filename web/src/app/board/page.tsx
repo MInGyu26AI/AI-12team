@@ -61,7 +61,7 @@ export default function BoardPage() {
   };
 
   return (
-    <div className="space-y-section">
+    <div className="space-y-gap-section">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">팀 결정 보드</h1>
@@ -141,7 +141,7 @@ function BoardSections({ cards, total }: { cards: RelatedCard[]; total: number }
   if (!cards.length) return <EmptyState title="이 분류에는 카드가 없어요" />;
 
   return (
-    <div className="space-y-section">
+    <div className="space-y-gap-section">
       {SUBTOPICS.map((subtopic) => {
         const list = cards.filter((c) => (c.subtopic ?? "기타") === subtopic);
         if (!list.length) return null;
