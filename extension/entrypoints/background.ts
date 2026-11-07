@@ -1,7 +1,8 @@
 // 서비스 워커: 수집한 메시지 → 분류 → 개인 버림·민감정보 가림 → 검토 대기 저장 → 아이콘 배지
 import type { RelatedCard } from '@shared/types';
 import { classifyWithFallback } from '@/lib/classifier';
-import type { BgRequest, CollectResult } from '@/lib/messages';
+import type { BgRequest, CollectResult, TabToast } from '@/lib/messages';
+import { selectionMessage } from '@/lib/selection';
 import {
   MAX_REMEMBERED_IDS,
   collectStateItem,
@@ -63,9 +64,41 @@ const updateBadge = (count: number) => {
   browser.action.setBadgeBackgroundColor({ color: '#1d4ed8' });
 };
 
+// ── 우클릭 메뉴 "싱크업에 선택한 내용 보내기" (자동 추출이 안 될 때 시연용 안전장치) ──
+const MENU_ID = 'syncup-send-selection';
+const CHAT_PAGES = ['https://chatgpt.com/*', 'https://chat.openai.com/*'];
+
+const toastTab = (tabId: number | undefined, toast: Omit<TabToast, 'type'>) => {
+  if (tabId !== undefined) browser.tabs.sendMessage(tabId, { type: 'toast', ...toast } satisfies TabToast).catch(() => {});
+};
+
+async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Browser.tabs.Tab) {
+  const msg = selectionMessage(info.selectionText ?? '', tab?.url ?? info.pageUrl ?? '', tab?.title ?? '');
+  if (!msg) return toastTab(tab?.id, { text: '보낼 텍스트를 먼저 드래그해서 선택해 주세요', tone: 'error' });
+  const res = await serial(() => collect({ type: 'collect', trigger: 'selection', messages: [msg] }));
+  toastTab(
+    tab?.id,
+    res.ok
+      ? { text: res.newMessages ? `보냈어요 · 검토 후보 ${res.newCards}장` : '이미 보낸 내용이에요', tone: 'ok' }
+      : { text: res.error, tone: 'error' },
+  );
+}
+
 export default defineBackground(() => {
   pendingItem.getValue().then((p) => updateBadge(p.length));
   pendingItem.watch((p) => updateBadge(p.length));
+
+  browser.runtime.onInstalled.addListener(() => {
+    browser.contextMenus.create({
+      id: MENU_ID,
+      title: '싱크업에 선택한 내용 보내기',
+      contexts: ['selection'],
+      documentUrlPatterns: CHAT_PAGES,
+    });
+  });
+  browser.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === MENU_ID) void sendSelection(info, tab);
+  });
 
   browser.runtime.onMessage.addListener((msg: BgRequest) => {
     if (msg.type === 'collect') return serial(() => collect(msg));

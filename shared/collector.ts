@@ -10,6 +10,7 @@ export interface CollectedMessage {
   id: string; // 사이트의 메시지 id (없으면 내용 해시)
   site: "chatgpt"; // 사이트 추가 시 늘림 (예: "claude")
   role: "user" | "assistant";
+  roleGuessed?: boolean; // 화면에서 화자를 못 읽어 순서로 추정했거나, 드래그 선택이라 사용자로 간주한 경우
   text: string;
   conversationId: string;
   conversationTitle: string;
