@@ -81,13 +81,13 @@ Conflict {
 }
 ```
 
-### 화면 규칙
-- 개인 검토함: relevance=personal과 tag=none은 기본으로 숨기거나 회색 처리
-- confidence < 0.6이면 "확인 필요" 배지
-- masked=true면 "민감정보 가림" 배지
-- is_change=true인 결정은 "변경" 배지
-- 팀 보드: subtopic별 섹션, 그 안에서 topic_key별로 묶어 시간순 표시
-- 색: 관련성=초록, 소주제=보라, 표시(tag)=파랑, 민감정보=빨강 (/shared/labels.ts 에서 관리)
+### 화면 규칙 (디자인 기준: 김민규님 피그마 6개 화면)
+- 화면: 1 첫 화면(/) · 2 팀 만들기(/team/new) · 3 대화 수집(/collect, 백업 입력 /collect/paste) · 4 승인함(/review) · 5 충돌 경고(승인 직후·보드의 '확인하기' 모달) · 6 팀 결정 기록(/board) · 확장 설치(/install)
+- 승인함: 공유 후보(결정·조사·할 일)는 확신도 0.6 이상이면 기본 체크. 개인은 "개인 N개 제외"로만(내용 저장 안 함), tag=none(요청·제안·AI 답변)은 접어서 숨김
+- confidence < 0.6이면 "확인 필요" 배지, masked=true면 "민감정보 가림" 배지, is_change=true인 결정은 "변경" 배지
+- 팀 결정 기록: 왼쪽 topic_key 필터 · 가운데 결정 타임라인(최신순, 충돌 카드 빨간 테두리) · 오른쪽 할 일 체크 + 조사·참고. 맨 위 충돌 배너 → 충돌 모달
+- 충돌 모달: 기존 유지 / 새 결정으로 변경 / 팀에 논의 요청(resolution "discuss", 경고 유지) + 처리 이유(선택)
+- 색 (피그마, /shared/theme.css 토큰): 브랜드·결정=남색 #4F46E5, 조사=초록, 할 일=주황, 개인=회색, 충돌=빨강, 변경=주황빛
 
 ## 7. 기능 목록과 우선순위
 ### [MVP 11/8 필수]
@@ -98,10 +98,12 @@ A. 확장 프로그램 팝업
 B. ChatGPT 대화 자동 추출
   - 설정 기간 중 새로 완료된 발화 단위로 추출(대화마다 버튼 누를 필요 없음)
   - 사이트별 추출 코드는 파일을 분리(ChatGPT 화면 구조가 바뀌면 그 파일만 수정)
-C. 로컬 수집기 연동
-  - Background에서 Native Messaging으로 발화 전달, 후보 카드 조회
-  - 분류 완료 시 팝업의 후보 수 갱신
-D. 개인 검토함 (확장 프로그램 내부의 비공개 승인 화면)
+C. 로컬 수집기 연동 (분류는 김하은님 ai/ — 확장 코드는 하은님 규칙에 맞춘다)
+  - Background에서 Native Messaging으로 발화 전달(NativeClassifyRequest/Response), 실패하면 목업 분류
+  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(ai/syncup_ai/batch.py = shared/batch.ts). 일시중지·종료 시각·수동 보내기 땐 남은 것까지
+  - 민감정보 가림 규칙(ai/syncup_ai/mask.py = shared/classify.ts mask), 충돌 규칙 판정(ai/syncup_ai/conflict.py = shared/conflict.ts)
+  - 분류 완료 시 팝업의 후보 수 갱신 (배지는 공유 후보만 셈)
+D. 승인함 (웹 /review — 확장이 모은 후보 + 붙여넣기 후보, 본인만 보는 비공개 화면)
   - 후보를 결정·할 일·조사(tag)로 표시, 출처와 원문(sentence) 확인·수정
   - 체크한 카드만 /items/approve로 전송
   - 백업 입력 1: 대화 붙여넣기 입력창 (자동 추출 실패 시)
@@ -109,9 +111,9 @@ D. 개인 검토함 (확장 프로그램 내부의 비공개 승인 화면)
     → JSZip으로 브라우저 안에서 열고, 대화 목록(제목·날짜)에서 팀 관련 대화만 선택
     → 원본 파일은 서버에 보내지 않고, 붙여넣기와 같은 로컬 전처리·승인 절차를 거침
 E. 팀 웹
-  - 팀 결정 보드: subtopic별 섹션 → topic_key별 묶음 → 시간순, tag 필터 탭
-  - 충돌 경고: 충돌한 두 결정과 근거 문장을 나란히 표시,
-    '기존 결정 유지 / 새 결정 채택 / 둘 다 유효' 선택 + 처리 이유 입력 → /conflicts/{id}/resolve
+  - 팀 결정 기록: topic_key 필터 · 결정 타임라인 · 할 일 체크 (위 화면 규칙)
+  - 충돌 경고: 충돌한 두 결정과 근거 문장을 나란히 표시, 같음/변경/충돌/무관 중 변경·충돌을 경고(CONFLICT_ON_CHANGE)
+    '기존 유지 / 새 결정으로 변경 / 팀에 논의 요청' + 처리 이유(선택) → /conflicts/{id}/resolve
   - 팀 기록 복사: 팀 결정 기록을 AI에 붙여넣기 좋은 텍스트로 변환해 클립보드 복사
 F. 상태·에러 처리
   - 로컬 수집기 연결 끊김, 분류 실패, 공유 실패, 충돌 검사 대기를 구분해서 표시
@@ -121,10 +123,11 @@ F. 상태·에러 처리
 - '팀 기록 불러오기': 팀 결정 기록을 AI 입력창에 자동으로 채우기(전송은 사용자가 직접)
 
 ## 8. 팀 서버 API (동균님과 형식 확정 전까지 목업으로 개발)
-- POST /items/approve : 승인한 카드와 근거 발췌 전송
+- POST /items/approve : 승인한 카드와 근거 발췌 전송 → 응답 {conflicts}: 하은님 `python -m syncup_ai conflicts` 결과 (cardA 기존, cardB 새 결정)
 - GET  /board?team={code} : 팀 결정 보드 조회
-- GET  /conflicts?team={code} : 충돌 목록 조회
-- POST /conflicts/{id}/resolve : 충돌 해결(resolution, resolutionNote)
+- GET  /conflicts?team={code} : 처리 안 된 충돌 + '논의 요청' 중인 충돌
+- POST /conflicts/{id}/resolve : 충돌 처리(resolution: keep-existing | adopt-new | discuss, resolutionNote)
+- GET /todos/done, POST /items/{id}/done : 할 일 완료 체크 (형식 미정, 동균님과 확정)
 - API 주소는 환경변수로 관리 (웹: NEXT_PUBLIC_API_URL)
 
 ## 9. 개인정보·보안 원칙 (반드시 지킬 것)

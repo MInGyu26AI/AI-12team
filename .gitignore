@@ -26,3 +26,7 @@ web-ext.config.ts
 Thumbs.db
 .vscode/*
 .idea/
+
+# 평가용 샘플·정답표 (민규님 엑셀) — 깃에 올리지 않음
+docs/samples/
+*.xlsx

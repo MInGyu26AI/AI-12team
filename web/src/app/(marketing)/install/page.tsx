@@ -49,7 +49,7 @@ const STEPS = [
     title: "처음 설정",
     body: (
       <>
-        싱크업 아이콘 → 팀 이름 · 프로젝트 주제 · 내 이름 입력 후 저장. 개인 검토함 주소는 이 사이트로 미리 채워져 있어요. 이미
+        싱크업 아이콘 → 팀 이름 · 프로젝트 주제 · 내 이름 입력 후 저장. 승인함 주소는 이 사이트로 미리 채워져 있어요. 이미
         열어 둔 ChatGPT 탭은 새로고침해 주세요.
       </>
     ),
@@ -59,11 +59,11 @@ const STEPS = [
 export default function InstallPage() {
   const built = new Date(release.builtAt).toLocaleDateString("ko-KR");
   return (
-    <div className="space-y-gap-section">
+    <div className="mx-auto max-w-content space-y-gap-section px-gutter py-10">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">확장 프로그램 설치</h1>
         <p className="text-sm text-muted-foreground break-keep">
-          ChatGPT 대화에서 팀 결정·할 일·조사를 자동으로 골라 내 개인 검토함으로 보내 주는 크롬 확장 프로그램이에요.
+          ChatGPT 대화에서 팀 결정·할 일·조사를 자동으로 골라 내 승인함으로 보내 주는 크롬 확장 프로그램이에요.
         </p>
       </div>
 
@@ -74,7 +74,7 @@ export default function InstallPage() {
             크롬 · zip {release.sizeKB}KB · {built} 빌드
           </p>
         </div>
-        <a href="/syncup-extension.zip" download className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}>
+        <a href="/syncup-extension.zip" download className={cn(buttonVariants({ size: "lg" }), "h-10 bg-brand px-4 hover:bg-brand-hover")}>
           <Download />
           확장 프로그램 내려받기
         </a>
@@ -125,14 +125,14 @@ export default function InstallPage() {
             <li>자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화만 읽어요.</li>
             <li>개인 내용은 버리고, 전화번호 같은 민감정보는 가려요.</li>
             <li>
-              팀에는 <Link href="/review" className="underline">개인 검토함</Link>에서 내가 체크해서 공유한 카드만 올라가요.
+              팀에는 <Link href="/review" className="underline">승인함</Link>에서 내가 체크해서 공유한 카드만 올라가요.
             </li>
           </ul>
         </div>
       </section>
 
       <p className="text-sm text-muted-foreground">
-        설치가 됐는지는 <Link href="/review" className="underline">개인 검토함</Link>에서 “확장프로그램에서 가져온 카드” 탭이 보이는지로
+        설치가 됐는지는 <Link href="/collect" className="underline">대화 수집</Link>에서 “브라우저 확장 연결됨” 표시가 보이는지로
         확인할 수 있어요.
       </p>
     </div>

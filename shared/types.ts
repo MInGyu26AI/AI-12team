@@ -52,8 +52,10 @@ export type RelatedCard = RelatedOutput & AppFields;
 export type PersonalCard = PersonalOutput & AppFields;
 export type Card = RelatedCard | PersonalCard;
 
-export type Judgement = "같음" | "변경" | "충돌";
-export type Resolution = "keep-existing" | "adopt-new" | "both-valid";
+// ai/syncup_ai/conflict.py JUDGEMENTS 와 같음. 경고로 보내는 것은 충돌(+ CONFLICT_ON_CHANGE 면 변경)
+export type Judgement = "같음" | "변경" | "충돌" | "무관";
+// discuss = 팀에 논의 요청 (결정을 보류하고 경고를 보드에 남김, 피그마 5번 화면)
+export type Resolution = "keep-existing" | "adopt-new" | "both-valid" | "discuss";
 
 export interface Conflict {
   id: string;
@@ -62,6 +64,7 @@ export interface Conflict {
   cardB: RelatedCard; // 새 결정
   judgement: Judgement;
   reason: string;
+  confidence?: number;
   resolution?: Resolution;
   resolutionNote?: string;
 }

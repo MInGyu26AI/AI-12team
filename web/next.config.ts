@@ -9,9 +9,6 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   outputFileTracingRoot: repoRoot,
-  async redirects() {
-    return [{ source: "/", destination: "/board", permanent: false }];
-  },
   turbopack: {
     root: repoRoot,
     rules: {

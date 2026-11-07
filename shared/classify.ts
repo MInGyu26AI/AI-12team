@@ -20,8 +20,9 @@ export interface ClassifyContext {
 const SENSITIVE: [RegExp, string][] = [
   [/01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/g, "[연락처]"],
   [/[\w.+-]+@[\w-]+\.[\w.]+/g, "[이메일]"],
+  [/\d{6}-?[1-4]\d{6}/g, "[주민번호]"],
   [/\d{3,6}-\d{2,6}-\d{4,8}/g, "[계좌]"], // 날짜(2026-11-06)는 안 걸리게
-];
+]; // ai/syncup_ai/mask.py 와 같은 규칙·순서
 export function mask(text: string) {
   let masked = false;
   let out = text;
@@ -42,10 +43,13 @@ export function splitSentences(text: string): string[] {
 }
 
 // ── 1단계 관련성 ──
-const PERSONAL = /점심|저녁|아침|약속|기분|시험|병원|김밥|편하더라|좋더라|피곤|졸려|데이트|수업 끝나고/;
+// 팀 일정에 영향을 줘도 본인 사정(병원·알바·약속)은 개인 (민규 님 정답표)
+const PERSONAL = /점심|저녁|아침|약속|기분|시험|병원|김밥|편하더라|좋더라|피곤|졸려|데이트|수업 끝나고|알바|본가|잠을 못/;
 
 // ── 3단계 표시 (위에서부터 먼저 맞는 것) ──
-const SUGGESTION = /하면 어때|할까\?|어때\?|어떨까|해 볼까|는 어때/;
+const SUGGESTION = /하면 어때|할까\?|어때\?|어떨까|해 볼까|는 어때|게 어때/;
+// 요청 속에 숨은 결정: "FastAPI 기준으로 코드 짜 줘" → 서버 = FastAPI
+const HIDDEN_DECISION = /\S+\s?기준으로\s.*(?:짜|써|만들어|정리해)\s?줘/;
 // 주의: JS 의 \b 는 한글 뒤에서 동작하지 않으므로 쓰지 않는다
 const RESEARCH = /(?:래|대)(?:[.!]|$)|에 따르면|찾아보니|비교해 보니|랬어|하더라고|추천했어|기억해/;
 const TODO = /할게|해야 해|해야 돼|까지|맡아|해 ?줘|보내 ?줘|만들어야/;
@@ -66,6 +70,7 @@ const SUBTOPIC_RULES: [Subtopic, RegExp][] = [
 const TOPIC_RULES: [string, RegExp][] = [
   ["서비스명", /서비스명|이름/],
   ["타깃", /타깃/],
+  ["브라우저 확장 심사", /웹스토어/],
   ["MVP 범위", /MVP|브라우저 확장/],
   ["분석 방법", /분석/],
   ["화면 구성", /화면/],
@@ -79,23 +84,41 @@ const TOPIC_RULES: [string, RegExp][] = [
   ["경쟁 서비스", /ChatGPT|카나나|경쟁/],
 ];
 
-function pickTag(s: string, speaker: Speaker): Tag | null {
+function pickTag(s: string): Tag | null {
   if (SUGGESTION.test(s)) return "none";
   if (/[가이]\s?(?:맡아|하자)/.test(s)) return "todo"; // "유나가 하자" = 담당 지정
   if (RESEARCH.test(s)) return "research";
+  if (HIDDEN_DECISION.test(s)) return "decision";
   if (TODO.test(s)) return "todo";
-  if (DECISION.test(s)) return speaker === "ai" ? "none" : "decision"; // AI 가 말한 결정은 제안
+  if (DECISION.test(s)) return "decision";
   return null;
 }
 
-function pickOwner(s: string, tag: Tag, ctx: ClassifyContext): string | null {
-  if (/내가|제가/.test(s)) return ctx.userName;
+// "하린" → "정하린" (팀원 이름 목록에서 이름 부분이 맞는 사람)
+function resolveName(given: string, ctx: ClassifyContext): string {
+  return (ctx.knownNames ?? []).find((full) => full === given || (full.length >= 3 && full.slice(1) === given)) ?? given;
+}
+
+/** speakerName = 단톡방 붙여넣기 줄의 화자 ("[유나] …"). 없으면 대화를 보낸 사용자 */
+function pickOwner(s: string, tag: Tag, ctx: ClassifyContext, speakerName?: string): string | null {
+  const speaker = speakerName ? resolveName(speakerName, ctx) : ctx.userName;
+  if (/내가|제가/.test(s)) return speaker;
   for (const full of ctx.knownNames ?? []) {
     const given = full.length >= 3 ? full.slice(1) : full; // "김동균" → "동균"
-    if (s.includes(given)) return full;
+    if (s.includes(given) && full !== speaker) return full; // "지민이가 만들어 주기로" → 박지민
   }
-  return tag === "decision" ? ctx.userName : null; // 결정자 = 말한 사람
+  return tag === "decision" ? speaker : null; // 결정자 = 말한 사람
 }
+
+// 규칙에 없는 세부 주제: 군말("찾아보니", "근데" …)을 건너뛴 첫 낱말에서 조사를 뗀 것
+const FILLER = /^(찾아보니|참고로|근데|그럼|그리고|아|음|난|나|내가|이거|그거|우리|오늘|내일|일단|혹시)$/;
+function fallbackTopic(body: string): string {
+  const word = body.split(/\s+/).find((w) => w && !FILLER.test(w)) ?? body;
+  return word.replace(/(은|는|이|가|을|를|도|랑|이랑)$/, "") || "기타";
+}
+
+const CHAT_LINE = /^\[([^\]\s]{1,10})\]\s*(.+)$/; // 단톡방 한 줄: [하린] 서버는 …
+export const MAX_CARDS_PER_AI_MESSAGE = 2; // config.MAX_CARDS_PER_AI_MESSAGE
 
 const WEEKDAYS = "일월화수목금토";
 const ymd = (d: Date) =>
@@ -132,30 +155,38 @@ export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Car
   const cards: Card[] = [];
 
   for (const u of utterances) {
+    let aiCards = 0;
     for (const raw of splitSentences(u.text)) {
-      const { text: sentence, masked } = mask(raw);
-      const tag = pickTag(sentence, u.speaker);
+      const { text: masked0, masked } = mask(raw);
+      const chat = u.speaker === "user" ? masked0.match(CHAT_LINE) : null;
+      const sentence = masked0;
+      const body = chat ? chat[2]! : masked0;
+      let tag = pickTag(body);
+      // AI 답변은 결정·할 일이 될 수 없음 → 제안 (ai/syncup_ai/classify.py 와 같음)
+      if (u.speaker === "ai" && (tag === "decision" || tag === "todo")) tag = "none";
+      if (u.speaker === "ai" && tag !== null && !PERSONAL.test(body) && ++aiCards > MAX_CARDS_PER_AI_MESSAGE) continue;
       const common = { id: newId(), source: u.source, masked, status: "candidate" as const };
 
-      if (PERSONAL.test(sentence) || tag === null) {
+      // AI 답변의 인사·추천 같은 군말은 카드도 개인도 아님 (해당 없음 → 만들지 않음)
+      if (u.speaker === "ai" && tag === null && !PERSONAL.test(body)) continue;
+      if (PERSONAL.test(body) || tag === null) {
         // 개인: 문장은 저장하지 않는다
-        cards.push({ ...common, relevance: "personal", confidence: PERSONAL.test(sentence) ? 0.85 : 0.5 });
+        cards.push({ ...common, relevance: "personal", confidence: PERSONAL.test(body) ? 0.85 : 0.5 });
         continue;
       }
 
       let subtopic: Subtopic | null =
         tag === "none"
           ? null
-          : (SUBTOPIC_RULES.find(([, re]) => re.test(sentence))?.[0] ??
+          : (SUBTOPIC_RULES.find(([, re]) => re.test(body))?.[0] ??
             (tag === "todo" ? "역할·일정" : tag === "research" ? "자료 조사" : "기타"));
       if (subtopic && enabled && !enabled.has(subtopic)) subtopic = "기타"; // 꺼 둔 소주제
       const topic_key =
         tag === "none"
           ? null
-          : (TOPIC_RULES.find(([, re]) => re.test(sentence))?.[0] ??
-            sentence.split(/\s/)[0]!.replace(/(은|는|이|가|을|를|도)$/, ""));
-      const owner = tag === "decision" || tag === "todo" ? pickOwner(sentence, tag, ctx) : null;
-      const due = tag === "todo" ? pickDue(sentence, baseDate(u.source)) : null;
+          : (TOPIC_RULES.find(([, re]) => re.test(body))?.[0] ?? fallbackTopic(body));
+      const owner = tag === "decision" || tag === "todo" ? pickOwner(body, tag, ctx, chat?.[1]) : null;
+      const due = tag === "todo" ? pickDue(body, baseDate(u.source)) : null;
 
       let confidence = 0.8;
       if (tag === "todo" && !owner) confidence = 0.5; // 담당 미정 → 확인 필요
@@ -169,11 +200,11 @@ export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Car
         tag,
         topic_key,
         is_new_topic: topic_key ? !known.has(topic_key) : false,
-        content: sentence.replace(/[.?!]+$/, ""),
+        content: body.replace(/[.?!]+$/, ""),
         reason: null,
         owner,
         due,
-        is_change: tag === "decision" && CHANGE.test(sentence),
+        is_change: tag === "decision" && CHANGE.test(body),
         confidence: Math.round(confidence * 100) / 100,
       };
       if (topic_key) known.add(topic_key);

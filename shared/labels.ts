@@ -1,6 +1,6 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
-import type { Card, RelatedCard, Relevance, Tag } from "./types";
+import type { Card, Judgement, RelatedCard, Relevance, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
   decision: "결정",
@@ -18,7 +18,24 @@ export const TAG_COLOR: Record<Tag, string> = {
   decision: "bg-tag-decision-soft text-tag-decision border-tag-decision/20",
   todo: "bg-tag-todo-soft text-tag-todo border-tag-todo/20",
   research: "bg-tag-research-soft text-tag-research border-tag-research/20",
-  none: "bg-muted text-muted-foreground border-border",
+  none: "bg-tag-personal-soft text-tag-personal border-transparent",
+};
+
+// 승인함 카드 테두리 (피그마 4번: 결정 남색 · 할 일 주황 · 조사 초록)
+export const TAG_BORDER: Record<Tag, string> = {
+  decision: "border-tag-decision/70",
+  todo: "border-tag-todo/70",
+  research: "border-tag-research/70",
+  none: "border-border",
+};
+export const PERSONAL_COLOR = "bg-tag-personal-soft text-tag-personal border-transparent";
+
+// 충돌 판정 배지 (변경도 경고로 보여 주되 색으로 구분)
+export const JUDGEMENT_COLOR: Record<Judgement, string> = {
+  충돌: "bg-sensitive-soft text-sensitive",
+  변경: "bg-change-soft text-change",
+  같음: "bg-muted text-muted-foreground",
+  무관: "bg-muted text-muted-foreground",
 };
 
 export const BADGE_COLOR = {

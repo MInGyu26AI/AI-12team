@@ -9,4 +9,4 @@ export const api: TeamApi = USE_MOCK
   ? createMockApi()
   : createRealApi(process.env.NEXT_PUBLIC_API_URL ?? "");
 
-export type { ConflictChoice, TeamApi } from "./types";
+export type { ApproveResult, ConflictChoice, TeamApi } from "./types";

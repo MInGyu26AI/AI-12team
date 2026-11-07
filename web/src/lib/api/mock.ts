@@ -1,22 +1,22 @@
 // 가짜 팀 서버. 브라우저 localStorage 에 저장해서 새로고침해도 승인한 카드가 남는다.
-// (localStorage 를 못 쓰는 환경이면 메모리에만 저장)
-// 충돌은 서버가 하듯 "같은 topic_key 의 결정인데 내용이 다르면" 그때그때 계산한다.
-import { mockCards } from "@shared/mock";
-import { isShareable } from "@shared/labels";
-import type { Conflict, RelatedCard } from "@shared/types";
+// 충돌 판정은 하은 님 ai/syncup_ai/conflict.py 의 규칙 판정(shared/conflict.ts)과 같다.
+import { checkNewCards } from "@shared/conflict";
+import { MOCK_DONE_TODOS, mockCards } from "@shared/mock";
+import type { Conflict, RelatedCard, Resolution } from "@shared/types";
 import type { TeamApi } from "./types";
 
-const KEY = "syncup:mock-board:v1";
+const KEY = "syncup:mock-board:v2";
 
 interface State {
-  board: RelatedCard[]; // approved + dismissed(충돌 해결로 밀려난 결정)
-  notes: Record<string, string>;
+  board: RelatedCard[]; // approved + dismissed(충돌 처리로 밀려난 결정), 승인 순서대로
+  resolutions: Record<string, { resolution: Resolution; note?: string }>;
+  done: string[]; // 완료한 할 일 id
 }
 
 const seed = (): State => ({
-  // 분류 예시 22개 중 공유 가능한 것 = 이미 승인된 팀 보드
-  board: mockCards.filter(isShareable).map((c) => ({ ...c, status: "approved" })),
-  notes: {},
+  board: mockCards.map((c) => ({ ...c, status: "approved" })),
+  resolutions: {},
+  done: [...MOCK_DONE_TODOS],
 });
 
 let memory: State | null = null;
@@ -45,61 +45,62 @@ export function resetMockData() {
 
 // 주소에 ?mockFail 을 붙이면 실패 화면 확인용으로 일부러 실패
 const delay = async () => {
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 300));
   if (typeof window !== "undefined" && window.location.search.includes("mockFail")) {
     throw new Error("목업 서버 실패 (?mockFail)");
   }
 };
 
-const same = (a: string, b: string) => a.replace(/\s/g, "") === b.replace(/\s/g, "");
+const approved = (s: State) => s.board.filter((c) => c.status === "approved");
 
-export function findConflicts(board: RelatedCard[]): Conflict[] {
-  const decisions = board.filter((c) => c.status === "approved" && c.tag === "decision" && c.topic_key);
-  const byTopic = Map.groupBy(decisions, (c) => c.topic_key!);
-  const conflicts: Conflict[] = [];
-  for (const [topic_key, list] of byTopic) {
-    const [first, ...rest] = list;
-    for (const later of rest) {
-      if (same(first!.content, later.content)) continue;
-      conflicts.push({
-        id: `${first!.id}__${later.id}`,
-        topic_key,
-        cardA: first!,
-        cardB: later,
-        judgement: later.is_change ? "변경" : "충돌",
-        reason: `같은 세부 주제(${topic_key})에 서로 다른 결정이 있어요`,
-      });
-    }
-  }
-  return conflicts;
+/** 보드의 결정을 승인 순서대로 다시 판정 → 아직 처리 안 된 경고 (논의 요청 중인 것 포함) */
+function openConflicts(s: State): Conflict[] {
+  return checkNewCards(approved(s), [])
+    .filter((x) => {
+      const r = s.resolutions[x.id]?.resolution;
+      return !r || r === "discuss";
+    })
+    .map((x) => ({ ...x, ...s.resolutions[x.id] }));
 }
 
 export function createMockApi(): TeamApi {
   return {
     async approveItems(cards) {
       await delay();
-      const state = load();
-      const ids = new Set(state.board.map((c) => c.id));
+      const s = load();
+      const ids = new Set(s.board.map((c) => c.id));
       const added = cards.filter((c) => !ids.has(c.id)).map((c) => ({ ...c, status: "approved" as const }));
-      save({ ...state, board: [...state.board, ...added] });
+      const conflicts = checkNewCards(added, approved(s)); // 서버의 /items/approve 충돌 검사
+      save({ ...s, board: [...s.board, ...added] });
+      return { conflicts };
     },
     async getBoard() {
       await delay();
-      return load().board.filter((c) => c.status === "approved");
+      return approved(load());
     },
     async getConflicts() {
       await delay();
-      return findConflicts(load().board);
+      return openConflicts(load());
     },
     async resolveConflict(id, choice, note) {
       await delay();
-      const state = load();
+      const s = load();
       const [aId, bId] = id.split("__");
-      const loser = choice === "keep-existing" ? bId : aId; // 밀려난 결정은 보드에서 내림
+      // 기존 유지 → 새 결정을 내림 / 새 결정으로 변경 → 기존 결정을 내림 / 논의 요청 → 둘 다 두고 경고 유지
+      const loser = choice === "keep-existing" ? bId : choice === "adopt-new" ? aId : null;
       save({
-        board: state.board.map((c) => (c.id === loser ? { ...c, status: "dismissed" } : c)),
-        notes: note ? { ...state.notes, [id]: note } : state.notes,
+        ...s,
+        board: s.board.map((c) => (c.id === loser ? { ...c, status: "dismissed" } : c)),
+        resolutions: { ...s.resolutions, [id]: { resolution: choice, ...(note ? { note } : {}) } },
       });
+    },
+    async getDoneTodos() {
+      await delay();
+      return load().done;
+    },
+    async setTodoDone(id, done) {
+      const s = load();
+      save({ ...s, done: done ? [...new Set([...s.done, id])] : s.done.filter((x) => x !== id) });
     },
   };
 }

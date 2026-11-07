@@ -1,16 +1,28 @@
 import { useEffect, useState } from 'react';
+import { countTurns } from '@shared/batch';
+import { isShareable } from '@shared/labels';
 import { SUBTOPICS, type Subtopic } from '@shared/types';
 import { LOCAL_WEB_URL, PRODUCTION_WEB_URL, bridgeSupported, normalizeWebUrl } from '@/lib/config';
 import { READ_FAIL_GUIDE, type TabPingResult } from '@/lib/messages';
 import {
+  bufferItem,
   collectStateItem,
+  endsAtOf,
   isConfigured,
+  isEnded,
   pendingItem,
   settingsItem,
+  turnsOf,
   webUrlOf,
   type CollectState,
   type Settings,
 } from '@/lib/settings';
+
+// <input type="datetime-local"> 값 ↔ ISO
+const toLocalInput = (d: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 import { SITES } from '@/lib/sites';
 
 type TabStatus =
@@ -23,17 +35,23 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [state, setState] = useState<CollectState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [bufferedTurns, setBufferedTurns] = useState(0);
+  const [flushing, setFlushing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<TabStatus>({ kind: 'checking' });
 
   useEffect(() => {
+    const countShareable = (p: Parameters<Parameters<typeof pendingItem.watch>[0]>[0]) =>
+      setPendingCount(p.filter(isShareable).length); // '해당 없음'은 세지 않음
     settingsItem.getValue().then(setSettings);
     collectStateItem.getValue().then(setState);
-    pendingItem.getValue().then((p) => setPendingCount(p.length));
+    pendingItem.getValue().then(countShareable);
+    bufferItem.getValue().then((b) => setBufferedTurns(countTurns(b)));
     const un = [
       settingsItem.watch(setSettings),
       collectStateItem.watch(setState),
-      pendingItem.watch((p) => setPendingCount(p.length)),
+      pendingItem.watch(countShareable),
+      bufferItem.watch((b) => setBufferedTurns(countTurns(b))),
     ];
     checkTab().then(setTab);
     return () => un.forEach((f) => f());
@@ -55,10 +73,20 @@ export default function App() {
     );
   }
 
-  const toggle = () => {
-    const next = { ...settings, autoCollect: !settings.autoCollect };
+  const save = (patch: Partial<Settings>) => {
+    const next = { ...settings, ...patch };
     setSettings(next); // 화면은 바로 반영, 저장은 뒤따라
     void settingsItem.setValue(next);
+  };
+  const toggle = () =>
+    // 종료 시각이 지난 뒤 다시 켜면 종료 시각을 지운다
+    save({ autoCollect: !settings.autoCollect, ...(!settings.autoCollect && isEnded(settings) ? { endsAt: null } : {}) });
+  const turns = turnsOf(settings);
+  const end = endsAtOf(settings);
+  const flush = async () => {
+    setFlushing(true);
+    await browser.runtime.sendMessage({ type: 'flush' }).catch(() => {});
+    setFlushing(false);
   };
 
   return (
@@ -90,10 +118,54 @@ export default function App() {
         <span className="relative h-6 w-11 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-tag-decision after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5" />
       </label>
 
+      <section className="space-y-2 rounded-lg border p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span>대화</span>
+          <span className="flex items-center rounded-md border">
+            <button className="px-2 py-0.5 text-gray-500" onClick={() => save({ turnsPerBatch: Math.max(1, turns - 1) })} aria-label="줄이기">
+              −
+            </button>
+            <b className="w-7 text-center text-brand">{turns}</b>
+            <button className="px-2 py-0.5 text-gray-500" onClick={() => save({ turnsPerBatch: Math.min(50, turns + 1) })} aria-label="늘리기">
+              +
+            </button>
+          </span>
+          <span className="flex-1 text-xs text-gray-600">회마다 분류해 검토함에 올려요</span>
+        </div>
+        <label className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-gray-600">수집 종료 시각</span>
+          <input
+            type="datetime-local"
+            value={end ? toLocalInput(end) : ''}
+            onChange={(e) => save({ endsAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
+            className="rounded-md border px-1.5 py-1"
+          />
+        </label>
+        {end && (
+          <p className={`text-xs ${isEnded(settings) ? 'text-sensitive' : 'text-gray-500'}`}>
+            {isEnded(settings)
+              ? '종료 시각이 지나 수집을 멈췄어요. 다시 켜면 종료 시각이 지워져요.'
+              : `${end.toLocaleString('ko-KR')}에 남은 대화를 보내고 수집을 멈춰요`}
+          </p>
+        )}
+      </section>
+
       <section className="space-y-1 rounded-lg bg-gray-50 p-3">
         <p>
           ChatGPT 대화 메시지 <b>{state.collectedCount}개</b> 수집됨
         </p>
+        <div className="flex items-center justify-between gap-2">
+          <p>
+            다음 분류까지 대화 <b>{bufferedTurns}</b>/{turns}회
+          </p>
+          <button
+            className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40"
+            disabled={!bufferedTurns || flushing}
+            onClick={flush}
+          >
+            {flushing ? '분류 중…' : '지금 분류하기'}
+          </button>
+        </div>
         <p>
           검토 대기 카드 <b className="text-tag-decision">{pendingCount}개</b>
         </p>
