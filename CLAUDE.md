@@ -36,34 +36,46 @@
 - /web : Next.js 팀 웹
 - /shared : 두 프로젝트가 같이 쓰는 타입 정의(카드, 충돌 등)와 목업 데이터
 
-## 6. 데이터 형식 (하은님·동균님과 최종 확정 필요, 우선 이 형식으로 목업 개발)
+## 6. 데이터 형식 (팀 확정 분류 기준표 형식, 코드는 /shared/types.ts)
 ```
 Card {
   id: string
-  category: "결정" | "조사" | "할 일" | "제안" | "개인"
-  topic: "서비스명" | "타깃 사용자" | "핵심 기능" | "MVP 범위" | "기술 스택" | "역할 분담" | "일정·마감" | "발표 구성" | "기타"
+  sentence: string | null  // 대화 원문. relevance=personal이면 저장하지 않음(null)
+  relevance: "related" | "personal"
+  subtopic: "주제·목표" | "자료 조사" | "작업·결과물" | "역할·일정" | "과제 조건·피드백" | "발표·제출" | "기타"
+  tag: "decision" | "todo" | "research" | "none"   // none(제안)은 공유 후보에서 제외
+  topic_key: string        // 세부 주제. 같은 topic_key의 decision끼리만 충돌 비교
+  is_new_topic: boolean
   content: string          // 핵심 내용 요약
-  evidence: string         // 대화 원문 발췌
-  speaker: "user" | "ai"   // 근거 문장의 화자
-  source: "chatgpt-web" | "codex" | "claude-code" | "paste" | "export"
-  author: string           // 팀원 이름
-  assignee?: string        // 할 일일 때
-  due?: string             // 할 일일 때
-  createdAt: string
+  reason: string | null
+  owner: string | null     // 결정자 또는 할 일 담당자
+  due: string | null       // YYYY-MM-DD
+  is_change: boolean       // 기존 결정을 바꾸는 표현
+  source: string           // 예: "ChatGPT, 2026-11-06 21:10"
+  masked: boolean          // 민감정보 가림 여부
+  confidence: number       // 0~1
   status: "candidate" | "approved" | "dismissed"
 }
 Conflict {
   id: string
-  topic: string
-  cardA: Card
-  cardB: Card
+  topic_key: string        // 충돌한 두 카드의 공통 topic_key
+  cardA: Card              // 기존 결정
+  cardB: Card              // 새 결정
   judgement: "같음" | "변경" | "충돌"
   reason: string
   resolution?: "keep-existing" | "adopt-new" | "both-valid"
   resolutionNote?: string
 }
 ```
-규칙: AI가 추천만 한 내용은 '제안'으로 분류(사용자가 동의해야 '결정')
+규칙: AI가 추천만 했거나 아직 합의되지 않은 제안은 tag=none (사용자가 동의해야 decision)
+
+### 화면 규칙
+- 개인 검토함: relevance=personal과 tag=none은 기본으로 숨기거나 회색 처리
+- confidence < 0.6이면 "확인 필요" 배지
+- masked=true면 "민감정보 가림" 배지
+- is_change=true인 결정은 "변경" 배지
+- 팀 보드: subtopic별 섹션, 그 안에서 topic_key별로 묶어 시간순 표시
+- 색: 관련성=초록, 소주제=보라, 표시(tag)=파랑, 민감정보=빨강 (/shared/labels.ts 에서 관리)
 
 ## 7. 기능 목록과 우선순위
 ### [MVP 11/8 필수]
@@ -78,14 +90,14 @@ C. 로컬 수집기 연동
   - Background에서 Native Messaging으로 발화 전달, 후보 카드 조회
   - 분류 완료 시 팝업의 후보 수 갱신
 D. 개인 검토함 (확장 프로그램 내부의 비공개 승인 화면)
-  - 후보를 결정·조사·할 일로 표시, 출처와 화자별 근거 확인·수정
+  - 후보를 결정·할 일·조사(tag)로 표시, 출처와 원문(sentence) 확인·수정
   - 체크한 카드만 /items/approve로 전송
   - 백업 입력 1: 대화 붙여넣기 입력창 (자동 추출 실패 시)
   - 백업 입력 2: ChatGPT 내보내기 zip 또는 conversations.json 업로드
     → JSZip으로 브라우저 안에서 열고, 대화 목록(제목·날짜)에서 팀 관련 대화만 선택
     → 원본 파일은 서버에 보내지 않고, 붙여넣기와 같은 로컬 전처리·승인 절차를 거침
 E. 팀 웹
-  - 팀 결정 보드: 주제별·시간순 목록, 분류 필터 탭
+  - 팀 결정 보드: subtopic별 섹션 → topic_key별 묶음 → 시간순, tag 필터 탭
   - 충돌 경고: 충돌한 두 결정과 근거 문장을 나란히 표시,
     '기존 결정 유지 / 새 결정 채택 / 둘 다 유효' 선택 + 처리 이유 입력 → /conflicts/{id}/resolve
   - 팀 기록 복사: 팀 결정 기록을 AI에 붙여넣기 좋은 텍스트로 변환해 클립보드 복사

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../../shared";
 
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, system-ui, sans-serif;
