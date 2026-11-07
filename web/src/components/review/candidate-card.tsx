@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Hash, User } from "lucide-react";
+import { CalendarDays, Hash, User, X } from "lucide-react";
 import type { RelatedCard } from "@shared/types";
 import { CardBadges } from "@/components/card-badges";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,9 +12,10 @@ interface Props {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   onContentChange: (content: string) => void;
+  onDismiss?: () => void; // 버리기 (확장에서 온 카드는 검토 대기에서도 지움)
 }
 
-export function CandidateCard({ card: c, checked, onCheckedChange, onContentChange }: Props) {
+export function CandidateCard({ card: c, checked, onCheckedChange, onContentChange, onDismiss }: Props) {
   const suggestion = c.tag === "none"; // 제안 → 공유 후보 아님, 체크 불가
   const id = `pick-${c.id}`;
 
@@ -37,7 +38,20 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardBadges card={c} />
-          {suggestion && <span className="text-xs font-medium">공유 후보 아님</span>}
+          <div className="flex items-center gap-2">
+            {suggestion && <span className="text-xs font-medium">공유 후보 아님</span>}
+            {onDismiss && (
+              <button
+                type="button"
+                onClick={onDismiss}
+                className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="이 카드 버리기"
+              >
+                <X className="size-3.5" />
+                버리기
+              </button>
+            )}
+          </div>
         </div>
 
         {suggestion ? (

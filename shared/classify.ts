@@ -1,12 +1,19 @@
-// 목업 분류기. docs/classification.md "신호 표현" 키워드로 대충 분류한다.
+// 목업 분류기 (웹·확장 공용). docs/classification.md "신호 표현" 키워드로 대충 분류한다.
 // 나중에 김동균 님 로컬 수집기 결과로 바꿀 때는 mockClassify 한 함수만 교체하면 된다.
-import type { Card, RelatedCard, Speaker, Subtopic, Tag } from "@shared/types";
-import { CURRENT_USER, KNOWN_NAMES } from "./me";
+import type { Card, RelatedCard, Speaker, Subtopic, Tag } from "./types";
 
 export interface Utterance {
   speaker: Speaker;
   text: string;
   source: string; // 예: "ChatGPT, 2026-11-06 21:10"
+}
+
+// 분류 프롬프트에 함께 넣는 정보 (docs/classification.md 4장)
+export interface ClassifyContext {
+  userName: string; // "내가" = 이 사람
+  knownNames?: string[]; // 담당자 인식용 이름 목록
+  existingTopicKeys?: string[]; // 기존 세부 주제 (있으면 그 이름 먼저)
+  enabledSubtopics?: Subtopic[]; // 켜 둔 소주제. 꺼진 소주제는 "기타"로
 }
 
 // ── 민감정보 가림 (어느 단계든 먼저) ──
@@ -81,13 +88,13 @@ function pickTag(s: string, speaker: Speaker): Tag | null {
   return null;
 }
 
-function pickOwner(s: string, tag: Tag): string | null {
-  if (/내가|제가/.test(s)) return CURRENT_USER;
-  for (const full of KNOWN_NAMES) {
-    const given = full.slice(1);
+function pickOwner(s: string, tag: Tag, ctx: ClassifyContext): string | null {
+  if (/내가|제가/.test(s)) return ctx.userName;
+  for (const full of ctx.knownNames ?? []) {
+    const given = full.length >= 3 ? full.slice(1) : full; // "김동균" → "동균"
     if (s.includes(given)) return full;
   }
-  return tag === "decision" ? CURRENT_USER : null; // 결정자 = 말한 사람
+  return tag === "decision" ? ctx.userName : null; // 결정자 = 말한 사람
 }
 
 const WEEKDAYS = "일월화수목금토";
@@ -118,9 +125,10 @@ const baseDate = (source: string) => {
 let seq = 0;
 const newId = () => `p${Date.now().toString(36)}${(seq++).toString(36)}`;
 
-/** 발화 목록 → 후보 카드. existingTopicKeys 는 팀 보드에 이미 있는 세부 주제 목록 */
-export function mockClassify(utterances: Utterance[], existingTopicKeys: string[] = []): Card[] {
-  const known = new Set(existingTopicKeys);
+/** 발화 목록 → 후보 카드 (개인 카드 포함. 개인은 sentence 없이 relevance 만) */
+export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Card[] {
+  const known = new Set(ctx.existingTopicKeys ?? []);
+  const enabled = ctx.enabledSubtopics ? new Set<Subtopic>(ctx.enabledSubtopics) : null;
   const cards: Card[] = [];
 
   for (const u of utterances) {
@@ -135,17 +143,18 @@ export function mockClassify(utterances: Utterance[], existingTopicKeys: string[
         continue;
       }
 
-      const subtopic =
+      let subtopic: Subtopic | null =
         tag === "none"
           ? null
           : (SUBTOPIC_RULES.find(([, re]) => re.test(sentence))?.[0] ??
             (tag === "todo" ? "역할·일정" : tag === "research" ? "자료 조사" : "기타"));
+      if (subtopic && enabled && !enabled.has(subtopic)) subtopic = "기타"; // 꺼 둔 소주제
       const topic_key =
         tag === "none"
           ? null
           : (TOPIC_RULES.find(([, re]) => re.test(sentence))?.[0] ??
             sentence.split(/\s/)[0]!.replace(/(은|는|이|가|을|를|도)$/, ""));
-      const owner = tag === "decision" || tag === "todo" ? pickOwner(sentence, tag) : null;
+      const owner = tag === "decision" || tag === "todo" ? pickOwner(sentence, tag, ctx) : null;
       const due = tag === "todo" ? pickDue(sentence, baseDate(u.source)) : null;
 
       let confidence = 0.8;

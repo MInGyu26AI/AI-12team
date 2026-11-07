@@ -1,8 +1,8 @@
 // ChatGPT 내보내기(zip 또는 conversations.json)를 브라우저 안에서만 연다.
 // 원본 파일은 어디로도 전송하지 않는다 (CLAUDE.md §9).
 import JSZip from "jszip";
-import type { Utterance } from "./classify";
-import { nowSource } from "./classify";
+import type { Utterance } from "@shared/classify";
+import { nowSource } from "@shared/classify";
 
 interface RawNode {
   parent?: string | null;

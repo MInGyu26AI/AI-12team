@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { nowSource, parsePasted, type Utterance } from "@/lib/classify";
+import { nowSource, parsePasted, type Utterance } from "@shared/classify";
 
 // 시연용 예시 대화 (docs/classification.md 예시 + 새 충돌을 만드는 문장)
 const SAMPLE = `나: 오늘 점심 김밥 먹었어.

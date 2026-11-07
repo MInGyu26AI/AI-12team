@@ -7,6 +7,10 @@ import type { Card, Conflict, PersonalCard, RelatedCard } from "./types";
 
 export const MOCK_TEAM_CODE = "SYNC-2026";
 
+// 우리 팀원 + 분류 예시 문장에 나오는 이름 (담당자 인식용, 서준이 → 이서준, 유나 → 최유나)
+export const TEAM_MEMBERS = ["김동균", "김민규", "김단비", "김하은"];
+export const DEMO_KNOWN_NAMES = [...TEAM_MEMBERS, "이서준", "최유나"];
+
 let n = 0;
 const at = (time: string) => `ChatGPT, 2026-11-06 ${time}`;
 
