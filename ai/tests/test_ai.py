@@ -1,0 +1,227 @@
+"""외부 AI 없이 도는 테스트 (가짜 LLM 이 정해진 JSON 을 돌려줌).  python3 -m unittest -v"""
+import json
+import unittest
+
+from syncup_ai import batch, conflict
+from syncup_ai.classify import classify, handle_request
+from syncup_ai.llm import parse_json_reply
+from syncup_ai.schema import validate_output
+
+
+class FakeLLM:
+    def __init__(self, reply):
+        self.reply, self.prompts = reply, []
+
+    def chat_json(self, system, user):
+        self.prompts.append(user)
+        return self.reply if isinstance(self.reply, dict) else parse_json_reply(self.reply)
+
+
+def msg(i, text, role="user", conv="c1"):
+    return {"id": f"m{i}", "site": "chatgpt", "role": role, "text": text, "conversationId": conv,
+            "conversationTitle": "t", "url": "", "collectedAt": "2026-11-06T12:10:00Z"}
+
+
+CTX = {"teamName": "싱크업", "projectTopic": "팀 AI 메모리", "userName": "김단비",
+       "knownNames": ["김동균", "이서준"], "enabledSubtopics": None, "existingTopicKeys": ["MVP 범위", "서비스명"]}
+
+
+class ClassifyTest(unittest.TestCase):
+    def run_cls(self, messages, cards, **ctx):
+        llm = FakeLLM({"cards": cards})
+        return classify({"context": {**CTX, **ctx}, "messages": messages}, llm), llm
+
+    def test_masks_before_sending_and_source(self):
+        cards, llm = self.run_cls(
+            [msg(1, "발표 자료는 010-1234-5678로 보내 줘.")],
+            [{"msg": 1, "relevance": "related", "sentence": "발표 자료는 [연락처]로 보내 줘.", "subtopic": "발표·제출",
+              "tag": "todo", "topic_key": "발표 자료", "content": "발표 자료 전달", "owner": None, "confidence": 0.85}],
+        )
+        self.assertNotIn("010-1234-5678", llm.prompts[0])  # 외부 AI 로 원문 번호가 안 감
+        c = cards[0]
+        self.assertTrue(c["masked"])
+        self.assertEqual(c["source"], "ChatGPT, 2026-11-06 21:10")  # KST
+        self.assertLess(c["confidence"], 0.6)  # 담당 미정 → 확인 필요
+        self.assertEqual(validate_output(c), [])
+
+    def test_personal_drops_content(self):
+        cards, _ = self.run_cls([msg(1, "오늘 점심 김밥 먹었어.")],
+                                [{"msg": 1, "relevance": "personal", "sentence": "오늘 점심 김밥", "confidence": 0.9}])
+        self.assertEqual(set(cards[0]), {"relevance", "source", "masked", "confidence"})
+
+    def test_split_topic_reuse_and_fixups(self):
+        cards, _ = self.run_cls(
+            [msg(1, "서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게.")],
+            [
+                {"msg": 1, "relevance": "related", "sentence": "서비스명은 싱크업으로 하고,", "subtopic": "주제 · 목표",
+                 "tag": "결정", "topic_key": "서비스 명", "content": "서비스명 = 싱크업", "owner": "김단비",
+                 "is_change": False, "due": "2026-11-07", "confidence": 1.4},
+                {"msg": 1, "relevance": "related", "sentence": "기준표는 내가 내일까지 만들게.", "subtopic": "역할·일정",
+                 "tag": "todo", "topic_key": "분류 기준", "content": "분류 기준표 만들기", "owner": "김단비",
+                 "due": "2026-11-07", "is_change": True, "confidence": 0.85},
+            ],
+        )
+        a, b = cards
+        self.assertEqual((a["subtopic"], a["tag"], a["topic_key"], a["is_new_topic"]), ("주제·목표", "decision", "서비스명", False))
+        self.assertIsNone(a["due"])  # 결정에는 기한 없음
+        self.assertEqual(a["confidence"], 1.0)
+        self.assertEqual((b["due"], b["is_change"], b["is_new_topic"]), ("2026-11-07", False, True))
+        for c in cards:
+            self.assertEqual(validate_output(c), [])
+
+    def test_ai_speaker_cannot_decide_and_context_ignored(self):
+        cards, llm = self.run_cls(
+            [msg(2, "React로 만드세요.", role="assistant")],
+            [{"msg": 1, "relevance": "related", "sentence": "참고", "tag": "decision", "subtopic": "기타", "topic_key": "x", "content": "x"},
+             {"msg": 2, "relevance": "related", "sentence": "React로 만드세요.", "tag": "decision", "subtopic": "작업·결과물",
+              "topic_key": "프레임워크", "content": "프레임워크 = React", "owner": "AI", "confidence": 0.8}],
+            )
+        # msg 1 은 참고용 발화가 아니지만 여기선 발화가 하나라 msg 2 는 범위 밖 → 버려짐
+        self.assertEqual(len(cards), 1)
+        req = {"context": CTX, "messages": [msg(2, "React로 만드세요.", role="assistant")], "contextMessages": [msg(1, "뭐로 만들까?")]}
+        llm = FakeLLM({"cards": [
+            {"msg": 1, "relevance": "related", "sentence": "뭐로 만들까?", "tag": "none", "content": "질문"},
+            {"msg": 2, "relevance": "related", "sentence": "React로 만드세요.", "tag": "decision", "subtopic": "작업·결과물",
+             "topic_key": "프레임워크", "content": "프레임워크 = React", "owner": "AI", "confidence": 0.8}]})
+        cards = classify(req, llm)
+        self.assertIn("[1] [참고용]", llm.prompts[0])
+        self.assertEqual(len(cards), 1)  # 참고용 발화 카드는 버림
+        self.assertEqual((cards[0]["tag"], cards[0]["owner"]), ("none", None))  # AI 말은 제안
+
+    def test_disabled_subtopic_becomes_etc(self):
+        cards, _ = self.run_cls([msg(1, "발표는 유나가 하자.")],
+                                [{"msg": 1, "relevance": "related", "sentence": "발표는 유나가 하자.", "subtopic": "발표·제출",
+                                  "tag": "todo", "topic_key": "발표 담당", "content": "발표 = 최유나", "owner": "최유나"}],
+                                enabledSubtopics=["주제·목표", "역할·일정", "기타"])
+        self.assertEqual(cards[0]["subtopic"], "기타")
+
+    def test_bad_reply_gives_error_response(self):
+        res = handle_request({"context": CTX, "messages": [msg(1, "x")]}, FakeLLM({"oops": 1}))
+        self.assertFalse(res["ok"])
+
+    def test_parse_json_reply_with_fence(self):
+        self.assertEqual(parse_json_reply('결과입니다\n```json\n{"cards": []}\n```'), {"cards": []})
+        self.assertEqual(parse_json_reply('[{"msg": 1}]'), {"cards": [{"msg": 1}]})
+
+
+class BatchTest(unittest.TestCase):
+    def test_turns_and_flush(self):
+        ms = []
+        for i in range(12):
+            ms += [msg(2 * i, f"q{i}"), msg(2 * i + 1, f"a{i}", role="assistant")]
+        ms.append(msg(99, "답 기다리는 질문"))
+        batches, left = batch.take_ready_batches(ms, turns_per_batch=10)
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(len(batches[0]), 20)
+        self.assertEqual(len(left), 5)  # 2턴(4발화) + 답 없는 질문
+        batches, left = batch.take_ready_batches(left, turns_per_batch=10, flush=True)
+        self.assertEqual((len(batches), left), (1, []))
+
+    def test_new_conversation_starts_new_turn(self):
+        turns = batch.group_turns([msg(1, "q"), msg(2, "a", role="assistant", conv="c2")])
+        self.assertEqual(len(turns), 2)
+
+
+def dec(id_, topic, content, is_change=False):
+    return {"id": id_, "relevance": "related", "tag": "decision", "topic_key": topic, "content": content,
+            "sentence": content, "is_change": is_change}
+
+
+class ConflictTest(unittest.TestCase):
+    def test_rule_fallback(self):
+        old = dec("a", "타깃", "타깃 = 대학생")
+        judged, conflicts = conflict.check_new_decision(dec("b", "타깃", "타깃 = 직장인"), [old])
+        self.assertEqual(judged[0]["judgement"], "충돌")
+        self.assertEqual((conflicts[0]["cardA"]["id"], conflicts[0]["cardB"]["id"]), ("a", "b"))
+
+    def test_ai_judge_and_missing_result(self):
+        old1, old2 = dec("a", "MVP 범위", "브라우저 확장 = 행사 이후"), dec("c", "MVP 범위", "웹 = MVP 포함")
+        llm = FakeLLM({"results": [{"id": "a", "judgement": "변경", "reason": "행사 이후 → MVP 포함"}]})
+        judged, conflicts = conflict.check_new_decision(dec("b", "MVP 범위", "브라우저 확장 = MVP 포함", True), [old1, old2], llm)
+        self.assertEqual({j["id"]: j["judgement"] for j in judged}, {"a": "변경", "c": "충돌"})  # c 는 규칙으로 채움 (결정자 모름 → 충돌)
+        by_old = {c["cardA"]["id"]: c for c in conflicts}
+        self.assertEqual(by_old["a"]["reason"], "행사 이후 → MVP 포함")
+
+    def test_non_decision_skipped_and_batch_compares_new_cards(self):
+        todo = {**dec("t", "타깃", "x"), "tag": "todo"}
+        res = conflict.handle_request({"newCards": [todo, dec("b1", "타깃", "타깃 = 대학생"), dec("b2", "타깃", "타깃 = 직장인")],
+                                       "existing": []}, None)
+        self.assertTrue(res["ok"])
+        self.assertEqual(len(res["conflicts"]), 1)
+
+
+class OwnerRuleTest(unittest.TestCase):
+    def test_same_owner_or_team_agreement_is_change(self):
+        old = {**dec("a", "회의 시간", "회의 = 밤 10시"), "owner": "박지민"}
+        same = {**dec("b", "회의 시간", "회의 = 밤 11시"), "owner": "박지민"}
+        other = {**dec("c", "회의 시간", "회의 = 밤 9시"), "owner": "이서준"}
+        team = {**dec("d", "회의 시간", "회의 = 밤 8시"), "owner": "이서준", "sentence": "팀에서 8시로 하기로 했어"}
+        self.assertEqual(conflict.rule_judge(same, old)["judgement"], "변경")
+        self.assertEqual(conflict.rule_judge(other, old)["judgement"], "충돌")
+        self.assertEqual(conflict.rule_judge(team, old)["judgement"], "변경")
+
+
+class FakeDecider:
+    def __init__(self, answers):
+        self.answers, self.calls = answers, []
+
+    def decide(self, text, questions):
+        self.calls.append((text, questions))
+        return {q["name"]: self.answers(q) for q in questions if self.answers(q) is not None}
+
+
+class DecisionsTest(unittest.TestCase):
+    def test_relabel_overrides_labels_and_confidence(self):
+        llm = FakeLLM({"cards": [
+            {"msg": 1, "relevance": "related", "sentence": "FastAPI 기준으로 코드 짜 줘.", "tag": "none", "content": "코드 요청"},
+            {"msg": 1, "relevance": "related", "sentence": "오늘 피곤하다", "tag": "research", "subtopic": "기타", "topic_key": "컨디션", "content": "피곤"},
+        ]})
+
+        def answers(q):
+            n = q["name"]
+            if n == "u1_rel": return {"type": "choice", "name": n, "choice": "related", "confidence": 0.95}
+            if n == "u1_tag": return {"type": "choice", "name": n, "choice": "decision", "confidence": 0.55}
+            if n == "u1_sub": return {"type": "choice", "name": n, "choice": "작업·결과물", "confidence": 0.9}
+            if n == "u1_chg": return {"type": "predicate", "name": n, "probability": 0.1}
+            if n == "u2_rel": return {"type": "choice", "name": n, "choice": "personal", "probabilities": [{"value": "personal", "probability": 0.8}]}
+            return None
+        d = FakeDecider(answers)
+        cards = classify({"context": CTX, "messages": [msg(1, "FastAPI 기준으로 코드 짜 줘. 오늘 피곤하다")]}, llm, d)
+        a, b = cards
+        self.assertEqual((a["tag"], a["subtopic"], a["is_change"], a["confidence"]), ("decision", "작업·결과물", False, 0.55))
+        self.assertEqual(validate_output(a), [])
+        self.assertEqual(set(b), {"relevance", "source", "masked", "confidence"})
+        self.assertEqual(b["confidence"], 0.8)
+        self.assertEqual(len(d.calls[0][1]), 8)  # 문장 2개 × 질문 4개
+
+    def test_decider_failure_keeps_chat_labels(self):
+        class Boom:
+            def decide(self, *a): raise RuntimeError("403")
+        llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": "타깃은 대학생으로 가자.", "tag": "decision",
+                                  "subtopic": "주제·목표", "topic_key": "타깃", "content": "타깃 = 대학생", "owner": "김단비", "confidence": 0.9}]})
+        cards = classify({"context": CTX, "messages": [msg(1, "타깃은 대학생으로 가자.")]}, llm, Boom())
+        self.assertEqual((cards[0]["tag"], cards[0]["confidence"]), ("decision", 0.9))
+
+    def test_conflict_judged_by_decider(self):
+        old = {**dec("a", "타깃", "타깃 = 대학생"), "owner": "박지민"}
+        new = {**dec("b", "타깃", "타깃 = 직장인"), "owner": "이서준"}
+        d = FakeDecider(lambda q: {"type": "choice", "name": q["name"], "choice": "충돌", "confidence": 0.87})
+        judged, conflicts = conflict.check_new_decision(new, [old], decider=d)
+        self.assertEqual((judged[0]["judgement"], judged[0]["confidence"]), ("충돌", 0.87))
+        self.assertIn("박지민", conflicts[0]["reason"])
+
+
+class CliTest(unittest.TestCase):
+    def test_classify_without_key_returns_ok_false(self):
+        import os
+        import subprocess
+        import sys
+        env = {k: v for k, v in os.environ.items() if not k.startswith("AI_")}
+        env.update(AI_BASE_URL="", AI_API_KEY="", AI_MODEL="")
+        p = subprocess.run([sys.executable, "-m", "syncup_ai", "classify"], input=json.dumps({"context": CTX, "messages": [msg(1, "x")]}),
+                           capture_output=True, text=True, env=env)
+        self.assertFalse(json.loads(p.stdout)["ok"])
+
+
+if __name__ == "__main__":
+    unittest.main()

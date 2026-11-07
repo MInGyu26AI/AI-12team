@@ -36,6 +36,7 @@
 - /extension : WXT 확장 프로그램
 - /web : Next.js 팀 웹
 - /shared : 두 프로젝트가 같이 쓰는 타입 정의(카드, 충돌 등)와 목업 데이터
+- /ai : 분류·충돌 판정 (김하은). Python 표준 라이브러리, OpenAI chat 모델 + Decisions API. 사용법은 ai/README.md
 
 ## 6. 데이터 형식 (코드는 /shared/types.ts)
 **분류 기준은 [docs/classification.md](docs/classification.md)를 따른다.** (관련성 → 소주제 → 표시, 민감정보 별도 검사, 분류 예시 22개)

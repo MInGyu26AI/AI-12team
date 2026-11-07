@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+eval/results/
+# 샘플 대화·정답표 원본은 개인정보 확인 후에만 커밋 (README 참고)
+data/*
+!data/README.md

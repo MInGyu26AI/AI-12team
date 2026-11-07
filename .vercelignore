@@ -7,3 +7,4 @@ extension/
 **/.wxt
 **/.env*
 !**/.env.example
+ai/
