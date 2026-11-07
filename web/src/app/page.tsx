@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SUBTOPICS, type Card as CardT } from "@shared/types";
-import { BADGE_COLOR, TAG_LABEL, statusBadges } from "@shared/labels";
+import { SUBTOPICS, type RelatedCard } from "@shared/types";
+import { BADGE_COLOR, TAG_LABEL, isShareable, statusBadges } from "@shared/labels";
 import { MOCK_TEAM_CODE } from "@shared/mock";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 // 팀 보드: subtopic별 섹션 → topic_key별 묶음 → 시간순 (CLAUDE.md §6 화면 규칙)
 // 시간순은 서버가 주는 순서를 따른다 (Card 에 별도 시각 필드 없음)
 export default function BoardPage() {
-  const [cards, setCards] = useState<CardT[] | null>(null);
+  const [cards, setCards] = useState<RelatedCard[] | null>(null);
 
   useEffect(() => {
-    api.getBoard(MOCK_TEAM_CODE).then((all) =>
-      setCards(all.filter((c) => c.relevance === "related" && c.tag !== "none")),
-    );
+    api.getBoard(MOCK_TEAM_CODE).then((all) => setCards(all.filter(isShareable)));
   }, []);
 
   return (
@@ -25,9 +23,9 @@ export default function BoardPage() {
       {!cards && <p className="text-muted-foreground">불러오는 중…</p>}
       {cards &&
         SUBTOPICS.map((subtopic) => {
-          const inSection = cards.filter((c) => c.subtopic === subtopic);
+          const inSection = cards.filter((c) => (c.subtopic ?? "기타") === subtopic);
           if (!inSection.length) return null;
-          const groups = Map.groupBy(inSection, (c) => c.topic_key);
+          const groups = Map.groupBy(inSection, (c) => c.topic_key ?? "기타");
           return (
             <section key={subtopic} className="space-y-3">
               <h2 className="text-lg font-semibold">
@@ -50,7 +48,7 @@ export default function BoardPage() {
   );
 }
 
-function BoardCard({ card: c }: { card: CardT }) {
+function BoardCard({ card: c }: { card: RelatedCard }) {
   return (
     <Card>
       <CardHeader className="flex-row flex-wrap items-center gap-2">
@@ -65,7 +63,7 @@ function BoardCard({ card: c }: { card: CardT }) {
         <CardTitle className="text-base">{c.content}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-1 text-sm text-muted-foreground">
-        {c.sentence && <p>“{c.sentence}”</p>}
+        <p>“{c.sentence}”</p>
         <p>
           {[c.owner, c.due && `~${c.due}`, c.source].filter(Boolean).join(" · ")}
         </p>

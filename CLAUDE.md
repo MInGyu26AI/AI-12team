@@ -36,26 +36,38 @@
 - /web : Next.js 팀 웹
 - /shared : 두 프로젝트가 같이 쓰는 타입 정의(카드, 충돌 등)와 목업 데이터
 
-## 6. 데이터 형식 (팀 확정 분류 기준표 형식, 코드는 /shared/types.ts)
+## 6. 데이터 형식 (코드는 /shared/types.ts)
+**분류 기준은 [docs/classification.md](docs/classification.md)를 따른다.** (관련성 → 소주제 → 표시, 민감정보 별도 검사, 분류 예시 22개)
+
+### 출력 형식(JSON) — 분류 기준표 4장
+| 필드 | 설명 | 값 예시 | 필수 여부 |
+|---|---|---|---|
+| sentence | 원문 문장(또는 나눈 일부) | 브라우저 확장도 MVP에 넣자. | 관련만 |
+| relevance | 관련성: related / personal | related | 필수 |
+| subtopic | 소주제: 주제·목표 / 자료 조사 / 작업·결과물 / 역할·일정 / 과제 조건·피드백 / 발표·제출 / 기타 | 작업·결과물 | 관련만 |
+| tag | 표시: decision(결정) / todo(할 일) / research(조사) / none(제안) | decision | 관련만 |
+| topic_key | 세부 주제 (충돌 비교 기준, 기존 이름 먼저) | MVP 범위 | 관련만 |
+| is_new_topic | 기존 세부 주제 목록에 없는 새 주제인지 | false | 관련만 |
+| content | 정리된 내용 한 줄 | 브라우저 확장 = MVP 포함 | 관련만 |
+| reason | 결정 이유 (있으면) | 대화 자동 수집이 있어야 시연 효과가 큼 | 선택 |
+| owner | 결정자 또는 할 일 담당자 | 이서준 | 결정·할 일 |
+| due | 할 일 기한 (YYYY-MM-DD, 없으면 null) | null | 할 일 |
+| is_change | 기존 결정을 바꾸는 표현인지 | true | 결정 |
+| source | 출처 (AI 종류·시간, 링크, 사람) | ChatGPT, 2026-11-06 21:10 | 필수 |
+| masked | 민감정보를 가렸는지 | false | 필수 |
+| confidence | 분류 확신도 (0~1). 0.6 미만이면 확인 필요 | 0.85 | 필수 |
+
+- 개인(personal)은 sentence를 저장하지 않고 relevance만 남긴다 (+ 필수 필드 source·masked·confidence).
+- 한 문장에 여러 내용이 있으면 나눠서 카드 여러 장으로 만든다 (예: 결정 + 할 일).
+- tag=none(제안)은 subtopic·topic_key가 없을 수 있고(null), 공유 후보에서 제외한다.
+- 예시 JSON:
+  `{"sentence":"브라우저 확장도 MVP에 넣자.","relevance":"related","subtopic":"작업·결과물","tag":"decision","topic_key":"MVP 범위","is_new_topic":false,"content":"브라우저 확장 = MVP 포함","reason":null,"owner":"이서준","due":null,"is_change":true,"source":"ChatGPT, 2026-11-06 21:10","masked":false,"confidence":0.85}`
+
+### 앱에서 덧붙이는 필드 (AI 출력에는 없음)
+- `id: string` — 카드 식별자
+- `status: "candidate" | "approved" | "dismissed"` — 개인 검토함 승인 상태
+
 ```
-Card {
-  id: string
-  sentence: string | null  // 대화 원문. relevance=personal이면 저장하지 않음(null)
-  relevance: "related" | "personal"
-  subtopic: "주제·목표" | "자료 조사" | "작업·결과물" | "역할·일정" | "과제 조건·피드백" | "발표·제출" | "기타"
-  tag: "decision" | "todo" | "research" | "none"   // none(제안)은 공유 후보에서 제외
-  topic_key: string        // 세부 주제. 같은 topic_key의 decision끼리만 충돌 비교
-  is_new_topic: boolean
-  content: string          // 핵심 내용 요약
-  reason: string | null
-  owner: string | null     // 결정자 또는 할 일 담당자
-  due: string | null       // YYYY-MM-DD
-  is_change: boolean       // 기존 결정을 바꾸는 표현
-  source: string           // 예: "ChatGPT, 2026-11-06 21:10"
-  masked: boolean          // 민감정보 가림 여부
-  confidence: number       // 0~1
-  status: "candidate" | "approved" | "dismissed"
-}
 Conflict {
   id: string
   topic_key: string        // 충돌한 두 카드의 공통 topic_key
@@ -67,7 +79,6 @@ Conflict {
   resolutionNote?: string
 }
 ```
-규칙: AI가 추천만 했거나 아직 합의되지 않은 제안은 tag=none (사용자가 동의해야 decision)
 
 ### 화면 규칙
 - 개인 검토함: relevance=personal과 tag=none은 기본으로 숨기거나 회색 처리

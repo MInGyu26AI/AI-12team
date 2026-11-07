@@ -1,6 +1,6 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록돼 있음.
-import type { Card, Relevance, Tag } from "./types";
+import type { Card, RelatedCard, Relevance, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
   decision: "결정",
@@ -28,11 +28,14 @@ export const LOW_CONFIDENCE = 0.6;
 // 개인 검토함에서 기본으로 숨기거나 회색 처리할 카드
 export const isDimmed = (c: Card) => c.relevance === "personal" || c.tag === "none";
 
+// 팀 보드·공유 후보에 올라갈 수 있는 카드 (관련 + 제안 아님)
+export const isShareable = (c: Card): c is RelatedCard => c.relevance === "related" && c.tag !== "none";
+
 // 상태 배지 목록 (순서 = 표시 순서)
 export function statusBadges(c: Card) {
   const badges: { label: string; color: string }[] = [];
   if (c.confidence < LOW_CONFIDENCE) badges.push({ label: "확인 필요", color: BADGE_COLOR.lowConfidence });
   if (c.masked) badges.push({ label: "민감정보 가림", color: BADGE_COLOR.masked });
-  if (c.is_change && c.tag === "decision") badges.push({ label: "변경", color: BADGE_COLOR.change });
+  if (c.relevance === "related" && c.is_change && c.tag === "decision") badges.push({ label: "변경", color: BADGE_COLOR.change });
   return badges;
 }

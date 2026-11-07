@@ -1,4 +1,4 @@
-// CLAUDE.md §6 데이터 형식 (팀 확정 분류 기준표)
+// CLAUDE.md §6 / docs/classification.md 4장 출력 형식(JSON)
 
 export const SUBTOPICS = [
   "주제·목표",
@@ -15,24 +15,42 @@ export type Relevance = "related" | "personal";
 export type Tag = "decision" | "todo" | "research" | "none"; // none(제안)은 공유 후보에서 제외
 export type CardStatus = "candidate" | "approved" | "dismissed";
 
-export interface Card {
-  id: string;
-  sentence: string | null; // 원문. personal이면 저장 안 함(null)
-  relevance: Relevance;
-  subtopic: Subtopic;
+// 분류 AI가 내보내는 JSON 한 건
+interface CommonOutput {
+  source: string; // 예: "ChatGPT, 2026-11-06 21:10"
+  masked: boolean; // 민감정보를 가렸는지
+  confidence: number; // 0~1. 0.6 미만이면 확인 필요
+}
+
+export interface RelatedOutput extends CommonOutput {
+  relevance: "related";
+  sentence: string; // 원문 문장(또는 나눈 일부)
+  subtopic: Subtopic | null; // tag=none(제안)이면 null 가능
   tag: Tag;
-  topic_key: string; // 같은 topic_key의 decision끼리만 충돌 비교
+  topic_key: string | null; // 세부 주제. 같은 topic_key의 decision끼리만 충돌 비교. tag=none이면 null 가능
   is_new_topic: boolean;
   content: string;
   reason: string | null;
   owner: string | null; // 결정자 또는 할 일 담당자
   due: string | null; // YYYY-MM-DD
-  is_change: boolean; // 기존 결정을 바꾸는 표현
-  source: string; // 예: "ChatGPT, 2026-11-06 21:10"
-  masked: boolean; // 민감정보 가림 여부
-  confidence: number; // 0~1
+  is_change: boolean; // 기존 결정을 바꾸는 표현인지
+}
+
+// 개인은 sentence 등 내용을 저장하지 않고 relevance만 남김
+export interface PersonalOutput extends CommonOutput {
+  relevance: "personal";
+}
+
+export type ClassificationOutput = RelatedOutput | PersonalOutput;
+
+// 앱에서 덧붙이는 필드
+interface AppFields {
+  id: string;
   status: CardStatus;
 }
+export type RelatedCard = RelatedOutput & AppFields;
+export type PersonalCard = PersonalOutput & AppFields;
+export type Card = RelatedCard | PersonalCard;
 
 export type Judgement = "같음" | "변경" | "충돌";
 export type Resolution = "keep-existing" | "adopt-new" | "both-valid";
@@ -40,8 +58,8 @@ export type Resolution = "keep-existing" | "adopt-new" | "both-valid";
 export interface Conflict {
   id: string;
   topic_key: string;
-  cardA: Card; // 기존 결정
-  cardB: Card; // 새 결정
+  cardA: RelatedCard; // 기존 결정
+  cardB: RelatedCard; // 새 결정
   judgement: Judgement;
   reason: string;
   resolution?: Resolution;
