@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, system-ui, sans-serif;
+}
