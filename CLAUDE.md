@@ -29,7 +29,7 @@
   - Content Script(ChatGPT DOM 추출), Background Service Worker, Native Messaging, chrome.storage
 - 팀 웹: Next.js(App Router), TypeScript, Tailwind, shadcn/ui, lucide-react, Pretendard 폰트, sonner(토스트)
 - 파일 처리: JSZip (ChatGPT 내보내기 zip을 브라우저 안에서 열기)
-- 배포: 웹은 Vercel, 확장 프로그램은 개발자 모드로 직접 설치해 시연
+- 배포: 웹은 Vercel(Root Directory = web, 환경변수 NEXT_PUBLIC_USE_MOCK·NEXT_PUBLIC_API_URL), 확장 프로그램은 개발자 모드로 직접 설치해 시연(팝업 설정의 "개인 검토함 주소"에 Vercel 주소 입력)
 
 ## 5. 폴더 구조
 - /extension : WXT 확장 프로그램
@@ -130,7 +130,7 @@ F. 상태·에러 처리
 - 최초 설정에서 자동 수집 범위와 외부 AI 전송을 사용자에게 안내
 - 설정한 종료 시각에는 새 발화 수집과 외부 전송을 중단
 - 팀 서버에는 본인이 승인한 카드와 확인한 근거 발췌만 전송, 원본 대화 전체는 보내지 않음
-- API 키 등 비밀값은 .env에만 두고 .gitignore에 추가 (깃허브 레포가 Public)
+- API 키 등 비밀값은 .env에만 두고 .gitignore에 추가 (깃허브 레포 "syncup"은 비공개지만, 공개될 수 있다고 보고 비밀값은 절대 커밋하지 않음)
 
 ## 10. 시연 시나리오 (11/8까지 이 흐름이 끝까지 동작해야 함)
 한 번 설정 → ChatGPT 웹·코딩 도구 대화에서 후보 자동 생성 → 한 장만 승인
