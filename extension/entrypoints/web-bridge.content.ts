@@ -1,17 +1,23 @@
 // 웹 개인 검토함과 연결: 검토 대기 카드를 window.postMessage 로 웹 페이지에 넘기고,
 // 웹에서 승인/버린 카드는 검토 대기에서 지운다. 형식은 /shared/bridge.ts
 import { BRIDGE_FROM_EXT, isWebToExt, type ExtToWeb } from '@shared/bridge';
-import { BRIDGE_ORIGINS } from '@/lib/config';
-import { pendingItem, settingsItem } from '@/lib/settings';
+import { LOCAL_WEB_URL } from '@/lib/config';
+import { pendingItem, settingsItem, webUrlOf } from '@/lib/settings';
 
 export default defineContentScript({
   matches: ['http://localhost:3000/*', 'https://*.vercel.app/*'],
-  main(ctx) {
-    // *.vercel.app 은 남의 사이트일 수도 있으므로, 설정한 웹 주소에서만 카드를 넘긴다
-    if (!BRIDGE_ORIGINS.includes(location.origin)) return;
+  async main(ctx) {
+    // *.vercel.app 은 남의 사이트일 수도 있으므로, 팝업에서 설정한 웹 주소(+로컬 개발 주소)에서만 카드를 넘긴다
+    const allowed = new Set([webUrlOf(await settingsItem.getValue()), LOCAL_WEB_URL]);
+    if (!allowed.has(location.origin)) {
+      console.info(`[싱크업] 웹 연동 꺼짐: ${location.origin} 은(는) 팝업에 설정한 개인 검토함 주소가 아니에요`);
+      return;
+    }
+    console.info(`[싱크업] 웹 연동 켜짐: ${location.origin}`);
 
     const post = async () => {
       const [cards, settings] = await Promise.all([pendingItem.getValue(), settingsItem.getValue()]);
+      if (webUrlOf(settings) !== location.origin && location.origin !== LOCAL_WEB_URL) return; // 도중에 주소를 바꾼 경우
       const msg: ExtToWeb = { source: BRIDGE_FROM_EXT, type: 'pending', cards, userName: settings.userName };
       window.postMessage(msg, location.origin);
     };

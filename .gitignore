@@ -1,5 +1,28 @@
-node_modules
+# 의존성
+node_modules/
+
+# 빌드 결과물
+.next/
+out/
+.output/
+.wxt/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+stats*.html
+
+# 비밀값 (예시 파일만 올림)
 .env*
 !.env.example
+
+# 배포·도구
+.vercel/
+web-ext.config.ts
+*.log
+
+# OS·에디터
 .DS_Store
+Thumbs.db
 .vscode/*
+.idea/

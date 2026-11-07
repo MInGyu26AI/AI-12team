@@ -1,6 +1,7 @@
 // chrome.storage.local 에 저장하는 값들 (WXT storage 래퍼)
 import { storage } from '#imports';
 import { SUBTOPICS, type RelatedCard, type Subtopic } from '@shared/types';
+import { DEFAULT_WEB_URL } from './config';
 
 export interface Settings {
   teamName: string;
@@ -8,11 +9,15 @@ export interface Settings {
   userName: string;
   enabledSubtopics: Subtopic[];
   autoCollect: boolean;
+  webUrl?: string; // 개인 검토함 웹 주소 (origin). 없으면 DEFAULT_WEB_URL
 }
 
 export const settingsItem = storage.defineItem<Settings>('local:settings', {
   fallback: { teamName: '', projectTopic: '', userName: '', enabledSubtopics: [...SUBTOPICS], autoCollect: false },
 });
+
+// 예전에 저장된 설정에는 webUrl 이 없을 수 있으므로 항상 이 함수로 읽는다
+export const webUrlOf = (s: Settings) => s.webUrl || DEFAULT_WEB_URL;
 
 export const isConfigured = (s: Settings) => !!(s.teamName.trim() && s.projectTopic.trim() && s.userName.trim());
 

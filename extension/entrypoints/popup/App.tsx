@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { SUBTOPICS, type Subtopic } from '@shared/types';
-import { WEB_URL } from '@/lib/config';
+import { LOCAL_WEB_URL, bridgeSupported, normalizeWebUrl } from '@/lib/config';
 import { READ_FAIL_GUIDE, type TabPingResult } from '@/lib/messages';
 import {
   collectStateItem,
   isConfigured,
   pendingItem,
   settingsItem,
+  webUrlOf,
   type CollectState,
   type Settings,
 } from '@/lib/settings';
@@ -105,12 +106,17 @@ export default function App() {
       <TabNotice tab={tab} autoCollect={settings.autoCollect} />
       {state.lastError && <Notice tone="error">{state.lastError}</Notice>}
 
-      <button
-        className="w-full rounded-lg bg-gray-900 px-3 py-2.5 font-medium text-white hover:bg-gray-800"
-        onClick={() => browser.tabs.create({ url: `${WEB_URL}/review` })}
-      >
-        개인 검토함 열기{pendingCount ? ` (${pendingCount})` : ''}
-      </button>
+      <div className="space-y-1">
+        <button
+          className="w-full rounded-lg bg-gray-900 px-3 py-2.5 font-medium text-white hover:bg-gray-800"
+          onClick={() => browser.tabs.create({ url: `${webUrlOf(settings)}/review` })}
+        >
+          개인 검토함 열기{pendingCount ? ` (${pendingCount})` : ''}
+        </button>
+        <p className="truncate text-center text-xs text-gray-400" title={webUrlOf(settings)}>
+          {webUrlOf(settings).replace(/^https?:\/\//, '')}
+        </p>
+      </div>
     </main>
   );
 }
@@ -169,7 +175,10 @@ function Setup({
   onCancel?: () => void;
 }) {
   const [s, setS] = useState(initial);
+  const [webUrlInput, setWebUrlInput] = useState(webUrlOf(initial));
+  const webUrl = normalizeWebUrl(webUrlInput); // null = 잘못된 주소
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS((p) => ({ ...p, [k]: v }));
+  const canSave = isConfigured(s) && !!webUrl;
   const toggleSub = (t: Subtopic) =>
     set('enabledSubtopics', s.enabledSubtopics.includes(t) ? s.enabledSubtopics.filter((x) => x !== t) : [...s.enabledSubtopics, t]);
 
@@ -178,7 +187,14 @@ function Setup({
       className="w-[340px] space-y-3 p-4 font-sans text-sm text-gray-900"
       onSubmit={(e) => {
         e.preventDefault();
-        if (isConfigured(s)) onSave({ ...s, teamName: s.teamName.trim(), projectTopic: s.projectTopic.trim(), userName: s.userName.trim() });
+        if (canSave)
+          onSave({
+            ...s,
+            teamName: s.teamName.trim(),
+            projectTopic: s.projectTopic.trim(),
+            userName: s.userName.trim(),
+            webUrl: webUrl!,
+          });
       }}
     >
       <h1 className="text-base font-bold">{firstTime ? '싱크업 처음 설정' : '설정 수정'}</h1>
@@ -201,6 +217,29 @@ function Setup({
         <p className="text-xs text-gray-500">꺼 둔 소주제 내용은 ‘기타’로 분류돼요.</p>
       </fieldset>
 
+      <div className="space-y-1">
+        <Field
+          label="개인 검토함 주소"
+          value={webUrlInput}
+          onChange={setWebUrlInput}
+          placeholder="https://syncup-xxxx.vercel.app"
+        />
+        <div className="flex gap-2 text-xs">
+          <button type="button" className="text-gray-500 underline" onClick={() => setWebUrlInput(LOCAL_WEB_URL)}>
+            로컬 개발 주소 쓰기
+          </button>
+        </div>
+        {!webUrl ? (
+          <p className="text-xs text-sensitive">http:// 또는 https:// 로 시작하는 주소를 넣어 주세요.</p>
+        ) : !bridgeSupported(webUrl) ? (
+          <p className="text-xs text-warn">
+            이 주소에서는 “확장에서 가져온 카드” 넘기기가 동작하지 않아요. localhost:3000 또는 *.vercel.app 주소를 써 주세요.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">Vercel 배포 주소를 붙여넣으면 “개인 검토함 열기”가 그 주소로 열려요.</p>
+        )}
+      </div>
+
       {/* CLAUDE.md §9: 수집 범위와 외부 AI 전송 안내 */}
       <div className="space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
         <p className="font-medium text-gray-800">수집 범위 안내</p>
@@ -217,7 +256,7 @@ function Setup({
         )}
         <button
           type="submit"
-          disabled={!isConfigured(s)}
+          disabled={!canSave}
           className="flex-1 rounded-lg bg-gray-900 px-3 py-2 font-medium text-white disabled:opacity-40"
         >
           저장
