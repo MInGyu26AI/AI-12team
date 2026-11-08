@@ -14,6 +14,7 @@
 !team_client.py
 !card_contract.py
 !local_privacy.py
+!retention.py
 !ai/
 !ai/syncup_ai/
 !ai/syncup_ai/*.py

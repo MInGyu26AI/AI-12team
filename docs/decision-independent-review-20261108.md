@@ -23,7 +23,9 @@
 
 원래/신규 12회와 기존 96회의 추정 비용은 $0.04718865, API 호출 334회다. 실제 응답 usage 기준이며 계정 청구서, 세금, 호스팅은 포함하지 않는다. Decisions는 [공식 요금](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability), 추론 모델은 [공식 모델 요금](https://developers.openai.com/api/docs/pricing) 적용.
 
-DB 진행 저장/복구/마이그레이션/권한과 클라우드 HTTP 경계 회귀 10개 통과. AI 테스트 최종 결과는 배포 기록에 함께 보관한다. 초기 테스트 한 건은 의도된 독립 검토 HTTP 호출 추가를 반영하도록 기대 경로를 수정했고, 잘못된 검토 응답은 여전히 실패함을 확인했다.
+DB 진행 저장/복구/마이그레이션/권한과 클라우드 HTTP 경계 회귀 10개, 최종 AI 테스트 68개 통과. 초기 테스트 한 건은 의도된 독립 검토 HTTP 호출 추가를 반영하도록 기대 경로를 수정했고, 잘못된 검토 응답은 여전히 실패함을 확인했다.
+
+배포 전 실제 컨테이너 import 검사에서 기존 allowlist의 `retention.py` 누락을 발견했다. 로컬에서는 존재하므로 단위 검사만으로는 드러나지 않았다. 보존 기능을 제거하지 않고 Dockerfile과 .dockerignore에 기존 모듈을 포함했다. 최초 실패 빌드는 배포하지 않았다.
 
 ## 증거 위치와 배포 범위
 
