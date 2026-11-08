@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from . import config
 from .decide import relabel
 from .llm import LLM, Decider
-from .mask import mask
+from .mask import mask, mask_text
 from .schema import SUBTOPICS, normalize_card
 
 KST = ZoneInfo("Asia/Seoul")
@@ -78,7 +78,8 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
         lines.append(f"[{i}]{tag} {who} ({_when(m):%Y-%m-%d %H:%M}): {text}")
         info.append({"source": source_of(m), "masked": masked, "role": m.get("role"), "context": is_ctx})
     lines += ["", '위 발화를 분류해 {"cards": [...]} JSON 하나로만 답하세요.']
-    return "\n".join(lines), info
+    # 발화는 위에서 가렸고, 팀 정보·기존 결정(사용자가 검토함에서 고친 내용일 수 있음)까지 외부로 나가기 전에 한 번 더
+    return mask_text("\n".join(lines)), info
 
 
 def classify_indexed(request: dict, llm: LLM, decider: Decider | None = None) -> list[tuple[int, dict]]:

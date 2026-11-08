@@ -14,6 +14,7 @@ import re
 from . import config
 from .decide import judge_pairs
 from .llm import LLM, Decider, Embedder
+from .mask import mask_text
 from .similarity import similarities
 
 JUDGEMENTS = ("같음", "변경", "충돌", "무관")
@@ -38,8 +39,9 @@ def find_candidates(new: dict, existing: list[dict], embedder: Embedder | None =
 
 
 def _brief(c: dict) -> dict:
+    """외부 AI 에 보낼 카드 요약. JSON 으로 바꾸면 따옴표가 \\" 로 바뀌어 규칙이 못 잡으므로 필드마다 먼저 가린다."""
     keys = ("id", "topic_key", "content", "sentence", "reason", "owner", "source", "is_change")
-    return {k: c.get(k) for k in keys}
+    return {k: mask_text(v) if isinstance(v, str) else v for k, v in ((k, c.get(k)) for k in keys)}
 
 
 def _norm(content: str) -> str:
@@ -70,7 +72,7 @@ def ai_judge(new: dict, candidates: list[dict], llm: LLM) -> list[dict]:
         + "\n\n# 기존 결정\n" + "\n".join(json.dumps(_brief(c), ensure_ascii=False) for c in candidates)
         + '\n\n기존 결정마다 판정해 {"results": [...]} JSON 하나로만 답하세요.'
     )
-    reply = llm.chat_json(system, user)
+    reply = llm.chat_json(system, mask_text(user))  # 승인 카드는 사용자가 고친 내용일 수 있어 외부 전송 전에 가림
     by_id = {str(r.get("id")): r for r in reply.get("results", []) if isinstance(r, dict)}
     out = []
     for c in candidates:

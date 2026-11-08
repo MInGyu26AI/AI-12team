@@ -6,6 +6,7 @@ import re
 from collections import Counter
 
 from .llm import Embedder
+from .mask import mask_text
 
 
 def _bigrams(text: str) -> Counter:
@@ -33,7 +34,7 @@ def similarities(query: dict, others: list[dict], embedder: Embedder | None = No
     texts = [card_text(query)] + [card_text(c) for c in others]
     if embedder is not None:
         try:
-            vecs = embedder.embed(texts)
+            vecs = embedder.embed([mask_text(t) for t in texts])  # 외부 전송 전에 가림
             return [_cos(vecs[0], v) for v in vecs[1:]]
         except Exception:
             pass  # 임베딩 실패 → n-gram 으로

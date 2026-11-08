@@ -211,6 +211,66 @@ class DecisionsTest(unittest.TestCase):
         self.assertIn("박지민", conflicts[0]["reason"])
 
 
+SECRETS = ["sk-proj-AbCdEf0123456789_xyz-QRSTuvwx", "ghp_1234567890abcdefGHIJKLmnopqrstuvWXYZ",
+           "Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP"]
+LEAK = ("AbCdEf0123", "QRSTuvwx", "ghp_", "WXYZ", "Xy3_kL9", "mN6oP")
+
+
+class MaskTest(unittest.TestCase):
+    def test_shared_cases(self):
+        """shared/mask-cases.json — TypeScript(shared/classify.ts)도 같은 파일로 검사"""
+        from pathlib import Path
+        from syncup_ai.mask import mask
+        cases = json.loads((Path(__file__).resolve().parents[2] / "shared/mask-cases.json").read_text(encoding="utf-8"))["cases"]
+        for c in cases:
+            with self.subTest(c["name"]):
+                out, masked = mask(c["input"])
+                for a in c["absent"]:
+                    self.assertNotIn(a, out)
+                for x in c["present"]:
+                    self.assertIn(x, out)
+                self.assertEqual(masked, c["masked"])
+
+    def assertNoLeak(self, text):
+        for frag in LEAK:
+            self.assertNotIn(frag, text)
+
+    def test_classify_request_and_card(self):
+        text = f"OpenAI 키 {SECRETS[0]} 랑 Authorization: Bearer {SECRETS[2]} 로 서버 붙이자"
+        ctx = {**CTX, "existingDecisions": [{"topic_key": "서버 인증", "content": f"토큰 = {SECRETS[1]}"}]}
+        llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": text, "subtopic": "작업·결과물",
+                                  "tag": "decision", "topic_key": "서버 인증", "content": f"인증 = Bearer {SECRETS[2]}",
+                                  "owner": "김단비"}]})
+        d = FakeDecider(lambda q: None)
+        cards = classify({"context": ctx, "messages": [msg(1, text)]}, llm, d)
+        self.assertNoLeak(llm.prompts[0])  # 발화 + 기존 결정까지
+        self.assertNoLeak(d.calls[0][0])   # Decisions 로 가는 본문
+        self.assertNoLeak(json.dumps(cards, ensure_ascii=False))  # 모델이 원문을 되돌려 줘도 카드에 안 남음
+        self.assertTrue(cards[0]["masked"])
+
+    def test_conflict_requests(self):
+        old = {**dec("a", "서버 인증", f"인증 = {SECRETS[0]}"), "owner": "김동균"}
+        new = {**dec("b", "서버 인증", "인증 = 토큰"), "owner": "김하은",
+               "sentence": f'"access_token": "{SECRETS[2]}" 으로 바꾸자'}  # 검토함에서 사용자가 고친 문장
+        llm = FakeLLM({"results": [{"id": "a", "judgement": "충돌", "reason": "x"}]})
+        conflict.check_new_decision(new, [old], llm)
+        self.assertNoLeak(llm.prompts[0])
+        d = FakeDecider(lambda q: {"type": "choice", "name": q["name"], "choice": "충돌", "confidence": 0.9})
+        conflict.check_new_decision(new, [old], decider=d)
+        self.assertNoLeak(d.calls[0][0])
+
+    def test_embedding_request(self):
+        from syncup_ai.similarity import similarities
+        sent = []
+
+        class E:
+            def embed(self, texts):
+                sent.extend(texts)
+                return [[1.0, 0.0] for _ in texts]
+        similarities(dec("b", "x", f"키 {SECRETS[0]}"), [dec("a", "x", f"토큰 {SECRETS[1]}")], E())
+        self.assertNoLeak("\n".join(sent))
+
+
 class CliTest(unittest.TestCase):
     def test_classify_without_key_returns_ok_false(self):
         import os

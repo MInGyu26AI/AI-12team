@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from . import config
 from .llm import Decider, choice_q, predicate_q
+from .mask import mask_text
 from .schema import SUBTOPICS
 
 TAG_CHOICES = {
@@ -60,7 +61,7 @@ def relabel(cards: list[dict], conversation: str, decider: Decider, enabled: lis
         ]
     if not questions:
         return cards
-    answers = decider.decide(f"{criteria}\n\n{conversation}\n\n# 판정할 문장\n" + "\n".join(units), questions)
+    answers = decider.decide(mask_text(f"{criteria}\n\n{conversation}\n\n# 판정할 문장\n" + "\n".join(units)), questions)
 
     out = []
     for k, c in enumerate(cards, start=1):
@@ -97,7 +98,7 @@ def judge_pairs(new: dict, candidates: list[dict], decider: Decider) -> list[dic
 
     text = "# 새 결정\n" + line(new) + "\n\n# 기존 결정\n" + "\n".join(f"e{i}: {line(c)}" for i, c in enumerate(candidates, 1))
     qs = [choice_q(f"e{i}", f"새 결정과 기존 결정 e{i}의 관계는?", JUDGE_CHOICES) for i in range(1, len(candidates) + 1)]
-    answers = decider.decide(text, qs)
+    answers = decider.decide(mask_text(text), qs)  # 외부 전송 전에 가림
     out = []
     for i, c in enumerate(candidates, 1):
         a = answers.get(f"e{i}")
