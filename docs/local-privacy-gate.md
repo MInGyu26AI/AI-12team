@@ -1,3 +1,7 @@
+# 현재 설정 (2026-11-09)
+
+기본 모델은 gemma4:e4b-it-qat, 정책 v3, 문맥 8192, 유휴 유지 60초다. 엄격한 JSON 검증과 501 대체 요청을 사용한다. 아래 과거 평가의 기본값 표현은 당시 결과다. 현재 검증은 [모델·파서 통합 기록](privacy-model-v3.md)을 참고한다.
+
 # 로컬 사전 개인정보 필터
 
 2026-11-08 · 브랜치 `claude/local-privacy-gate-20261108` → `claude/review-privacy-retention-20261108` · 정책 버전 `syncup-local-privacy/2`
@@ -79,7 +83,7 @@ flowchart LR
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
-| `SYNCUP_LOCAL_PRIVACY_MODEL` | `gemma3:12b` | 빈 값이면 모델 없음으로 처리해 전부 보류한다. |
+| `SYNCUP_LOCAL_PRIVACY_MODEL` | `gemma4:e4b-it-qat` | 빈 값이면 모델 없음으로 처리해 전부 보류한다. |
 | `SYNCUP_LOCAL_PRIVACY_URL` | `http://127.0.0.1:11434` | 루프백 주소만 허용한다. |
 | `SYNCUP_LOCAL_PRIVACY_TIMEOUT` | `90` | 초 단위. 1~600 범위 밖이면 전부 보류한다. |
 

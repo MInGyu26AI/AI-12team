@@ -27,8 +27,8 @@ import urllib.parse
 from ai.syncup_ai import config as ai_config
 from ai.syncup_ai.mask import mask as contact_mask
 
-# v2 (2026-11-08): digits right after Korean credential words are masked (found by the 4B comparison).
-POLICY_VERSION = 'syncup-local-privacy/2'
+# v3 invalidates cached answers accepted before strict JSON validation; v2 credential masking is retained.
+POLICY_VERSION = 'syncup-local-privacy/3'
 ALLOW, EXCLUDE, HOLD = 'allow', 'exclude', 'hold'
 PERSONAL_TOKEN = '[개인사정]'
 SECRET_TOKEN = '[비밀키]'
@@ -38,8 +38,10 @@ TRANSIENT = ('model_unavailable', 'model_timeout', 'model_error')
 REQUESTED = ('recheck_requested', 'exclude_requested')
 RECHECK_SECONDS = 60
 DEFAULT_URL = 'http://127.0.0.1:11434'
-DEFAULT_MODEL = 'gemma3:12b'  # Measured in docs/local-privacy-gate.md; override with SYNCUP_LOCAL_PRIVACY_MODEL.
+DEFAULT_MODEL = 'gemma4:e4b-it-qat'  # Quality/memory comparison: docs/privacy-model-v3.md; tested on Ollama 0.40.15.
 LOOPBACK = ('127.0.0.1', '::1')
+# Prompt + one message (<= 2000 chars) stays under 4K tokens; a fixed window keeps the KV cache small.
+NUM_CTX = 8192
 
 
 class PrivacyBlocked(RuntimeError):
@@ -173,6 +175,7 @@ class OllamaClassifier:
             raise ValueError('로컬 개인정보 모델 이름을 확인하세요.')
         self.model, self.host, self.port, self.timeout = model, parsed.hostname, parsed.port or 11434, timeout
         self._identity = None
+        self.structured = True  # schema-constrained output; newer engines (gemma4, qwen3.5) answer 501 and we fall back
 
     def _call(self, method: str, path: str, body: dict | None, timeout: float) -> dict:
         connection = http.client.HTTPConnection(self.host, self.port, timeout=timeout)
@@ -190,7 +193,9 @@ class OllamaClassifier:
         if response.status == 404:
             raise ModelUnavailable('local model is not installed')
         if response.status != 200 or len(data) > 2_000_000:
-            raise ModelError(f'local model HTTP {response.status}')
+            error = ModelError(f'local model HTTP {response.status}')
+            error.status = response.status  # code only; the response body is never kept
+            raise error
         try:
             return json.loads(data)
         except ValueError as error:
@@ -210,17 +215,47 @@ class OllamaClassifier:
         return self._identity
 
     def classify(self, text: str) -> dict:
-        reply = self._call('POST', '/api/chat', {
-            'model': self.model, 'stream': False, 'think': False, 'format': OUTPUT_SCHEMA, 'keep_alive': '30m',
-            'options': {'temperature': 0, 'seed': 7},
-            'messages': [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': '발화: ' + text}],
-        }, self.timeout)
+        body = {'model': self.model, 'stream': False, 'think': False, 'keep_alive': '60s',
+                'options': {'temperature': 0, 'seed': 7, 'num_ctx': NUM_CTX},
+                'messages': [{'role': 'system', 'content': SYSTEM_PROMPT}, {'role': 'user', 'content': '발화: ' + text}]}
+        if self.structured:
+            body['format'] = OUTPUT_SCHEMA
+        try:
+            reply = self._call('POST', '/api/chat', body, self.timeout)
+        except ModelError as error:
+            # Ollama 0.40 answers 501 "structured output is unavailable" for new-engine models: ask for plain JSON
+            # instead. The answer is still parsed strictly and checked by judge(), so a bad answer holds.
+            if not self.structured or getattr(error, 'status', None) != 501:
+                raise
+            self.structured = False
+            body.pop('format')
+            reply = self._call('POST', '/api/chat', body, self.timeout)
         if reply.get('remote_host') or reply.get('remote_model'):
             raise ModelUnavailable('model is served remotely')
         try:
-            return json.loads(reply['message']['content'])
+            return _parse_json_object(reply['message']['content'])
         except (KeyError, TypeError, ValueError) as error:
             raise ModelOutputError('local model output is not JSON') from error
+
+
+def _parse_json_object(content: str) -> dict:
+    """Accept one complete JSON object, optionally fenced; ambiguous answers must hold."""
+    if not isinstance(content, str):
+        raise ValueError('not text')
+    content = content.strip()
+    fence = re.fullmatch(r'```(?:json)?\s*(.*?)\s*```', content, re.S)
+    if fence:
+        content = fence.group(1)
+    def unique_fields(pairs):
+        result = dict(pairs)
+        if len(result) != len(pairs):
+            raise ValueError('duplicate fields')
+        return result
+    # Dropping surrounding prose or duplicate fields could turn uncertainty into permission to send.
+    data = json.loads(content, object_pairs_hook=unique_fields)
+    if not isinstance(data, dict):
+        raise ValueError('not an object')
+    return data
 
 
 class UnconfiguredClassifier:
