@@ -20,6 +20,13 @@ from team_server import authorized
 from prepare_native import prepare
 import app
 
+
+def checked(req, conflicts=None):
+    return dict(ok=True, checkStatus='complete', conflicts=conflicts or [],
+                results=[dict(cardId=req['newCards'][0]['id'], judgements=[
+                    dict(id=c['id'], judgement='무관', confidence=.9, method='chat') for c in req['existing']])])
+
+
 class TeamIntegration(TeamIsolation):
     def publish_card(self, identifier, text, tag='decision', topic='DB'):
         card=public_card(text); card.update(content=text,tag=tag,topic_key=topic)
@@ -32,7 +39,7 @@ class TeamIntegration(TeamIsolation):
     def check_pair(self, pair='pair', judgement='변경'):
         def engine(req):
             new=req['newCards'][0]; old=[c for c in req['existing'] if c['tag']=='decision']
-            return dict(ok=True,checkStatus='complete',conflicts=[] if not old else [dict(id=pair,topic_key='DB',cardA=old[0],cardB=new,judgement=judgement,reason='가상 판정',confidence=.9,method='chat')])
+            return checked(req, [] if not old else [dict(id=pair,topic_key='DB',cardA=old[0],cardB=new,judgement=judgement,reason='가상 판정',confidence=.9,method='chat')])
         self.api.conflict_engine=engine; process_checks(self.api,self.tokens['Dana'],self.teams['A'])
     def test_change_yes_discuss_and_history(self):
         self.publish_card('old','SQLite로 결정했다.'); self.publish_card('new','PostgreSQL로 변경했다.'); self.check_pair()
@@ -62,7 +69,7 @@ class TeamIntegration(TeamIsolation):
             self.assertEqual(self.team_request('GET',suffix,user='Bob')[0],403)
         self.assertEqual(self.team_request('POST','items/one/retry-check',{},user='Bob')[0],403)
         self.assertEqual(self.team_request('POST','items/one/retry-check',{})[0],200)
-        self.api.conflict_engine=lambda req:dict(ok=True,checkStatus='complete',conflicts=[])
+        self.api.conflict_engine=checked
         process_checks(self.api,self.tokens['Dana'],self.teams['A'])
         self.assertEqual(self.team_request('GET','board')[1]['items'][0]['conflictCheckStatus'],'complete')
         self.publish_card('todo','내일까지 발표를 준비한다.','todo')
@@ -108,7 +115,7 @@ class TeamIntegration(TeamIsolation):
             self.assertEqual(self.team_request('POST','items/new/retry-check',{})[0],200)
             fail_second[0]=False; calls.clear()
             process_checks(self.api,self.tokens['Dana'],self.teams['A'])
-        self.assertEqual([len(body['questions']) for _,body in calls],[1,1,1,1])
+        self.assertEqual([len(body['questions']) for _,body in calls],[1,1,1])  # First pair was committed before failure.
         self.assertTrue(all(path=='/v1/decisions' for path,_ in calls))
         prompts='\n'.join(body['input'] for _,body in calls)
         for marker in ('OTHER_TEAM_SENTINEL','INACTIVE_SENTINEL','TODO_SENTINEL', 'UNAPPROVED_PRIVATE_SENTINEL_739'):
@@ -210,7 +217,10 @@ class TeamIntegration(TeamIsolation):
             process_checks(self.api,self.tokens['Dana'],self.teams['A'])
             with authorized(self.api_dsn,self.tokens['Dana'],self.teams['A']) as (c,_):
                 row=c.execute("SELECT state,attempts FROM syncup.conflict_checks WHERE card_id='recovered'").fetchone()
-                self.assertEqual((row['state'],row['attempts']),('complete',2))
+                # Retry budget resets after each committed pair; the review-state decision also participates.
+                self.assertEqual((row['state'],row['attempts']),('complete',1))
+            item=next(c for c in self.team_request('GET','board')[1]['items'] if c['id']=='recovered')
+            self.assertEqual(item['conflictCheckProgress'],dict(total=2,completed=2,skipped=0))
 
     def test_unknown_interruption_and_legacy_failure_require_manual_retry(self):
         self.publish_card('interrupted','중단된 결정')

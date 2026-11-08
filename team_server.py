@@ -8,6 +8,7 @@ import math
 import os
 import re
 import time
+import threading
 import urllib.parse
 import uuid
 
@@ -28,6 +29,14 @@ class AccessError(Exception):
 class TeamServer(http.server.ThreadingHTTPServer):
     request_queue_size = 32
 
+    def __init__(self, *args, **kwargs):
+        self.checks_stop = threading.Event()
+        super().__init__(*args, **kwargs)
+
+    def shutdown(self):
+        self.checks_stop.set()
+        super().shutdown()
+
 
 def verify_database(dsn):
     with psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5) as c:
@@ -46,6 +55,10 @@ def verify_database(dsn):
             WHERE attrelid='syncup.conflict_checks'::regclass AND attname='diagnostics'
               AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped""").fetchone():
             raise ValueError('team_admin.py migrate-integration으로 진단 기록 스키마를 적용하세요.')
+        if not c.execute("""SELECT 1 FROM pg_attribute
+            WHERE attrelid='syncup.conflict_checks'::regclass AND attname='progress'
+              AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped""").fetchone():
+            raise ValueError('team_admin.py migrate-integration으로 검사 진행 스키마를 적용하세요.')
 
 
 @contextmanager

@@ -28,6 +28,7 @@ export interface RelatedOutput extends CommonOutput {
   deliveryState?: "pending" | "sent" | "blocked";
   decisionState?: "active" | "review" | "superseded" | "rejected";
   conflictCheckStatus?: "pending" | "running" | "complete" | "failed" | "not-required";
+  conflictCheckProgress?: { total: number; completed: number; skipped: number } | null;
   conflictCheckDetail?: string;
   approvedBy?: string;
   approvedAt?: number;

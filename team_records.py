@@ -3,14 +3,16 @@ import threading
 import time
 from urllib.parse import unquote
 
+import psycopg
 from psycopg.types.json import Jsonb
 
-from ai.syncup_ai.conflict import handle_request as check_conflicts, _is_decision
+from ai.syncup_ai.conflict import handle_request as check_conflicts, _is_decision, ordered_candidates
+from ai.syncup_ai import config
 from ai.syncup_ai.llm import from_env, decider_from_env, LLMNotConfigured, RetryableLLMError
 from card_contract import board_card
 from diagnostics import failure, check_started, check_finished, model_fingerprint, conflict_policy_fingerprint
 
-_running = set()
+_running = {}
 _lock = threading.Lock()
 MAX_CHECK_ATTEMPTS = 3  # 최초 시도 + 일시적인 통신 실패 재시도 2회
 CONFLICT_POLICY_SHA256 = conflict_policy_fingerprint()
@@ -31,12 +33,15 @@ def enqueue(c, team_id, packet):
 def board(c, team_id, history=False):
     rows = c.execute('''SELECT r.packet,r.approved_by::text,r.approved_at,
         coalesce(s.state,'active') AS decision_state,coalesce(k.state,'not-required') AS check_state,
-        coalesce(k.detail,'') AS check_detail
+        coalesce(k.detail,'') AS check_detail,k.progress
         FROM syncup.shared_cards r LEFT JOIN syncup.record_states s ON (s.team_id,s.card_id)=(r.team_id,r.id)
         LEFT JOIN syncup.conflict_checks k ON (k.team_id,k.card_id)=(r.team_id,r.id)
         WHERE r.team_id=%s ORDER BY r.received_at,r.id''', (team_id,)).fetchall()
     return [dict(board_card(r), decisionState=r['decision_state'], conflictCheckStatus=r['check_state'],
-                 conflictCheckDetail=r['check_detail'])
+                 conflictCheckDetail=r['check_detail'],
+                 conflictCheckProgress=(dict(total=len(r['progress']['ids']),
+                     completed=r['progress']['cursor']-r['progress']['skipped'],
+                     skipped=r['progress']['skipped']) if r['progress'] and 'ids' in r['progress'] else None))
             for r in rows if history or r['decision_state'] in ('active', 'review')]
 
 
@@ -115,9 +120,15 @@ def handle(c, team_id, user_id, method, tail, data):
 
 def process_checks(server, token, team_id):
     from team_server import authorized
-    for _ in range(20):
+    # One durable pair per transaction; a scheduling slice is not a coverage limit.
+    for _ in range(config.CONFLICT_MAX_CANDIDATES):
+        if server.checks_stop.is_set():
+            return
         with authorized(server.dsn, token, team_id) as (c, _user):
             team_lock(c, team_id)
+            c.execute("""UPDATE syncup.conflict_checks SET state='pending',
+                detail='중단된 검사 이어서 진행',attempts=0
+                WHERE team_id=%s AND state='running' AND next_attempt<=now() AND progress ? 'ids'""", (team_id,))
             c.execute("""UPDATE syncup.conflict_checks SET state='failed',detail='중단된 검사 · 수동 재시도 필요',
                 diagnostics=diagnostics || jsonb_build_object('outcome','interrupted',
                     'finished_at',extract(epoch from clock_timestamp()),'checked_count',NULL,'elapsed_ms',NULL)
@@ -130,16 +141,40 @@ def process_checks(server, token, team_id):
             row = c.execute('SELECT packet,approved_by::text,approved_at,received_at FROM syncup.shared_cards WHERE team_id=%s AND id=%s',
                             (team_id,job['card_id'])).fetchone()
             new = board_card(row)
-            earlier = c.execute('''SELECT r.packet,r.approved_by::text,r.approved_at FROM syncup.shared_cards r
-                LEFT JOIN syncup.record_states s ON (s.team_id,s.card_id)=(r.team_id,r.id)
-                WHERE r.team_id=%s AND (r.received_at,r.id)<(%s,%s) AND coalesce(s.state,'active')='active' ''',
-                (team_id,row['received_at'],job['card_id'])).fetchall()
-            existing = [board_card(r) for r in earlier]
+            progress = job['progress']
+            if not progress or progress.get('policy') != CONFLICT_POLICY_SHA256:
+                if progress:
+                    job['attempts'] = 0
+                earlier = c.execute('''SELECT r.packet,r.approved_by::text,r.approved_at FROM syncup.shared_cards r
+                    LEFT JOIN syncup.record_states s ON (s.team_id,s.card_id)=(r.team_id,r.id)
+                    WHERE r.team_id=%s AND (r.received_at,r.id)<(%s,%s)
+                    AND coalesce(s.state,'active') IN ('active','review')''',
+                    (team_id,row['received_at'],job['card_id'])).fetchall()
+                progress = dict(ids=[card['id'] for card in ordered_candidates(new, [board_card(r) for r in earlier])],
+                                cursor=0, skipped=0, policy=CONFLICT_POLICY_SHA256)
+            ids = progress['ids']
+            next_id = ids[progress['cursor']] if progress['cursor'] < len(ids) else None
+            existing = []
+            if next_id is not None:
+                old = c.execute('''SELECT r.packet,r.approved_by::text,r.approved_at FROM syncup.shared_cards r
+                    JOIN syncup.record_states s ON (s.team_id,s.card_id)=(r.team_id,r.id)
+                    WHERE r.team_id=%s AND r.id=%s AND s.state IN ('active','review')''', (team_id,next_id)).fetchone()
+                if old:
+                    existing = [board_card(old)]
+            new_active = c.execute("SELECT 1 FROM syncup.record_states WHERE team_id=%s AND card_id=%s AND state IN ('active','review')",
+                                   (team_id,new['id'])).fetchone()
+            if not new_active or (next_id is not None and not existing):
+                skipped = len(ids)-progress['cursor'] if not new_active else 1
+                progress.update(cursor=progress['cursor']+skipped, skipped=progress['skipped']+skipped)
+                complete = progress['cursor'] == len(ids)
+                c.execute("UPDATE syncup.conflict_checks SET progress=%s,state=%s,attempts=0,next_attempt=now(),detail=%s WHERE team_id=%s AND card_id=%s",
+                          (Jsonb(progress),'complete' if complete else 'pending','비활성 결정 비교 제외',team_id,new['id']))
+                continue
             candidate_ids = {card['id'] for card in existing if _is_decision(card) and card['id'] != new['id']}
             # 중단 후에도 시작 여부를 확인하도록 진단과 작업 상태를 같은 트랜잭션에 저장한다.
             diagnostic = check_started(job['attempts'] + 1, len(candidate_ids))
-            lease = c.execute("UPDATE syncup.conflict_checks SET state='running',detail='',diagnostics=%s,attempts=attempts+1,next_attempt=clock_timestamp()+interval '3 minutes' WHERE team_id=%s AND card_id=%s RETURNING next_attempt",
-                      (Jsonb(diagnostic),team_id,job['card_id'])).fetchone()['next_attempt']
+            lease = c.execute("UPDATE syncup.conflict_checks SET state='running',detail='',diagnostics=%s,progress=%s,attempts=%s,next_attempt=clock_timestamp()+interval '3 minutes' WHERE team_id=%s AND card_id=%s RETURNING next_attempt",
+                      (Jsonb(diagnostic),Jsonb(progress),job['attempts']+1,team_id,job['card_id'])).fetchone()['next_attempt']
         started = time.monotonic()
         try:
             if getattr(server, 'conflict_engine', None):
@@ -158,6 +193,9 @@ def process_checks(server, token, team_id):
             failure('conflict_engine', error, job['card_id'])
             result = dict(ok=False, retryable=isinstance(error, RetryableLLMError),
                           failureReason='communication' if isinstance(error, RetryableLLMError) else 'check-failed')
+        coverage = check_finished(diagnostic, result, new['id'], candidate_ids, 0, 'complete')
+        if result.get('ok') and coverage['checked_count'] != len(candidate_ids):
+            result = dict(ok=False, failureReason='check-failed')
         with authorized(server.dsn, token, team_id) as (c, _user):
             team_lock(c, team_id)
             current = c.execute('SELECT state,attempts,next_attempt FROM syncup.conflict_checks WHERE team_id=%s AND card_id=%s FOR UPDATE', (team_id,job['card_id'])).fetchone()
@@ -187,24 +225,50 @@ def process_checks(server, token, team_id):
                 c.execute("UPDATE syncup.record_states SET state='review' WHERE team_id=%s AND card_id=%s AND state='active'", (team_id,b))
             diagnostic = check_finished(diagnostic, result, new['id'], candidate_ids,
                                         (time.monotonic()-started)*1000, 'complete')
-            c.execute("UPDATE syncup.conflict_checks SET state='complete',detail='',diagnostics=%s WHERE team_id=%s AND card_id=%s",
-                      (Jsonb(diagnostic),team_id,job['card_id']))
+            progress['cursor'] += int(next_id is not None)
+            complete = progress['cursor'] == len(ids)
+            c.execute("UPDATE syncup.conflict_checks SET state=%s,detail='',diagnostics=%s,progress=%s,attempts=%s,next_attempt=clock_timestamp() WHERE team_id=%s AND card_id=%s",
+                      ('complete' if complete else 'pending',Jsonb(diagnostic),Jsonb(progress),
+                       current['attempts'] if complete else 0,team_id,job['card_id']))
 
 
 def schedule(server, token, team_id):
-    if getattr(server, 'disable_checks', False):
+    if getattr(server, 'disable_checks', False) or server.checks_stop.is_set():
         return
     key = (id(server), str(team_id))
     with _lock:
         if key in _running:
+            _running[key].set()
             return
-        _running.add(key)
+        wake = threading.Event()
+        _running[key] = wake
     def run():
         try:
-            process_checks(server, token, team_id)
+            from team_server import authorized
+            while not server.checks_stop.is_set():
+                wake.clear()
+                try:
+                    process_checks(server, token, team_id)
+                    with authorized(server.dsn, token, team_id) as (c, _):
+                        row = c.execute("""SELECT min(next_attempt) AS due FROM syncup.conflict_checks
+                            WHERE team_id=%s AND state IN ('pending','running')""", (team_id,)).fetchone()
+                except (psycopg.OperationalError, psycopg.InterfaceError) as error:
+                    failure('conflict_database', error, team_id)
+                    server.checks_stop.wait(5)
+                    continue
+                if row['due'] is None:
+                    with _lock:
+                        if wake.is_set():
+                            continue
+                        _running.pop(key, None)
+                        return
+                # Credentials stay in memory; every slice rechecks membership and token expiry.
+                wait = min(1, max(.05, row['due'].timestamp()-time.time()))
+                wake.wait(wait)
         except Exception as error:
             failure('conflict_worker', error, team_id)
         finally:
             with _lock:
-                _running.discard(key)
+                if _running.get(key) is wake:
+                    _running.pop(key, None)
     threading.Thread(target=run, daemon=True).start()

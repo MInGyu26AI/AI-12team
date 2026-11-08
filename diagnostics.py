@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import time
 
@@ -26,11 +27,13 @@ def conflict_policy_fingerprint():
     root = Path(__file__).parent / 'ai'
     try:
         digest = hashlib.sha256()
-        for name in ('syncup_ai/conflict.py', 'syncup_ai/decide.py', 'prompts/conflict_system.md'):
+        for name in ('syncup_ai/conflict.py', 'syncup_ai/decide.py', 'syncup_ai/llm.py', 'prompts/conflict_system.md'):
             digest.update(name.encode() + b'\0' + (root / name).read_bytes() + b'\0')
         limits = {name: getattr(config, name) for name in (
             'LOW_CONFIDENCE', 'CONFLICT_TOP_K', 'CONFLICT_MAX_CANDIDATES',
             'CONFLICT_MAX_INPUT_CHARS', 'CONFLICT_CHECK_SECONDS', 'CONFLICT_ON_CHANGE')}
+        limits['provider'] = {name: os.environ.get(name, '') for name in ('AI_BASE_URL','AI_MODEL','AI_DECISIONS_MODEL')}
+        limits['responses_default'] = bool(os.environ.get('OPENAI_API_KEY'))
         digest.update(json.dumps(limits, sort_keys=True).encode())
         return digest.hexdigest()
     except OSError:

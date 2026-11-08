@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import psycopg
 
-from check_team_integration import TeamIntegration
+from check_team_integration import TeamIntegration, checked
 from check_server_recovery import ServerRecovery
 from diagnostics import check_finished, check_started, model_fingerprint
 from team_records import process_checks
@@ -89,7 +89,9 @@ class DiagnosticPersistence(TeamIntegration):
             process_checks(self.api, self.tokens['Dana'], self.teams['A'])
             process_checks(self.api, self.tokens['Dana'], self.teams['A'])
         d = self.saved()['diagnostics']
-        self.assertEqual((d['candidate_count'], d['outcome'], len(calls)), (2, 'needs-review', 2))
+        self.assertEqual((d['candidate_count'], d['outcome'], len(calls)), (1, 'needs-review', 2))
+        item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == 'new')
+        self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=1, skipped=0))
         self.assertIsNone(d['checked_count'])
         self.assertNotIn(SECRET, json.dumps(d))
 
@@ -110,7 +112,7 @@ class DiagnosticPersistence(TeamIntegration):
         self.api.conflict_engine = lambda req: dict(ok=True, checkStatus='complete', conflicts=[])
         process_checks(self.api, self.tokens['Dana'], self.teams['A'])
         d = self.saved()['diagnostics']
-        self.assertEqual((d['attempt'], d['outcome']), (1, 'complete'))
+        self.assertEqual((d['attempt'], d['outcome']), (1, 'check-failed'))
         self.assertIsNone(d['checked_count'])  # Custom engine did not provide comparison results.
         self.assertIsNone(d['policy_sha256'])
 
@@ -138,11 +140,11 @@ class DiagnosticPersistence(TeamIntegration):
             process_checks(self.api, self.tokens['Dana'], self.teams['A'])
         with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
             c.execute("UPDATE syncup.conflict_checks SET next_attempt=now()-interval '1 second' WHERE card_id='new'")
+        self.api.conflict_engine = checked
         process_checks(self.api, self.tokens['Dana'], self.teams['A'])
         row = self.saved()
-        self.assertEqual((row['state'], row['diagnostics']['outcome']), ('failed', 'interrupted'))
-        self.assertIsNone(row['diagnostics']['elapsed_ms'])
-        self.assertIsNone(row['diagnostics']['checked_count'])
+        self.assertEqual((row['state'], row['diagnostics']['outcome']), ('complete', 'complete'))
+        self.assertEqual(row['diagnostics']['checked_count'], 1)
 
     def test_diagnostic_late_worker_cannot_replace_new_lease(self):
         ServerRecovery.test_late_worker_cannot_overwrite_retried_attempt_with_same_number(self)

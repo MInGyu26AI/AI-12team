@@ -105,7 +105,17 @@ export default function BoardPage() {
         </Button>
       </div>
       {!USE_MOCK && <History />}
-      {cards.filter(c => ['pending','running','failed'].includes(c.conflictCheckStatus ?? '')).map(c => <div key={c.id} className="rounded border p-3"><span>{c.content} · {c.conflictCheckDetail || (c.conflictCheckStatus === 'failed' ? 'AI 검사 미완료 · 확인 필요' : '기존 결정과 비교 중')}{c.conflictCheckStatus === 'failed' && ' · 충돌 없음으로 확정되지 않음'}</span>{c.conflictCheckStatus === 'failed' && <Button variant="outline" onClick={async () => { try { await rpc('team.retryCheck', { id: c.id }); await refresh(); } catch (error) { toast.error((error as Error).message); } }}>검사 재시도</Button>}</div>)}
+      {cards.filter(c => ['pending','running','failed'].includes(c.conflictCheckStatus ?? '')).map(c => (
+        <div key={c.id} className="space-y-2 rounded border p-3">
+          <p>{c.content} · {c.conflictCheckDetail || '기존 결정과 비교 중'}</p>
+          <CheckProgress card={c} />
+          <p className="text-sm text-muted-foreground">아직 전체 검사가 끝나지 않았어요. 발견된 충돌은 먼저 표시합니다.</p>
+          {c.conflictCheckStatus === 'failed' && <Button variant="outline" onClick={async () => {
+            try { await rpc('team.retryCheck', { id: c.id }); await refresh(); }
+            catch (error) { toast.error((error as Error).message); }
+          }}>남은 검사 재시도</Button>}
+        </div>
+      ))}
 
       {conflicts.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-sensitive/40 bg-sensitive-soft px-5 py-4">
@@ -223,6 +233,19 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto max-w-wide space-y-6 px-gutter py-10">{children}</div>;
 }
 
+function CheckProgress({ card }: { card: RelatedCard }) {
+  const progress = card.conflictCheckProgress;
+  if (!progress) return <p className="text-sm text-muted-foreground">{card.conflictCheckStatus === 'complete' ? '검사 완료' : '비교 대상 확인 대기'}</p>;
+  const processed = progress.completed + progress.skipped;
+  return <div className="space-y-1 text-sm text-muted-foreground" role="status">
+    <p>{card.conflictCheckStatus === 'complete' ? '검사 완료' : '검사 진행'} · {progress.completed}/{progress.total}개 비교 완료
+      {progress.skipped > 0 && ` · 비활성 결정 ${progress.skipped}개 제외`}</p>
+    {card.conflictCheckStatus !== 'complete' && progress.total > 0 && (
+      <progress className="h-2 w-full accent-brand" value={processed} max={progress.total} aria-label={`${card.content} 충돌 검사 진행률`} />
+    )}
+  </div>;
+}
+
 function History() {
   const [records, setRecords] = useState<RelatedCard[]|null>(null);
   const [events, setEvents] = useState<{resolution:string;note:string;at:string}[]>([]);
@@ -285,6 +308,7 @@ function DecisionItem({ card: c, judgement, onOpen }: { card: RelatedCard; judge
           )}
         </div>
         <p className="text-lg font-bold break-keep">{c.content}</p>
+        {c.conflictCheckStatus === 'complete' && <CheckProgress card={c} />}
         {c.reason && <p className="text-sm text-muted-foreground break-keep">이유: {c.reason}</p>}
         <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Avatar name={c.owner} size="sm" />

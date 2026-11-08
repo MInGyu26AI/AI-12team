@@ -29,18 +29,24 @@ class LowConfidenceError(ValueError):
 def _is_decision(c: dict) -> bool:
     return (c.get("relevance") == "related" and c.get("tag") == "decision"
             and c.get("status", "approved") == "approved"
-            and c.get("decisionState", "active") == "active")
+            and c.get("decisionState", "active") in ("active", "review"))
 
 
 def find_candidates(new: dict, existing: list[dict], embedder: Embedder | None = None) -> list[dict]:
-    topic = _norm(new.get("topic_key") or "")
-    pool = [c for c in existing if _is_decision(c) and c.get("id") != new.get("id")]
+    pool = ordered_candidates(new, existing)
     if not pool:
         return []
     if len(pool) > config.CONFLICT_MAX_CANDIDATES:
         raise ValueError("충돌 비교 개수 한도를 초과했습니다. 검사 미완료입니다.")
     if len(json.dumps([_brief(new), *map(_brief, pool)], ensure_ascii=False)) > config.CONFLICT_MAX_INPUT_CHARS:
         raise ValueError("충돌 비교 입력 크기 한도를 초과했습니다. 검사 미완료입니다.")
+    return pool
+
+
+def ordered_candidates(new: dict, existing: list[dict]) -> list[dict]:
+    """Durable workers snapshot all eligible IDs; synchronous callers retain their request budget."""
+    topic = _norm(new.get("topic_key") or "")
+    pool = [c for c in existing if _is_decision(c) and c.get("id") != new.get("id")]
     # 순서만 정하므로 외부 임베딩 호출 없이 기존 로컬 유사도를 사용한다.
     scores = similarities(new, pool)
     return [c for c, _ in sorted(zip(pool, scores),

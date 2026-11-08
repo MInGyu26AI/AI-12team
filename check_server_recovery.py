@@ -43,7 +43,7 @@ class ServerRecovery(check_team_integration.TeamIntegration):
         process_checks(self.api,self.tokens['Dana'],self.teams['A'])
         self.assertEqual(self.team_request('GET','board')[1]['items'][0]['conflictCheckStatus'], 'failed')
         self.assertEqual(self.team_request('POST','items/last/retry-check',{})[0], 200)
-        self.api.conflict_engine = lambda req: dict(ok=True,checkStatus='complete',conflicts=[])
+        self.api.conflict_engine = check_team_integration.checked
         process_checks(self.api,self.tokens['Dana'],self.teams['A'])
         self.assertEqual(self.team_request('GET','board')[1]['items'][0]['conflictCheckStatus'], 'complete')
 
@@ -54,7 +54,7 @@ class ServerRecovery(check_team_integration.TeamIntegration):
         def engine(req):
             entered.set()
             if not release.wait(10): raise TimeoutError()
-            return dict(ok=True,checkStatus='complete',conflicts=[])
+            return check_team_integration.checked(req)
         self.api.conflict_engine = engine
         def run():
             try: process_checks(self.api,self.tokens['Dana'],self.teams['A'])
