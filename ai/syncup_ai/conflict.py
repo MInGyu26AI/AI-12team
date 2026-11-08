@@ -15,7 +15,7 @@ import time
 
 from . import config
 from .decide import judge_pairs
-from .llm import LLM, Decider, Embedder, RetryableLLMError
+from .llm import LLM, Decider, Embedder, LLMError, RetryableLLMError
 from .similarity import similarities
 from .mask import mask_text
 
@@ -88,6 +88,12 @@ def ai_judge(new: dict, candidates: list[dict], llm: LLM, allow_rules: bool = Tr
         + '\n\n기존 결정마다 판정해 {"results": [...]} JSON 하나로만 답하세요.'
     )
     reply = llm.chat_json(system, mask_text(user))
+    if not allow_rules:
+        rows = reply.get('results')
+        if (not isinstance(rows, list) or len(rows) != len(candidates)
+                or any(not isinstance(row, dict) for row in rows)
+                or {row.get('id') for row in rows} != {c.get('id') for c in candidates}):
+            raise ValueError('충돌 판정 응답의 대상이 누락되거나 중복되었습니다.')
     by_id = {str(r.get("id")): r for r in reply.get("results", []) if isinstance(r, dict)}
     out = []
     for c in candidates:
@@ -156,6 +162,26 @@ def check_new_decision(
                     raise transport_error
                 raise ValueError("AI 충돌 검사를 완료하지 못했습니다. 재시도가 필요합니다.")
             result = [{**rule_judge(new, c), "method": "rule"} for c in batch]
+        for index, judgement in enumerate(result):
+            if judgement['method'] != 'decisions' or _confident(judgement) or llm is None:
+                continue
+            if time.monotonic() >= deadline:
+                raise LowConfidenceError('확인 필요: 독립 검토 시간을 초과했습니다.')
+            candidate = next(c for c in batch if c['id'] == judgement['id'])
+            try:
+                review = ai_judge(new, [candidate], llm, allow_rules=False)[0]
+                if not _confident(review) or time.monotonic() >= deadline:
+                    continue
+                # 검토자의 결론은 Decisions에 전달하지 않는다. 두 독립 판정이 모두 기준을 넘어야 한다.
+                confirmed = judge_pairs(new, [candidate], decider, with_owner_evidence=True)[0]
+                if (time.monotonic() < deadline and _confident(confirmed)
+                        and confirmed['judgement'] == review['judgement']):
+                    result[index] = dict(confirmed, method='decisions', reviewedBy='chat',
+                                         reviewConfidence=review['confidence'],
+                                         confidence=min(confirmed['confidence'], review['confidence']))
+            except (LLMError, ValueError, TypeError):
+                # 보완 검토 실패로 최초의 불확실한 판정을 자동 통신 재시도로 바꾸지 않는다.
+                continue
         if any(j["method"] != "rule" and not _confident(j) for j in result):
             raise LowConfidenceError("확인 필요: AI 판정의 확신도가 부족합니다. 검사 미완료입니다.")
         judged.extend(result)
@@ -175,6 +201,7 @@ def check_new_decision(
                 "reason": r["reason"],
                 "confidence": r["confidence"],
                 "method": r["method"],
+                **({"reviewedBy": r['reviewedBy']} if 'reviewedBy' in r else {}),
             })
     return judged, conflicts
 

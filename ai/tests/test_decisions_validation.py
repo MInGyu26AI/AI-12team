@@ -185,11 +185,13 @@ class DecisionsValidationTest(unittest.TestCase):
                 result = json.loads(process.stdout)
                 self.assertEqual(process.returncode, 0 if expected else 1, process.stderr)
                 self.assertEqual(result['ok'], expected)
-                self.assertEqual(len(calls), before + 1)
+                paths = [path for path, _ in calls[before:]]
+                self.assertEqual(paths, ['/v1/decisions', '/v1/chat/completions']
+                                 if answer.get('confidence') == .5999 else ['/v1/decisions'])
                 if not expected:
                     self.assertEqual(result['checkStatus'], 'failed')
                     self.assertFalse(result['retryable'])
-            self.assertTrue(all(path == '/v1/decisions' for path, _ in calls))
+            self.assertTrue(all(path in ('/v1/decisions', '/v1/chat/completions') for path, _ in calls))
         finally:
             server.shutdown()
             server.server_close()

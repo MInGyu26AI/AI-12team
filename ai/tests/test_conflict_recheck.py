@@ -1,4 +1,4 @@
-"""Low confidence stops once; only transient transport failures permit automatic retry."""
+"""Low confidence needs independent agreement; review failures never become automatic retries."""
 import unittest
 from unittest.mock import Mock, patch
 
@@ -32,7 +32,7 @@ class RecheckTest(unittest.TestCase):
         self.assertEqual([len(c.args[1]) for c in client.decide.call_args_list], [3])
         self.assertNotIn('conflicts', result)
 
-    def test_uncertain_any_label_blocks_chat_rules_and_partial_success(self):
+    def test_uncertain_any_label_blocks_unvalidated_review_and_partial_success(self):
         for label in conflict.JUDGEMENTS:
             for confidence in (0, .5999, None, float('nan'), 1.1, True):
                 with self.subTest(label=label, confidence=confidence):
@@ -44,7 +44,63 @@ class RecheckTest(unittest.TestCase):
                     self.assertNotIn('conflicts', result)
                     self.assertEqual(client.decide.call_count, 1)
                     self.assertFalse(result['retryable'])
-                    chat.chat_json.assert_not_called()
+                    chat.chat_json.assert_called_once()
+
+    def test_independent_agreement_preserves_both_thresholds_and_does_not_send_verdict(self):
+        chat = Mock()
+        chat.chat_json.return_value = {'results': [dict(id='old', judgement='변경', reason='REVIEW_ONLY', confidence=.8)]}
+        self.new['owner'] = self.old[0]['owner'] = '가상팀원A'
+        result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)},
+                                        {'e1': dict(choice='변경', confidence=.67)}], llm=chat, allow_rules=False)
+        judged = result['results'][0]['judgements'][0]
+        self.assertEqual((judged['judgement'], judged['confidence'], judged['reviewedBy']), ('변경', .67, 'chat'))
+        self.assertEqual(client.decide.call_count, 2)
+        self.assertNotIn('현재 쌍의 결정자 정보', client.decide.call_args_list[0].args[0])
+        self.assertIn('두 결정자: 동일', client.decide.call_args_list[1].args[0])
+        self.assertNotIn('REVIEW_ONLY', client.decide.call_args_list[1].args[0])
+        chat.chat_json.assert_called_once()
+
+    def test_review_disagreement_or_low_confidence_still_stops_once(self):
+        for review_label, review_conf, confirm_label, confirm_conf in [
+                ('변경', .9, '충돌', .9), ('변경', .59, '변경', .9), ('변경', .9, '변경', .59)]:
+            chat = Mock()
+            chat.chat_json.return_value = {'results': [dict(id='old', judgement=review_label, confidence=review_conf)]}
+            result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)},
+                                            {'e1': dict(choice=confirm_label, confidence=confirm_conf)}], llm=chat, allow_rules=False)
+            self.assertEqual(result['failureReason'], 'low-confidence')
+            self.assertFalse(result['retryable'])
+            self.assertNotIn('results', result)
+            self.assertEqual(client.decide.call_count, 1 if review_conf < .6 else 2)
+            chat.chat_json.assert_called_once()
+
+    def test_review_failure_does_not_retry_or_accept_duplicate_rows(self):
+        row = dict(id='old', judgement='변경', confidence=.99)
+        for reply in (RetryableLLMError('synthetic'), {'results': [row, row]}, {'results': []}):
+            chat = Mock()
+            chat.chat_json.side_effect = [reply]
+            result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)}], llm=chat, allow_rules=False)
+            self.assertEqual(result['failureReason'], 'low-confidence')
+            self.assertFalse(result['retryable'])
+            self.assertEqual(client.decide.call_count, 1)
+
+    def test_unknown_owner_is_not_invented_and_review_is_masked(self):
+        chat = Mock()
+        chat.chat_json.return_value = {'results': [dict(id='old', judgement='변경', confidence=.9)]}
+        self.new['owner'] = self.old[0]['owner'] = '사용자'
+        self.new['sentence'] = '연락처 010-1234-5678은 공유 금지'
+        result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)},
+                                        {'e1': dict(choice='변경', confidence=.7)}], llm=chat, allow_rules=False)
+        self.assertTrue(result['ok'])
+        self.assertIn('두 결정자: 미상', client.decide.call_args_list[1].args[0])
+        self.assertNotIn('010-1234-5678', chat.chat_json.call_args.args[1])
+        self.assertNotIn('010-1234-5678', client.decide.call_args_list[1].args[0])
+
+    def test_whitespace_around_unknown_owner_is_still_unknown(self):
+        client = Mock()
+        client.decide.return_value = {'e1': dict(choice='무관', confidence=.9)}
+        self.new['owner'] = self.old[0]['owner'] = ' 미상 '
+        judge_pairs(self.new, self.old, client, with_owner_evidence=True)
+        self.assertIn('두 결정자: 미상', client.decide.call_args.args[0])
 
     def test_missing_or_permanent_error_is_not_provider_fallback(self):
         for retry in ({}, RuntimeError('synthetic outage')):

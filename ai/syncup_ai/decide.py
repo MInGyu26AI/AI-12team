@@ -91,13 +91,22 @@ def relabel(cards: list[dict], conversation: str, decider: Decider, enabled: lis
     return out
 
 
-def judge_pairs(new: dict, candidates: list[dict], decider: Decider) -> list[dict]:
+def judge_pairs(new: dict, candidates: list[dict], decider: Decider, *, with_owner_evidence: bool = False) -> list[dict]:
     """새 결정 ↔ 기존 결정 후보들 → [{id, judgement, reason, confidence}]"""
     def line(c):
         # 검색용 주제 이름이 실제 결정 대상을 덮어쓰지 않게 판정 입력에서는 제외한다.
         return f"{c.get('content')} — 원문: \"{c.get('sentence')}\" (결정자 {c.get('owner') or '미상'}, {c.get('source', '')}) 이유: {c.get('reason') or ''}"
 
     text = "# 새 결정\n" + line(new) + "\n\n# 기존 결정\n" + "\n".join(f"e{i}: {line(c)}" for i, c in enumerate(candidates, 1))
+    if with_owner_evidence:
+        if len(candidates) != 1:
+            raise ValueError('보완 검토는 한 쌍씩 수행해야 합니다.')
+        old_owner, new_owner = candidates[0].get('owner'), new.get('owner')
+        known = all(isinstance(owner, str) and owner.strip() and owner.strip() not in ('미상', '사용자', 'unknown')
+                    for owner in (old_owner, new_owner))
+        relation = ('동일' if old_owner == new_owner else '다름') if known else '미상'
+        text += (f'\n\n# 현재 쌍의 결정자 정보\n기존 결정자: {old_owner or "미상"}'
+                 f'\n새 결정자: {new_owner or "미상"}\n두 결정자: {relation}')
     qs = [choice_q(f"e{i}", f"새 결정과 지금 비교하는 기존 결정 e{i} 사이의 관계를 아래 순서로 판정한다. "
                    "1. 결정 대상·항목이 다르거나 적용 범위·시점이 전혀 겹치지 않으면 무관이다. "
                    "2. 같은 대상이면 두 결정이 최종적으로 채택한 값을 비교한다. 최종 값이 같으면 같음이다. "

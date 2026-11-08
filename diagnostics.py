@@ -61,5 +61,7 @@ def check_finished(start, result, card_id, candidate_ids, elapsed_ms, outcome):
                     checked = len(ids)
                     methods = {j.get('method') for j in judgements
                                if isinstance(j.get('method'), str) and j['method'] in ('decisions', 'chat', 'rule')}
+                    if any(j.get('reviewedBy') == 'chat' for j in judgements):
+                        methods.add('chat')
     return dict(start, finished_at=time.time(), elapsed_ms=max(0, int(elapsed_ms)),
                 checked_count=checked, methods=sorted(methods), outcome=outcome)
