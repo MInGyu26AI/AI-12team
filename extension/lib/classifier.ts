@@ -72,7 +72,6 @@ export async function classifyWithFallback(
   try {
     return { cards: await nativeClassifier.classify(messages, settings, existingTopicKeys), used: 'native' };
   } catch (e) {
-    const cards = await mockClassifier.classify(messages, settings, existingTopicKeys);
-    return { cards, used: 'mock', nativeError: (e as Error).message };
+    throw new Error(`로컬 분류 실패: ${(e as Error).message}`);
   }
 }

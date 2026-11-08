@@ -23,6 +23,13 @@ export default function CollectPage() {
           브라우저 확장이 ChatGPT 웹 대화를 모아 승인함으로 보내요. 팀에 바로 올라가지 않고, 내가 승인한 것만 공유돼요.
         </p>
       </div>
+      {ext.error && <p role="alert">{ext.error}</p>}
+      {connected && <section className="space-y-3 rounded-xl border bg-card p-6">
+        <label className="block">승인 대상 팀<select aria-label="승인 대상 팀" value={st.teamId ?? ''} onChange={e => ext.updateSettings({ teamId: e.target.value })} className="ml-3 rounded border p-2">{st.teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+        <label className="block">프로젝트 주제<input aria-label="프로젝트 주제" defaultValue={st.projectTopic ?? ''} onBlur={e => ext.updateSettings({ projectTopic: e.target.value })} className="ml-3 rounded border p-2" /></label>
+        <label className="block">수집 종료 시각<input aria-label="수집 종료 시각" type="datetime-local" onChange={e => e.target.value && ext.updateSettings({ endsAt: new Date(e.target.value).toISOString() })} className="ml-3 rounded border p-2" /></label>
+        <p className="text-sm text-muted-foreground">Codex·Claude Code는 선택한 프로젝트에서 완료된 새 발화를 모읍니다. 이미 승인한 카드의 대상 팀은 변경되지 않습니다.</p>
+      </section>}
 
       {/* 연결된 AI */}
       <section className="rounded-xl border bg-card p-6">
@@ -104,21 +111,21 @@ export default function CollectPage() {
         )}
         <ToggleRow
           title="이 팀 프로젝트와 관련된 대화만 수집"
-          desc="프로젝트 주제와 상관없는 대화는 수집하지 않아요 (개인정보 보호를 위해 항상 켜져 있어요)"
+          desc="수집한 발화를 AI로 분류하고 팀 관련 후보만 검토함에 보여줍니다. 팀 공유는 승인 후에만 진행됩니다."
           checked
           disabled
           onChange={() => {}}
         />
         <ToggleRow
           title="수집 일시정지"
-          desc="개인적인 대화를 할 때 잠시 꺼 두세요. 일시정지하면 쌓인 대화는 바로 승인함으로 보내요"
+          desc="일시중지하면 새 수집과 AI 요청을 멈춥니다. 이미 승인한 카드의 전송은 계속됩니다."
           checked={connected ? !st.autoCollect : false}
           disabled={!connected}
           onChange={(paused) => ext.updateSettings({ autoCollect: !paused })}
         />
         {connected && st.endsAt && (
           <p className="text-sm text-muted-foreground">
-            수집 종료 시각 {fmtMDHM(new Date(st.endsAt))} — 이때 남은 대화를 보내고 수집을 멈춰요 (확장 팝업에서 바꿀 수 있어요)
+            수집 종료 시각 {fmtMDHM(new Date(st.endsAt))} — 남은 대화는 보관하고 수집과 AI 요청을 멈춰요.
           </p>
         )}
       </section>

@@ -40,7 +40,7 @@ export function PasteInput({ busy, onClassify }: { busy: boolean; onClassify: (u
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        붙여넣은 대화는 이 브라우저 안에서만 분류돼요. 팀에는 내가 체크해서 공유한 카드만 올라가요.
+        선택한 발화는 로컬 수집기를 통해 AI 분류에 보내요. 팀에는 내가 승인한 카드만 올라가요.
       </p>
     </div>
   );

@@ -45,7 +45,7 @@ export function ExportUpload({ busy, onClassify }: { busy: boolean; onClassify: 
       <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed bg-background p-6 text-center text-sm hover:bg-muted/50">
         <FileArchive className="size-6 text-muted-foreground" />
         <span className="font-medium">ChatGPT 내보내기 zip 또는 conversations.json 선택</span>
-        <span className="text-xs text-muted-foreground">파일은 이 브라우저 안에서만 열려요. 서버로 보내지 않아요.</span>
+        <span className="text-xs text-muted-foreground">파일은 브라우저에서 열고, 선택한 대화만 AI 분류에 보내요.</span>
         <input
           type="file"
           accept=".zip,.json,application/zip,application/json"

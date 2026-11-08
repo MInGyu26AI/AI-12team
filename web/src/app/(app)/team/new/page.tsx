@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useTeam } from "@/lib/team";
 import { useExtensionBridge } from "@/lib/use-extension-bridge";
 import { cn } from "@/lib/utils";
+import { USE_MOCK } from "@/lib/api";
 
 // 피그마 2번: 새 팀 만들기 (서버 붙기 전에는 이 브라우저에 저장)
 export default function NewTeamPage() {
@@ -43,6 +44,7 @@ export default function NewTeamPage() {
     router.push("/collect");
   };
 
+  if (!USE_MOCK) return <div className="mx-auto max-w-content space-y-4 px-gutter py-10"><h1 className="text-2xl font-bold">등록된 팀으로 연결</h1><p>현재 내부 시연은 관리자가 미리 등록한 사용자와 팀으로 연결합니다. 수집 화면에서 소속 팀을 선택하세요.</p><a href="/collect" className="underline">팀 연결 확인하기</a></div>;
   return (
     <div className="mx-auto max-w-content space-y-6 px-gutter py-10">
       <div className="space-y-2">

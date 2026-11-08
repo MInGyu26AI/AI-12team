@@ -54,6 +54,7 @@ export default function App() {
       bufferItem.watch((b) => setBufferedTurns(countTurns(b))),
     ];
     checkTab().then(setTab);
+    browser.runtime.sendMessage({ type: 'refresh' }).catch(() => {});
     return () => un.forEach((f) => f());
   }, []);
 
@@ -65,27 +66,28 @@ export default function App() {
         initial={settings}
         firstTime={!isConfigured(settings)}
         onSave={async (s) => {
-          await settingsItem.setValue(s);
-          setEditing(false);
+          const result = await browser.runtime.sendMessage({ type: 'updateSettings', patch: { projectTopic: s.projectTopic, enabledSubtopics: s.enabledSubtopics, turnsPerBatch: turnsOf(s), autoCollect: s.autoCollect, ...(s.endsAt ? { endsAt: s.endsAt } : {}) } });
+          if (result?.ok) { await settingsItem.setValue({ ...await settingsItem.getValue(), webUrl: s.webUrl }); setEditing(false); }
+          else alert(result?.error ?? '로컬 수집기 연결 실패');
         }}
         onCancel={isConfigured(settings) ? () => setEditing(false) : undefined}
       />
     );
   }
 
-  const save = (patch: Partial<Settings>) => {
-    const next = { ...settings, ...patch };
-    setSettings(next); // 화면은 바로 반영, 저장은 뒤따라
-    void settingsItem.setValue(next);
+  const save = async (patch: Partial<Settings>) => {
+    const result = await browser.runtime.sendMessage({ type: 'updateSettings', patch });
+    if (!result?.ok) alert(result?.error ?? '설정 저장 실패');
   };
   const toggle = () =>
     // 종료 시각이 지난 뒤 다시 켜면 종료 시각을 지운다
-    save({ autoCollect: !settings.autoCollect, ...(!settings.autoCollect && isEnded(settings) ? { endsAt: null } : {}) });
+    save({ autoCollect: !settings.autoCollect });
   const turns = turnsOf(settings);
   const end = endsAtOf(settings);
   const flush = async () => {
     setFlushing(true);
-    await browser.runtime.sendMessage({ type: 'flush' }).catch(() => {});
+    const result = await browser.runtime.sendMessage({ type: 'flush' }).catch(() => null);
+    if (!result?.ok) alert(result?.error ?? '분류 요청 실패');
     setFlushing(false);
   };
 
@@ -144,8 +146,8 @@ export default function App() {
         {end && (
           <p className={`text-xs ${isEnded(settings) ? 'text-sensitive' : 'text-gray-500'}`}>
             {isEnded(settings)
-              ? '종료 시각이 지나 수집을 멈췄어요. 다시 켜면 종료 시각이 지워져요.'
-              : `${end.toLocaleString('ko-KR')}에 남은 대화를 보내고 수집을 멈춰요`}
+              ? '수집이 종료됐어요. 종료 시각을 갱신한 뒤 다시 켜세요.'
+              : `${end.toLocaleString('ko-KR')}에 수집과 AI 요청을 멈춰요`}
           </p>
         )}
       </section>
@@ -272,9 +274,9 @@ function Setup({
       <h1 className="text-base font-bold">{firstTime ? '싱크업 처음 설정' : '설정 수정'}</h1>
       {firstTime && <Notice tone="error">설정 안 됨: 아래 정보를 입력해야 수집을 시작할 수 있어요.</Notice>}
 
-      <Field label="팀 이름" value={s.teamName} onChange={(v) => set('teamName', v)} placeholder="예: 싱크업" />
+      <Field label="등록된 팀 이름" readOnly value={s.teamName} onChange={(v) => set('teamName', v)} placeholder="로컬 수집기 연결 필요" />
       <Field label="프로젝트 주제" value={s.projectTopic} onChange={(v) => set('projectTopic', v)} placeholder="예: 팀 AI 메모리 서비스" />
-      <Field label="내 이름" value={s.userName} onChange={(v) => set('userName', v)} placeholder="예: 김단비" />
+      <Field label="연결된 사용자" readOnly value={s.userName} onChange={(v) => set('userName', v)} placeholder="로컬 수집기 연결 필요" />
 
       <fieldset className="space-y-1.5">
         <legend className="mb-1 font-medium">켤 소주제</legend>
@@ -319,8 +321,8 @@ function Setup({
       <div className="space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
         <p className="font-medium text-gray-800">수집 범위 안내</p>
         <p>· 자동 수집을 켜면 chatgpt.com 에서 새로 끝난 대화(내 말·AI 답변)를 읽어요.</p>
-        <p>· 분류를 위해 필요한 발췌가 외부 AI로 보내질 수 있어요 (지금은 목업이라 기기 밖으로 나가지 않아요).</p>
-        <p>· 개인 내용은 버리고, 전화번호 등 민감정보는 가려요. 팀에는 내가 승인한 카드만 올라가요.</p>
+        <p>· 선택한 발화는 로컬에 저장하고, 민감정보를 가린 뒤 외부 AI로 보내 분류합니다.</p>
+        <p>· 팀 관련 후보만 검토함에 표시하고, 승인한 카드만 팀에 공유합니다.</p>
       </div>
 
       <div className="flex gap-2">
@@ -341,11 +343,12 @@ function Setup({
   );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
+function Field({ label, value, onChange, placeholder, readOnly=false }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; readOnly?: boolean }) {
   return (
     <label className="block space-y-1">
       <span className="font-medium">{label}</span>
       <input
+        readOnly={readOnly}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

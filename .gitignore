@@ -1,32 +1,58 @@
-# 의존성
-node_modules/
+# Secrets and machine-local configuration
+.env
+.env.*
+.claude/
+.codex/
+.aws/
+.ssh/
+credentials*.json
+*credentials*.json
+secrets*.json
+tokens*.json
+connection.json
+*.pem
+*.key
+*.p12
+*.pfx
 
-# 빌드 결과물
-.next/
-out/
-.output/
-.wxt/
-dist/
-build/
-*.tsbuildinfo
-next-env.d.ts
-stats*.html
+# Conversation data, databases and backups
+*.jsonl
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.bak
+*.bak.*
+*.backup
+/state/
+/states/
+/data/
+run.lock
+board.lock
+*.pid
 
-# 비밀값 (예시 파일만 올림)
-.env*
-!.env.example
-
-# 배포·도구
-.vercel/
-web-ext.config.ts
-*.log
-
-# OS·에디터
+# Rebuildable output and caches; keep Cargo.lock tracked
+/target/
+/bin/
+/build/
+/dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
 .DS_Store
-Thumbs.db
-.vscode/*
-.idea/
+*.log
+node_modules/
+.next-integration/
+.next/
+.wxt/
+.output/
+*.tsbuildinfo
 
-# 평가용 샘플·정답표 (민규님 엑셀) — 깃에 올리지 않음
-docs/samples/
-*.xlsx
+# Local investigation reports contain machine paths and archive references
+/검증결과.md
+/Claude_Code_연결결과.md
+/local-reports/

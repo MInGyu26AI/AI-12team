@@ -3,6 +3,10 @@
 import type { Card, RelatedCard, Speaker, Subtopic, Tag } from "./types";
 
 export interface Utterance {
+  id?: string;
+  conversationId?: string;
+  collectedAt?: string;
+  roleGuessed?: boolean;
   speaker: Speaker;
   text: string;
   source: string; // 예: "ChatGPT, 2026-11-06 21:10"
@@ -16,18 +20,58 @@ export interface ClassifyContext {
   enabledSubtopics?: Subtopic[]; // 켜 둔 소주제. 꺼진 소주제는 "기타"로
 }
 
-// ── 민감정보 가림 (어느 단계든 먼저) ──
-const SENSITIVE: [RegExp, string][] = [
+// ── 민감정보·인증정보 가림 (어느 단계든 먼저) ──
+// ai/syncup_ai/mask.py 와 같은 규칙·같은 순서. 둘 다 shared/mask-cases.json 으로 검사한다.
+// 순서: 인증정보(키·토큰) → 개인정보. 인증정보를 먼저 가려야 계좌 규칙이 토큰 일부만 잘라 뒷부분이 남지 않는다.
+// 서버 토큰(43자, 접두사 없음)은 Bearer·token=·"access_token": 같은 인증 문맥이 있을 때만 가림 (동균 님과 11/8 합의).
+const TAIL = String.raw`(?:(?:\.{2,3}|…)[A-Za-z0-9_-]+)?`; // "sk-proj-abcd...wxyz" 의 뒷부분까지
+const VALUE_END = String.raw`\s"'&,;)}\]\\`; // 값 끝: 공백·따옴표·구분자·역슬래시(JSON 이스케이프)
+type Replacer = string | ((match: string, ...groups: string[]) => string);
+
+const SENSITIVE: [RegExp, Replacer][] = [
+  [/(\b(?:\w*_)?(?:token|secret|api[_-]?key|passw(?:or)?d)["']?\s*[:=]\s*)(["'])(?!\[)([^"'\r\n]+)\2/gi,
+    (_, keep, quote) => keep + quote + (/passw/i.test(keep) ? "[비밀번호]" : /api[_-]?key/i.test(keep) ? "[API키]" : "[액세스토큰]") + quote],
+  [/((?:주소|건강정보|개인사정)\s*[:=]\s*)(["'])(?!\[)([^"'\r\n]+)\2/g,
+    (_, keep, quote) => keep + quote + "[" + keep.match(/주소|건강정보|개인사정/)![0] + "]" + quote],
+  [/((?:주소|건강정보|개인사정)\s*[:=]\s*)(?![\s\["'])[^\n\r.;,"']+/g,
+    (_, keep) => keep + "[" + keep.match(/주소|건강정보|개인사정/)![0] + "]"],
+  // 인증정보
+  [new RegExp(String.raw`(?<![A-Za-z0-9_-])sk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}|(?=\.{3}|…))` + TAIL, "g"), "[API키]"],
+  [new RegExp(String.raw`(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})` + TAIL, "g"), "[액세스토큰]"],
+  [/(authorization["']?\s*[:=]\s*["']?(?:(?:bearer|basic|token)\s+)?)(?!\[)[A-Za-z0-9._~+/=-]{8,}/gi, (_, keep) => keep + "[액세스토큰]"],
+  [/(\bbearer\s+)(?!\[)[A-Za-z0-9._~+/=-]{8,}/gi, (_, keep) => keep + "[액세스토큰]"],
+  [
+    new RegExp(
+      String.raw`(\b((?:\w*_)?(?:token|secret|api[_-]?key|passw(?:or)?d))\\?["']?\s*[:=]\s*\\?["']?)` + // \" (JSON 안 JSON)도
+        String.raw`(?!\[)(?!(?:null|none|true|false|undefined)\b)(?!\d{1,9}(?![^${VALUE_END}]))` +
+        String.raw`[^${VALUE_END}]{4,}`,
+      "gi",
+    ),
+    (_, keep, key) =>
+      keep + (/api[_-]?key/i.test(key) ? "[API키]" : /passw/i.test(key) ? "[비밀번호]" : "[액세스토큰]"),
+  ],
+  // 개인정보
   [/01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/g, "[연락처]"],
   [/[\w.+-]+@[\w-]+\.[\w.]+/g, "[이메일]"],
   [/\d{6}-?[1-4]\d{6}/g, "[주민번호]"],
   [/\d{3,6}-\d{2,6}-\d{4,8}/g, "[계좌]"], // 날짜(2026-11-06)는 안 걸리게
-]; // ai/syncup_ai/mask.py 와 같은 규칙·순서
+];
+
+// 가린 자리 표시 (코드가 쓰는 것 + 분류 AI 가 쓰는 것). ai/syncup_ai/mask.py MASK_TOKENS 와 같음
+export const MASK_TOKENS = [
+  "[API키]", "[액세스토큰]", "[비밀번호]",
+  "[연락처]", "[이메일]", "[주민번호]", "[계좌]", "[주소]", "[건강정보]", "[금융정보]", "[개인사정]",
+] as const;
+
 export function mask(text: string) {
   let masked = false;
   let out = text;
-  for (const [re, label] of SENSITIVE) {
-    out = out.replace(re, () => ((masked = true), label));
+  for (const [re, repl] of SENSITIVE) {
+    // replace 콜백 인자: (전체, 그룹1, 그룹2, …, 위치, 원문). 함수형 규칙은 앞쪽 그룹만 쓴다.
+    out = out.replace(re, (...args) => {
+      masked = true;
+      return typeof repl === "string" ? repl : repl(...(args as [string, ...string[]]));
+    });
   }
   return { text: out, masked };
 }
@@ -221,19 +265,22 @@ const AI_PREFIX = /^(?:chatgpt|gpt|claude|gemini|ai|assistant)(?: said)?\s*:?\s*
 export function parsePasted(text: string, source: string): Utterance[] {
   const out: Utterance[] = [];
   let speaker: Speaker = "user";
+  let roleGuessed = true;
   for (const line of text.split(/\r?\n/)) {
     let body = line;
     if (USER_PREFIX.test(line)) {
       speaker = "user";
+      roleGuessed = false;
       body = line.replace(USER_PREFIX, "");
     } else if (AI_PREFIX.test(line)) {
       speaker = "ai";
+      roleGuessed = false;
       body = line.replace(AI_PREFIX, "");
     }
     if (!body.trim()) continue;
     const last = out.at(-1);
-    if (last && last.speaker === speaker) last.text += "\n" + body;
-    else out.push({ speaker, text: body, source });
+    if (last && last.speaker === speaker && last.roleGuessed === roleGuessed) last.text += "\n" + body;
+    else out.push({ speaker, text: body, source, roleGuessed });
   }
   return out;
 }

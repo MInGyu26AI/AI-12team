@@ -2,7 +2,7 @@
 // 실제 판정은 팀 서버가 하은 님 AI(Decisions → chat → 규칙)로 하고, 이 파일은 목업 서버·오프라인용.
 import type { Conflict, Judgement, RelatedCard } from "./types";
 
-export const CONFLICT_TOP_K = 3; // config.CONFLICT_TOP_K
+export const CONFLICT_TOP_K = 3; // 목업 후보 제한. 실제 서버의 AI 호출당 비교 수와 별개.
 export const CONFLICT_ON_CHANGE = true; // config.CONFLICT_ON_CHANGE — '변경'도 경고로 (11/7 팀 결정)
 export const ALERT_JUDGEMENTS: Judgement[] = CONFLICT_ON_CHANGE ? ["충돌", "변경"] : ["충돌"];
 

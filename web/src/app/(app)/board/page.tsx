@@ -15,6 +15,7 @@ import { USE_MOCK, api } from "@/lib/api";
 import { resetMockData } from "@/lib/api/mock";
 import { boardToMarkdown } from "@/lib/record";
 import { cn } from "@/lib/utils";
+import { rpc } from "@/lib/rpc";
 
 type Load =
   | { state: "loading" }
@@ -41,6 +42,8 @@ export default function BoardPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 시 서버에서 한 번 불러옴
     refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
   }, [refresh]);
 
   if (load.state === "loading")
@@ -83,14 +86,8 @@ export default function BoardPage() {
   };
 
   const toggleTodo = async (id: string, on: boolean) => {
-    setLoad((l) => {
-      if (l.state !== "ready") return l;
-      const next = new Set(l.done);
-      if (on) next.add(id);
-      else next.delete(id);
-      return { ...l, done: next };
-    });
-    await api.setTodoDone(id, on).catch(() => toast.error("저장하지 못했어요"));
+    try { await api.setTodoDone(id, on); await refresh(); }
+    catch { toast.error("저장하지 못했어요"); }
   };
 
   return (
@@ -107,6 +104,8 @@ export default function BoardPage() {
           팀 기록 복사
         </Button>
       </div>
+      {!USE_MOCK && <History />}
+      {cards.filter(c => ['pending','running','failed'].includes(c.conflictCheckStatus ?? '')).map(c => <div key={c.id} className="rounded border p-3"><span>{c.content} · {c.conflictCheckDetail || (c.conflictCheckStatus === 'failed' ? 'AI 검사 미완료 · 확인 필요' : '기존 결정과 비교 중')}{c.conflictCheckStatus === 'failed' && ' · 충돌 없음으로 확정되지 않음'}</span>{c.conflictCheckStatus === 'failed' && <Button variant="outline" onClick={async () => { try { await rpc('team.retryCheck', { id: c.id }); await refresh(); } catch (error) { toast.error((error as Error).message); } }}>검사 재시도</Button>}</div>)}
 
       {conflicts.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-sensitive/40 bg-sensitive-soft px-5 py-4">
@@ -222,6 +221,18 @@ export default function BoardPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto max-w-wide space-y-6 px-gutter py-10">{children}</div>;
+}
+
+function History() {
+  const [records, setRecords] = useState<RelatedCard[]|null>(null);
+  const [events, setEvents] = useState<{resolution:string;note:string;at:string}[]>([]);
+  const load = async () => { try {
+    const [history, log] = await Promise.all([rpc<{items:RelatedCard[]}>('team.history'), rpc<{events:typeof events}>('team.conflictHistory')]);
+    setRecords(history.items); setEvents(log.events);
+  } catch (error) { toast.error((error as Error).message); } };
+  return <details className="rounded-xl border p-4" onToggle={e => e.currentTarget.open && void load()}><summary className="cursor-pointer">이전 결정과 처리 이력</summary>
+    <ul className="mt-3 space-y-2">{records?.filter(c => c.decisionState === 'superseded' || c.decisionState === 'rejected').map(c => <li key={c.id}>{c.content} · {c.decisionState === 'superseded' ? '새 결정으로 대체됨' : '기존 결정 유지로 미채택'}</li>)}
+    {events.map((e,i) => <li key={i}>{e.at} · {({'adopt-new':'새 결정 채택','keep-existing':'기존 유지','both-valid':'둘 다 유효',discuss:'논의 요청',obsolete:'관련 결정 종료'} as Record<string,string>)[e.resolution]} {e.note}</li>)}</ul></details>;
 }
 
 // "충돌 1건: MVP 범위" / "충돌 1건 · 변경 1건: MVP 범위, 회의 시간"

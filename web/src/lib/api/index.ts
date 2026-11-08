@@ -3,10 +3,10 @@ import { createMockApi } from "./mock";
 import { createRealApi } from "./real";
 import type { TeamApi } from "./types";
 
-export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
+export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 export const api: TeamApi = USE_MOCK
   ? createMockApi()
-  : createRealApi(process.env.NEXT_PUBLIC_API_URL ?? "");
+  : createRealApi();
 
 export type { ApproveResult, ConflictChoice, TeamApi } from "./types";

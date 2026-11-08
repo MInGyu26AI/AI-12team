@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PORT=10000
+WORKDIR /app
+COPY requirements-team.txt ./
+# Supabase's official public CA is required for verified pooler TLS.
+COPY supabase-ca.crt ./
+RUN pip install --no-cache-dir -r requirements-team.txt
+# Explicit source allowlist excludes local DBs, credentials, tests and reports.
+COPY cloud_server.py team_server.py team_records.py app.py collector.py delivery.py diagnostics.py storage.py runtime.py team_client.py card_contract.py local_privacy.py ./
+COPY ai/syncup_ai/*.py ./ai/syncup_ai/
+COPY ai/prompts/*.md ./ai/prompts/
+USER 65534:65534
+EXPOSE 10000
+CMD ["python", "cloud_server.py"]

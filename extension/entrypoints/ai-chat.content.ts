@@ -14,7 +14,10 @@ export default defineContentScript({
 
     let settings: Settings | null = null;
     settingsItem.getValue().then((s) => (settings = s));
-    settingsItem.watch((s) => (settings = s));
+    settingsItem.watch((s) => {
+      if (!settings?.autoCollect || !s.autoCollect) site.extract().messages.forEach(m => baseline.add(m.id));
+      settings = s;
+    });
 
     const request = async (msg: BgRequest): Promise<CollectResult> => {
       try {
@@ -39,14 +42,20 @@ export default defineContentScript({
         return;
       }
       const fresh = messages.filter((m) => !baseline.has(m.id));
-      fresh.forEach((m) => baseline.add(m.id));
-      if (fresh.length) await request({ type: 'collect', trigger: 'auto', messages: fresh });
+      if (fresh.length) {
+        const result = await request({ type: 'collect', trigger: 'auto', messages: fresh });
+        if (result.ok) fresh.forEach(m => baseline.add(m.id));
+        else showToast(result.error, 'error');
+      }
     };
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const observer = new MutationObserver((records) => {
       if (records.every((r) => host.contains(r.target))) return; // 우리 버튼 변화는 무시
-      if (!settings?.autoCollect || !isConfigured(settings)) return;
+      if (!settings?.autoCollect || !isConfigured(settings)) {
+        site.extract().messages.forEach(m => baseline.add(m.id));
+        return;
+      }
       clearTimeout(timer);
       timer = setTimeout(() => void autoSend(), COLLECT_DEBOUNCE_MS);
     });
@@ -91,7 +100,7 @@ export default defineContentScript({
 
     const reportResult = (res: CollectResult) => {
       if (!res.ok) return showToast(res.error, 'error');
-      showToast(res.newMessages ? `보냈어요 · 검토 후보 ${res.newCards}장` : '이미 보낸 내용이에요', 'ok');
+      showToast(res.newMessages ? '분류 대기함에 저장했어요. 승인함에서 결과를 확인하세요.' : '이미 보낸 내용이에요', 'ok');
     };
 
     const needSetup = () => {

@@ -23,6 +23,14 @@ interface CommonOutput {
 }
 
 export interface RelatedOutput extends CommonOutput {
+  classificationMethod?: "chat" | "decisions" | "manual" | "demo";
+  evidence?: { messageId: string; role: "user" | "assistant"; roleGuessed: boolean; quote: string };
+  deliveryState?: "pending" | "sent" | "blocked";
+  decisionState?: "active" | "review" | "superseded" | "rejected";
+  conflictCheckStatus?: "pending" | "running" | "complete" | "failed" | "not-required";
+  conflictCheckDetail?: string;
+  approvedBy?: string;
+  approvedAt?: number;
   relevance: "related";
   sentence: string; // 원문 문장(또는 나눈 일부)
   subtopic: Subtopic | null; // tag=none(제안)이면 null 가능
@@ -65,6 +73,7 @@ export interface Conflict {
   judgement: Judgement;
   reason: string;
   confidence?: number;
+  method?: "decisions" | "chat" | "rule";
   resolution?: Resolution;
   resolutionNote?: string;
 }

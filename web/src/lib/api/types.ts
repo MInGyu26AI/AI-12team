@@ -1,7 +1,7 @@
 import type { Conflict, RelatedCard } from "@shared/types";
 
 // 충돌 처리 (피그마 5번): 기존 유지 / 새 결정으로 변경 / 팀에 논의 요청
-export type ConflictChoice = "keep-existing" | "adopt-new" | "discuss";
+export type ConflictChoice = "keep-existing" | "adopt-new" | "both-valid" | "discuss";
 
 // 승인 결과: 팀 서버가 /items/approve 에서 하은 님 충돌 판정(python -m syncup_ai conflicts)을 돌려 준다
 export interface ApproveResult {

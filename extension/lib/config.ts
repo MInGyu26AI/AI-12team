@@ -2,7 +2,7 @@
 export const LOCAL_WEB_URL = 'http://localhost:3000';
 export const PRODUCTION_WEB_URL = 'https://syncup-ashen.vercel.app'; // Vercel 배포 (soonsim1007/syncup)
 export const DEFAULT_WEB_URL: string =
-  normalizeWebUrl(import.meta.env.WXT_WEB_URL || PRODUCTION_WEB_URL) ?? PRODUCTION_WEB_URL;
+  normalizeWebUrl(import.meta.env.WXT_WEB_URL || LOCAL_WEB_URL) ?? LOCAL_WEB_URL;
 
 /** "https://x.vercel.app/review/" → "https://x.vercel.app" (잘못된 주소면 null) */
 export function normalizeWebUrl(input: string): string | null {
@@ -22,7 +22,7 @@ export function normalizeWebUrl(input: string): string | null {
 export function bridgeSupported(origin: string) {
   try {
     const u = new URL(origin);
-    return origin === LOCAL_WEB_URL || (u.protocol === 'https:' && u.hostname.endsWith('.vercel.app'));
+    return origin === LOCAL_WEB_URL || origin === 'http://127.0.0.1:3000' || (u.protocol === 'https:' && u.hostname.endsWith('.vercel.app'));
   } catch {
     return false;
   }

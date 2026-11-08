@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useTeam } from "@/lib/team";
 import { useExtensionBridge } from "@/lib/use-extension-bridge";
+import { USE_MOCK } from "@/lib/api";
 
 const COLORS = ["#4F46E5", "#3B9AE1", "#C2407A", "#3F9D52", "#D9670B", "#7E22CE"];
 
@@ -30,6 +31,7 @@ export function JoinForm({ params }: { params: Promise<{ code: string }> }) {
     router.push("/collect");
   };
 
+  if (!USE_MOCK) return <div className="mx-auto max-w-md space-y-4 px-gutter py-16"><h1 className="text-2xl font-bold">팀 연결 확인</h1><p>현재 내부 시연은 관리자가 사용자와 팀 소속을 등록합니다. 초대 코드만으로 소속이나 권한을 만들지 않습니다.</p><a href="/collect" className="underline">등록된 팀 확인하기</a></div>;
   return (
     <div className="mx-auto max-w-md space-y-6 px-gutter py-16">
       <div className="space-y-2 text-center">

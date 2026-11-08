@@ -13,6 +13,7 @@ interface RawNode {
   } | null;
 }
 interface RawConversation {
+  id?: string;
   title?: string;
   create_time?: number;
   current_node?: string;
@@ -28,31 +29,37 @@ export interface ExportConversation {
 
 const toDate = (sec?: number | null) => (sec ? new Date(sec * 1000) : null);
 
-function toUtterances(conv: RawConversation): Utterance[] {
+function toUtterances(conv: RawConversation, conversationId: string): Utterance[] {
   const mapping = conv.mapping ?? {};
   // current_node 에서 parent 를 따라 올라가면 화면에 보이던 대화 한 줄기
   const chain: RawNode[] = [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
   let id = conv.current_node;
   while (id && mapping[id]) {
+    if (seen.has(id)) throw new Error('대화 파일의 연결 구조가 잘못되었습니다.');
+    seen.add(id); ids.push(id);
     chain.push(mapping[id]!);
     id = mapping[id]!.parent ?? undefined;
   }
   chain.reverse();
+  ids.reverse();
 
   const out: Utterance[] = [];
-  for (const node of chain) {
+  for (const [index, node] of chain.entries()) {
     const m = node.message;
     const role = m?.author?.role;
     if (role !== "user" && role !== "assistant") continue;
     const text = (m?.content?.parts ?? []).filter((p): p is string => typeof p === "string").join("\n").trim();
     if (!text) continue;
     const at = toDate(m?.create_time) ?? toDate(conv.create_time) ?? new Date();
-    out.push({ speaker: role === "user" ? "user" : "ai", text, source: nowSource("ChatGPT", at) });
+    out.push({ id: ids[index], conversationId, collectedAt: at.toISOString(), roleGuessed: false, speaker: role === "user" ? "user" : "ai", text, source: nowSource("ChatGPT", at) });
   }
   return out;
 }
 
 export async function readChatGPTExport(file: File): Promise<ExportConversation[]> {
+  if (file.size > 50*1024*1024) throw new Error('50MB 이하 파일을 선택하세요.');
   let raw: RawConversation[] = [];
   if (file.name.toLowerCase().endsWith(".zip")) {
     const zip = await JSZip.loadAsync(file);
@@ -69,7 +76,7 @@ export async function readChatGPTExport(file: File): Promise<ExportConversation[
       id: String(i),
       title: c.title?.trim() || "(제목 없음)",
       date: toDate(c.create_time),
-      utterances: toUtterances(c),
+      utterances: toUtterances(c, c.id ?? `export-${c.create_time}-${i}`),
     }))
     .filter((c) => c.utterances.length > 0)
     .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));

@@ -6,6 +6,7 @@ import type { NextConfig } from "next";
 const repoRoot = path.join(__dirname, "..");
 
 const nextConfig: NextConfig = {
+  distDir: '.next-integration',
   cacheComponents: true,
   partialPrefetching: true,
   outputFileTracingRoot: repoRoot,

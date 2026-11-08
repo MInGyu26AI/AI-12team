@@ -1,0 +1,245 @@
+{
+  "_설명": "민감정보·인증정보 가림 공용 테스트 케이스. Python(ai/syncup_ai/mask.py)과 TypeScript(shared/classify.ts) 둘 다 이 파일로 검사한다. absent: 결과에 남으면 안 되는 문자열, present: 결과에 있어야 하는 문자열, masked: 가림 여부",
+  "cases": [
+    {"name":"quoted spaced password", "input":"password: \"Synthetic spaced password 987\"", "absent":["Synthetic","spaced","987"], "present":["[비밀번호]"], "masked":true},
+    {"name":"labeled private fields", "input":"주소: \"서울시 가상구 가상로 987\". 건강정보: \"합성건강정보XYZ\".", "absent":["가상구","987","합성건강정보XYZ"], "present":["[주소]","[건강정보]"], "masked":true},
+    {"name":"unquoted address", "input":"주소: 서울시 가상구 가상로 987. 회의는 내일", "absent":["가상구","987"], "present":["[주소]","회의는 내일"], "masked":true},
+    {"name":"labeled already masked", "input":"주소: [주소]. 건강정보: \"[건강정보]\".", "absent":[], "present":["주소: [주소]","건강정보: \"[건강정보]\""], "masked":false},
+    {
+      "name": "OpenAI 프로젝트 키",
+      "input": "키는 sk-proj-AbCdEf0123456789_xyz-QRSTuvwx 이거 써",
+      "absent": [
+        "sk-proj",
+        "AbCdEf",
+        "QRSTuvwx"
+      ],
+      "present": [
+        "키는 [API키] 이거 써"
+      ],
+      "masked": true
+    },
+    {
+      "name": "OpenAI 키",
+      "input": "OPENAI_API_KEY 값 sk-AbCdEf0123456789XyZw0000",
+      "absent": [
+        "sk-AbCd",
+        "XyZw0000"
+      ],
+      "present": [
+        "[API키]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "OpenAI 키 줄임 표기 뒷부분",
+      "input": "sk-proj-AbCdEfGh...wXyZ1234 이 키 만료됐어",
+      "absent": [
+        "AbCdEfGh",
+        "wXyZ1234"
+      ],
+      "present": [
+        "[API키] 이 키 만료됐어"
+      ],
+      "masked": true
+    },
+    {
+      "name": "GitHub 클래식 토큰",
+      "input": "ghp_1234567890abcdefGHIJKLmnopqrstuvWXYZ 로 푸시해",
+      "absent": [
+        "ghp_",
+        "WXYZ"
+      ],
+      "present": [
+        "[액세스토큰] 로 푸시해"
+      ],
+      "masked": true
+    },
+    {
+      "name": "GitHub 세분화 토큰",
+      "input": "github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+      "absent": [
+        "github_pat_",
+        "ABCDEFG"
+      ],
+      "present": [
+        "[액세스토큰]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "Authorization Bearer 헤더",
+      "input": "Authorization: Bearer Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP",
+      "absent": [
+        "Xy3_kL9",
+        "mN6oP"
+      ],
+      "present": [
+        "Authorization: Bearer [액세스토큰]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "소문자 authorization bearer",
+      "input": "authorization: bearer Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP",
+      "absent": [
+        "Xy3_kL9",
+        "mN6oP"
+      ],
+      "present": [
+        "authorization: bearer [액세스토큰]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "JSON token",
+      "input": "{\"token\": \"Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP\", \"team\": \"SYNC-2026\"}",
+      "absent": [
+        "Xy3_kL9",
+        "mN6oP"
+      ],
+      "present": [
+        "\"token\": \"[액세스토큰]\"",
+        "\"team\": \"SYNC-2026\""
+      ],
+      "masked": true
+    },
+    {
+      "name": "쿼리 access_token",
+      "input": "https://api.example.com/items?access_token=Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP&team=SYNC",
+      "absent": [
+        "Xy3_kL9",
+        "mN6oP"
+      ],
+      "present": [
+        "access_token=[액세스토큰]&team=SYNC"
+      ],
+      "masked": true
+    },
+    {
+      "name": "JSON access_token",
+      "input": "{\"access_token\": \"Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP\"}",
+      "absent": [
+        "Xy3_kL9",
+        "mN6oP"
+      ],
+      "present": [
+        "\"access_token\": \"[액세스토큰]\""
+      ],
+      "masked": true
+    },
+    {
+      "name": "api_key 할당",
+      "input": "api_key = 'abcd1234efgh5678'",
+      "absent": [
+        "abcd1234"
+      ],
+      "present": [
+        "api_key = '[API키]'"
+      ],
+      "masked": true
+    },
+    {
+      "name": "password 할당",
+      "input": "DB password: hunter2!!",
+      "absent": [
+        "hunter2"
+      ],
+      "present": [
+        "password: [비밀번호]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "이메일·전화번호 유지",
+      "input": "자료는 dongkyun@example.com 이나 010-1234-5678로 보내 줘",
+      "absent": [
+        "dongkyun@",
+        "1234-5678"
+      ],
+      "present": [
+        "[이메일]",
+        "[연락처]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "인증정보와 전화번호 함께",
+      "input": "토큰 ghp_1234567890abcdefGHIJKLmnopqrstuvWXYZ 받으면 010-2345-6789로 알려줘",
+      "absent": [
+        "ghp_",
+        "2345-6789"
+      ],
+      "present": [
+        "[액세스토큰]",
+        "[연락처]"
+      ],
+      "masked": true
+    },
+    {
+      "name": "문맥 없는 43자는 가리지 않음 (일반 식별자 오탐 방지, 동균 님과 합의)",
+      "input": "대화 id Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP 확인",
+      "absent": [],
+      "present": [
+        "Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP"
+      ],
+      "masked": false
+    },
+    {
+      "name": "일반 문장 보존",
+      "input": "토큰 개수는 4000개로 하자. 서버는 FastAPI로 가고 task-force 회의는 화요일.",
+      "absent": [
+        "["
+      ],
+      "present": [
+        "토큰 개수는 4000개로 하자. 서버는 FastAPI로 가고 task-force 회의는 화요일."
+      ],
+      "masked": false
+    },
+    {
+      "name": "숫자·null 값은 비밀값 아님",
+      "input": "max_token: 4000, \"token\": null",
+      "absent": [
+        "["
+      ],
+      "present": [
+        "max_token: 4000",
+        "\"token\": null"
+      ],
+      "masked": false
+    },
+    {
+      "name": "날짜는 계좌로 안 가림",
+      "input": "중간 보고서는 2026-11-08까지 제출",
+      "absent": [
+        "["
+      ],
+      "present": [
+        "2026-11-08"
+      ],
+      "masked": false
+    },
+    {
+      "name": "이미 가린 값은 그대로",
+      "input": "\"token\": \"[액세스토큰]\"",
+      "absent": [
+        "[액세스토큰]]"
+      ],
+      "present": [
+        "\"token\": \"[액세스토큰]\""
+      ],
+      "masked": false
+    },
+    {
+      "name": "JSON 안 JSON (이스케이프된 따옴표)",
+      "input": "{\"body\": \"{\\\"access_token\\\": \\\"Xy3_kL9-pQ2rT7uV1wZ5aB8cD4eF6gH0iJ2kL4mN6oP\\\"}\"}",
+      "absent": [
+        "Xy3_kL9",
+        "mN6oP"
+      ],
+      "present": [
+        "\\\"access_token\\\": \\\"[액세스토큰]\\\""
+      ],
+      "masked": true
+    }
+  ]
+}
