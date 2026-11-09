@@ -1,18 +1,28 @@
 """Synthetic boundary checks: no API key or external requests."""
+import contextlib
 import copy
-import http.server
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
-import threading
 import unittest
 from unittest.mock import Mock, patch
 
 from syncup_ai import classify, conflict
 from syncup_ai.llm import DecisionsClient, LLMError, RetryableLLMError, choice_q, predicate_q
-from tests.test_ai import CTX, FakeLLM, dec, msg
+from syncup_ai.schema import SUBTOPICS
+from tests.fakes import CTX, FakeLLM, dec, msg
+from tests.loopback import Reply, loopback_server
+
+TARGET = '타깃은 대학생으로 가자.'
+
+
+def chat_decision():
+    """TARGET 발화를 결정 카드 한 장으로 분류하는 가짜 chat 모델."""
+    return FakeLLM({'cards': [dict(msg=1, relevance='related', sentence=TARGET, tag='decision',
+                   subtopic='주제·목표', topic_key='타깃', content='타깃 = 대학생', owner='김단비', confidence=.9)]})
 
 
 class DecisionsValidationTest(unittest.TestCase):
@@ -55,7 +65,8 @@ class DecisionsValidationTest(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.rejected({'answers': [{**self.answer, **changes}]})
         for missing in ('name', 'type', 'choice'):
-            answer = dict(self.answer); answer.pop(missing)
+            answer = dict(self.answer)
+            answer.pop(missing)
             self.rejected({'answers': [answer]})
 
     def test_confidence_is_finite_numeric_probability(self):
@@ -73,10 +84,12 @@ class DecisionsValidationTest(unittest.TestCase):
             with self.subTest(probabilities=probabilities):
                 self.rejected({'answers': [{**self.answer, 'probabilities': probabilities}]})
         for value in (None, True, '0.2', -0.1, 1.1, float('nan'), float('inf')):
-            answer = copy.deepcopy(self.answer); answer['probabilities'][1]['probability'] = value
+            answer = copy.deepcopy(self.answer)
+            answer['probabilities'][1]['probability'] = value
             self.rejected({'answers': [answer]})
         self.rejected({'answers': [{**self.answer, 'choice': 'b'}]})
-        answer = copy.deepcopy(self.answer); answer['probabilities'][1]['value'] = []
+        answer = copy.deepcopy(self.answer)
+        answer['probabilities'][1]['value'] = []
         self.rejected({'answers': [answer]})
 
     def test_predicate_and_typed_boolean_choice(self):
@@ -91,17 +104,12 @@ class DecisionsValidationTest(unittest.TestCase):
         self.call({'answers': [answer]}, [question])
         self.rejected({'answers': [{**answer, 'choice': 1}]}, [question])
 
-    def test_score_matches_level_distribution(self):
+    def test_score_questions_are_rejected_before_request(self):
         question = dict(name='s', type='score', instructions='Rate', levels=[{'label': 'low'}, {'label': 'high'}])
-        answer = dict(name='s', type='score', score=.7, confidence=.4,
-                      probabilities=[dict(value=0, label='low', probability=.3),
-                                     dict(value=1, label='high', probability=.7)])
-        self.call({'answers': [answer]}, [question])
-        for value in (True, None, float('nan'), -1, 2, .4):
-            self.rejected({'answers': [{**answer, 'score': value}]}, [question])
-        for field, value in (('label', 'wrong'), ('value', True), ('value', 1.0)):
-            bad = copy.deepcopy(answer); bad['probabilities'][0][field] = value
-            self.rejected({'answers': [bad]}, [question])
+        with patch('syncup_ai.llm._post') as post:
+            with self.assertRaises(LLMError):
+                self.client.decide('synthetic', [question])
+            post.assert_not_called()
 
     def test_chunk_names_and_atomic_failure(self):
         self.client.MAX_QUESTIONS = 1
@@ -133,69 +141,75 @@ class DecisionsValidationTest(unittest.TestCase):
         chat.chat_json.assert_not_called()
 
     def test_classification_does_not_hide_malformed_response(self):
-        text = '타깃은 대학생으로 가자.'
-        llm = FakeLLM({'cards': [dict(msg=1, relevance='related', sentence=text, tag='decision',
-                   subtopic='주제·목표', topic_key='타깃', content='타깃 = 대학생', owner='김단비', confidence=.9)]})
         for response in ({'answers': []}, {'answers': [dict(type='refusal', name='u1_rel')]}):
             with patch('syncup_ai.llm._post', return_value=response) as post:
-                result = classify.handle_request({'context': CTX, 'messages': [msg(1, text)]}, llm, self.client)
+                result = classify.handle_request({'context': CTX, 'messages': [msg(1, TARGET)]},
+                                                 chat_decision(), self.client)
             self.assertFalse(result['ok'])
             self.assertNotIn('cards', result)
             self.assertEqual(post.call_count, 1)
 
+    def test_subtopic_choices_keep_other_and_empty_list_means_all_on(self):
+        # 역할·일정만 켜 둠(주제·목표·기타는 끔): 주제·목표 발화는 켜 둔 역할·일정이 아니라 기타로 가야 한다.
+        # 실제 클라이언트는 선택지에 없는 답을 거절하므로, 기타가 선택지에 없으면 분류가 실패한다.
+        def answer_other(url, key, body):
+            return {'answers': [dict(type='predicate', name=q['name'], probability=0.0) if q['type'] == 'predicate'
+                                else dict(type='choice', name=q['name'], confidence=.9,
+                                          choice='기타' if q['name'] == 'u1_sub' else q['choices'][0]['value'])
+                                for q in body['questions']]}
+        for enabled, offered in ((['역할·일정'], ['역할·일정', '기타']), ([], list(SUBTOPICS))):  # [] 은 모두 켬
+            request = {'context': {**CTX, 'enabledSubtopics': enabled}, 'messages': [msg(1, TARGET)]}
+            with self.subTest(enabled=enabled), patch('syncup_ai.llm._post', side_effect=answer_other) as post:
+                cards = classify.classify(request, chat_decision(), self.client)
+                choices = next(q['choices'] for q in post.call_args.args[2]['questions'] if q['name'] == 'u1_sub')
+                self.assertEqual([c['value'] for c in choices], offered)
+                self.assertEqual((cards[0]['subtopic'], cards[0]['classificationMethod']), ('기타', 'decisions'))
+
+    def test_classification_http_failure_logs_only_error_type_and_status(self):
+        # 오류 본문이 키와 요청 원문을 그대로 돌려줘도, 로그 줄에는 예외 종류와 HTTP 상태만 남는다
+        reply = Reply(403, f'{{"error": "bad key synthetic-key for {TARGET}"}}'.encode())
+        log = io.StringIO()
+        with loopback_server(reply) as origin, contextlib.redirect_stderr(log):
+            self.client.base_url = origin
+            cards = classify.classify({'context': CTX, 'messages': [msg(1, TARGET)]}, chat_decision(), self.client)
+        self.assertEqual(log.getvalue(), '[syncup_ai] Decisions 라벨 실패, chat 라벨 사용: LLMError HTTP 403\n')
+        self.assertEqual((cards[0]['tag'], cards[0]['classificationMethod']), ('decision', 'chat'))
+        self.assertEqual(len(reply.requests), 1)
+
     def test_real_http_and_cli_keep_invalid_responses_failed(self):
-        calls = []
-        response = [b'not-json']
-
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
-
-            def do_POST(self):
-                calls.append((self.path, json.loads(self.rfile.read(int(self.headers['Content-Length'])))))
-                self.send_response(200)
-                self.send_header('Content-Length', str(len(response[0])))
-                self.end_headers()
-                self.wfile.write(response[0])
-
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-        worker = threading.Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-        base = f'http://127.0.0.1:{server.server_port}/v1'
-        self.client.base_url = base
-        try:
+        reply = Reply()
+        with loopback_server(reply) as origin:
+            base = f'{origin}/v1'
+            self.client.base_url = base
             for body in (b'not-json', b'\xff', b'{"answers": []}'):
-                response[0] = body
+                reply.body = body
                 with self.assertRaises(LLMError) as caught:
                     self.client.decide('synthetic', self.questions)
                 self.assertNotIsInstance(caught.exception, RetryableLLMError)
-            self.assertEqual(len(calls), 3)
+            self.assertEqual(len(reply.requests), 3)
             env = {k: v for k, v in os.environ.items() if not k.startswith(('AI_', 'OPENAI_'))}
             env.update(PYTHONPATH=str(Path(__file__).resolve().parents[1]), AI_BASE_URL=base,
                        AI_API_KEY='synthetic-key', AI_MODEL='synthetic-chat', AI_DECISIONS_MODEL='synthetic-decisions')
             request = {'newCards': [dec('new', 'UI', '화면 = Vue')],
                        'existing': [dec('old', 'UI', '화면 = React')]}
-            for answer, expected in ((dict(type='refusal', name='e1'), False),
-                                     (dict(type='choice', name='e1', choice='충돌', confidence=.6), True),
-                                     (dict(type='choice', name='e1', choice='충돌', confidence=.5999), False)):
-                response[0] = json.dumps({'answers': [answer]}).encode()
-                before = len(calls)
+            decisions_only, with_review = ['/v1/decisions'], ['/v1/decisions', '/v1/chat/completions']
+            # (Decisions 답, 성공 여부, 서버가 받은 경로). 낮은 확신도는 chat 독립 검토를 한 번 부른다.
+            # 이 서버는 chat 경로에도 Decisions 응답을 돌려주므로 검토는 형식 오류로 끝나고 확인 필요로 남는다.
+            for answer, expected, paths in (
+                    (dict(type='refusal', name='e1'), False, decisions_only),
+                    (dict(type='choice', name='e1', choice='충돌', confidence=.6), True, decisions_only),
+                    (dict(type='choice', name='e1', choice='충돌', confidence=.5999), False, with_review)):
+                reply.body = json.dumps({'answers': [answer]}).encode()
+                before = len(reply.requests)
                 process = subprocess.run([sys.executable, '-m', 'syncup_ai', 'conflicts'],
                     input=json.dumps(request), text=True, capture_output=True, env=env, timeout=10)
                 result = json.loads(process.stdout)
                 self.assertEqual(process.returncode, 0 if expected else 1, process.stderr)
                 self.assertEqual(result['ok'], expected)
-                paths = [path for path, _ in calls[before:]]
-                self.assertEqual(paths, ['/v1/decisions', '/v1/chat/completions']
-                                 if answer.get('confidence') == .5999 else ['/v1/decisions'])
+                self.assertEqual([path for path, _ in reply.requests[before:]], paths)
                 if not expected:
                     self.assertEqual(result['checkStatus'], 'failed')
                     self.assertFalse(result['retryable'])
-            self.assertTrue(all(path in ('/v1/decisions', '/v1/chat/completions') for path, _ in calls))
-        finally:
-            server.shutdown()
-            server.server_close()
-            worker.join()
 
 
 if __name__ == '__main__':

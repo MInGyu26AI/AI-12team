@@ -1,11 +1,13 @@
 """Low confidence needs independent agreement; review failures never become automatic retries."""
+import contextlib
+import io
 import unittest
 from unittest.mock import Mock, patch
 
 from syncup_ai import config, conflict
 from syncup_ai.decide import judge_pairs
 from syncup_ai.llm import RetryableLLMError, LLMError
-from tests.test_ai import dec
+from tests.fakes import dec
 
 
 class RecheckTest(unittest.TestCase):
@@ -14,14 +16,17 @@ class RecheckTest(unittest.TestCase):
         self.old = [dec('old', 'UI', '고객 화면 = React')]
 
     def run_check(self, answers, **kwargs):
+        """검사 결과와 가짜 Decisions. 검사가 남긴 진단 줄은 self.log 에 모은다."""
         client = Mock()
         client.decide.side_effect = answers
-        result = conflict.handle_request({'newCards': [self.new], 'existing': self.old},
-                                         kwargs.pop('llm', None), decider=client, **kwargs)
+        self.log = io.StringIO()
+        with contextlib.redirect_stderr(self.log):
+            result = conflict.handle_request({'newCards': [self.new], 'existing': self.old},
+                                             kwargs.pop('llm', None), decider=client, **kwargs)
         return result, client
 
-    @patch.object(config, 'CONFLICT_TOP_K', 3)
-    def test_uncertain_batch_stops_without_partial_success_or_more_calls(self):
+    @patch.object(config, 'CONFLICT_TOP_K', 3)  # 운영값(1)이 아닌 여러 쌍 묶음 설정
+    def test_top_k_3_uncertain_batch_stops_without_partial_success_or_more_calls(self):
         self.old += [dec('two', 'UI', '아이콘 = 원형'), dec('three', 'UI', '폰트 = 고딕')]
         first = {f'e{i}': dict(choice=j, confidence=c) for i, (j, c) in
                  enumerate([('같음', .2), ('무관', .59), ('무관', .9)], 1)}
@@ -82,6 +87,19 @@ class RecheckTest(unittest.TestCase):
             self.assertEqual(result['failureReason'], 'low-confidence')
             self.assertFalse(result['retryable'])
             self.assertEqual(client.decide.call_count, 1)
+            failure = 'RetryableLLMError' if isinstance(reply, Exception) else 'ValueError'
+            self.assertEqual(self.log.getvalue(), f'[syncup_ai] 독립 검토 실패, 확인 필요로 남김: {failure}\n')
+
+    def test_review_log_names_http_status_and_code_errors_are_not_hidden(self):
+        chat = Mock()
+        chat.chat_json.side_effect = [LLMError('synthetic', code=401)]
+        result, _ = self.run_check([{'e1': dict(choice='충돌', confidence=.21)}], llm=chat, allow_rules=False)
+        self.assertEqual(result['failureReason'], 'low-confidence')
+        self.assertEqual(self.log.getvalue(), '[syncup_ai] 독립 검토 실패, 확인 필요로 남김: LLMError HTTP 401\n')
+        # 해시할 수 없는 id 는 코드 오류(TypeError)라 '확신도 부족'으로 덮지 않고 검사 실패로 올린다
+        chat.chat_json.side_effect = [{'results': [dict(id=['old'], judgement='변경', confidence=.9)]}]
+        result, _ = self.run_check([{'e1': dict(choice='충돌', confidence=.21)}], llm=chat, allow_rules=False)
+        self.assertEqual((result['failureReason'], result['retryable']), ('check-failed', False))
 
     def test_unknown_owner_is_not_invented_and_review_is_masked(self):
         chat = Mock()
@@ -91,7 +109,7 @@ class RecheckTest(unittest.TestCase):
         result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)},
                                         {'e1': dict(choice='변경', confidence=.7)}], llm=chat, allow_rules=False)
         self.assertTrue(result['ok'])
-        self.assertIn('두 결정자: 미상', client.decide.call_args_list[1].args[0])
+        self.assertIn('기존 결정자: 미상\n새 결정자: 미상\n두 결정자: 미상', client.decide.call_args_list[1].args[0])
         self.assertNotIn('010-1234-5678', chat.chat_json.call_args.args[1])
         self.assertNotIn('010-1234-5678', client.decide.call_args_list[1].args[0])
 
@@ -101,6 +119,13 @@ class RecheckTest(unittest.TestCase):
         self.new['owner'] = self.old[0]['owner'] = ' 미상 '
         judge_pairs(self.new, self.old, client, with_owner_evidence=True)
         self.assertIn('두 결정자: 미상', client.decide.call_args.args[0])
+
+    def test_whitespace_around_same_owner_is_still_same(self):
+        client = Mock()
+        client.decide.return_value = {'e1': dict(choice='변경', confidence=.9)}
+        self.new['owner'], self.old[0]['owner'] = ' 가상팀원A', '가상팀원A '
+        judge_pairs(self.new, self.old, client, with_owner_evidence=True)
+        self.assertIn('기존 결정자: 가상팀원A\n새 결정자: 가상팀원A\n두 결정자: 동일', client.decide.call_args.args[0])
 
     def test_missing_or_permanent_error_is_not_provider_fallback(self):
         for retry in ({}, RuntimeError('synthetic outage')):
@@ -118,7 +143,8 @@ class RecheckTest(unittest.TestCase):
             result, client = self.run_check([first], allow_rules=False)
             self.assertEqual(result['checkStatus'], 'failed')
             self.assertEqual(client.decide.call_count, 1)
-        client = Mock(); client.decide.return_value = {'e1': dict(choice='같음', confidence=0)}
+        client = Mock()
+        client.decide.return_value = {'e1': dict(choice='같음', confidence=0)}
         self.assertEqual(judge_pairs(self.new, self.old, client)[0]['confidence'], 0)
 
     def test_confident_results_do_not_add_calls(self):
@@ -159,7 +185,8 @@ class RecheckTest(unittest.TestCase):
             self.assertEqual(client.decide.call_count, 1)
 
     def test_nontransient_chat_fallback_failure_stops_server_retries(self):
-        chat = Mock(); chat.chat_json.side_effect = LLMError('unauthorized')
+        chat = Mock()
+        chat.chat_json.side_effect = LLMError('unauthorized')
         result, _ = self.run_check([RetryableLLMError('offline')], llm=chat, allow_rules=False)
         self.assertFalse(result['retryable'])
         self.assertEqual(chat.chat_json.call_count, 1)

@@ -1,9 +1,10 @@
 import json
 import unittest
+from unittest.mock import patch
 
 from syncup_ai.classify import handle_request
 from syncup_ai.evidence import render_evidence
-from tests.test_ai import FakeLLM, msg
+from tests.fakes import FakeLLM, msg
 
 
 class MaskedEvidenceTest(unittest.TestCase):
@@ -40,7 +41,6 @@ class MaskedEvidenceTest(unittest.TestCase):
         self.assertNotIn(key, json.dumps(result))
 
     def test_quote_outside_transmitted_limit_is_rejected(self):
-        from unittest.mock import patch
         with patch('syncup_ai.config.MAX_USER_CHARS', 2):
             self.assertFalse(self.run_card()['ok'])
 

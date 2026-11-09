@@ -3,7 +3,7 @@ import unittest
 
 from syncup_ai.classify import handle_request
 from syncup_ai.conflict import handle_request as conflicts, find_candidates
-from tests.test_ai import FakeLLM, msg, dec
+from tests.fakes import FakeLLM, msg, dec
 
 
 class ContractTest(unittest.TestCase):
