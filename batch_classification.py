@@ -147,8 +147,7 @@ def failed_batches(c, team_id):
 
 def retry_failed(pipeline, params):
     """jobs.retry: queue a failed batch again in the current session (local_rpc has validated id and teamId)."""
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         s, binding = require_active(pipeline.db, params.get('teamId'))
         row = c.execute(FAILED_BATCH, (binding['team_id'], params['id'])).fetchone()
         if not row:

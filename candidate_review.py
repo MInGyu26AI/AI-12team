@@ -68,8 +68,7 @@ def update_candidate(pipeline, identifier, patch):
     """candidates.update: edits are masked, must stay grounded in the batch, and keep the public card valid."""
     if not isinstance(patch, dict) or set(patch) - EDITABLE:
         raise ValueError('수정 필드 오류')
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         row = c.execute(CURRENT_TEAM_CANDIDATE, (identifier,)).fetchone()
         if not row or row['status'] != 'ready':
             raise ValueError('수정 가능한 후보가 아닙니다.')
@@ -93,8 +92,7 @@ def dismiss_candidate(pipeline, params):
     """candidates.dismiss: only a current-team candidate still in review; anything else is an error."""
     if not isinstance(params.get('id'), str):
         raise ValueError('제외할 후보를 확인하세요.')
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         updated = c.execute('''UPDATE candidate_details SET dismissed=1 WHERE id=? AND team_id=(SELECT team_id FROM sharing)
                 AND id IN (SELECT id FROM cards WHERE status='ready')''', (params['id'],))
         if updated.rowcount != 1:
@@ -110,8 +108,7 @@ def approve_candidates(pipeline, params):
         raise ValueError('승인 후보를 확인하세요.')
     # me() is a network call, so it runs before taking the lock.
     profile = pipeline.client.me()
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         binding = dict(c.execute('SELECT * FROM sharing').fetchone())
         if params.get('teamId') != binding['team_id'] or binding['team_id'] not in {t['id'] for t in profile['teams']}:
             raise ValueError('대상 팀이 변경되었습니다. 다시 확인하세요.')
@@ -128,8 +125,7 @@ def retry_delivery(pipeline, params):
 
     local_rpc has validated id and teamId.
     """
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         if 'teamId' in params and params['teamId'] != bound_team(c):
             raise ValueError('대상 팀이 변경되었습니다.')
         if not reset_blocked(c, params['id'], CURRENT_DESTINATION):

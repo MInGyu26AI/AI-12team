@@ -180,7 +180,7 @@ class LocalFunctional(PipelineFixture):
 
     def test_retry_parameter_validation(self):
         unreachable=AssertionError('invalid retry must not reach the database')
-        with patch('batch_classification.connect',side_effect=unreachable), patch('candidate_review.connect',side_effect=unreachable):
+        with patch('turn_pipeline.connect',side_effect=unreachable):
             for method in ('jobs.retry','delivery.retry'):
                 for params in ({},dict(id={}),dict(id='x',teamId=None),dict(id='x',teamId=''),dict(id='x',teamId=False),dict(id='x',teamId=0)):
                     with self.subTest(method=method,params=params), self.assertRaises(ValueError):

@@ -42,8 +42,7 @@ def queue_ready_batches(c, team_id, context, flush=False):
 
 def flush(pipeline):
     """collection.flush: queue the open batches now, however few turns they have."""
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         _, binding = require_active(pipeline.db)
         team_id = binding['team_id']
         queue_ready_batches(c, team_id, classification_context(c, team_id, local_profile(c)), True)

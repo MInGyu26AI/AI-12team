@@ -6,7 +6,6 @@ import time
 
 from ai.syncup_ai.schema import SUBTOPICS
 from collection_session import set_paused
-from storage import connect
 from team_client import bind_sharing
 
 CONFIGURABLE = {'teamId', 'projectTopic', 'enabledSubtopics', 'turnsPerBatch', 'endsAt', 'autoCollect'}
@@ -85,8 +84,7 @@ def configure(pipeline, patch):
         raise ValueError('수집 설정 필드 오류')
     # me() is a network call, so it runs before taking the lock.
     profile = pipeline.client.me() if 'teamId' in patch else None
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         options = read_options(c)
         if 'teamId' in patch:
             bind_sharing(c, pipeline.client, patch['teamId'], profile)

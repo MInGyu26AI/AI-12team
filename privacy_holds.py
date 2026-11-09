@@ -91,8 +91,7 @@ def _mark_requested(c, job, reason):
 def exclude_messages(pipeline, params):
     """privacy.exclude: leave the named message, or every message the gate did not allow, out of the next run."""
     _check_request(params)
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         row = _held_batch(c, params)
         _record_exclusions(c, params['id'], params, json.loads(row['detail']))
         _mark_requested(c, params['id'], 'exclude_requested')
@@ -102,8 +101,7 @@ def exclude_messages(pipeline, params):
 def recheck_batch(pipeline, params):
     """privacy.recheck: forget the judging model's cached answers so the next run asks it again."""
     _check_request(params)
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         row = _held_batch(c, params)
         pipeline.privacy.forget_holds(c, json.loads(row['messages']), row['model'])
         _mark_requested(c, params['id'], 'recheck_requested')

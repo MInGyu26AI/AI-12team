@@ -90,8 +90,7 @@ def append(pipeline, messages, flush=False):
             clean.append(clean_message(m))
         except ValueError:
             rejected.append(m)
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         s, binding = require_active(pipeline.db)
         team_id = binding['team_id']
         context = classification_context(c, team_id, local_profile(c))
@@ -122,8 +121,7 @@ def _scanned_messages(job):
 
 def capture_scanned_jobs(pipeline):
     """Move new Codex / Claude Code jobs from the Rust scanner into intake, then queue ready batches."""
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         s, binding = require_active(pipeline.db)
         team_id = binding['team_id']
         context = classification_context(c, team_id, local_profile(c))
@@ -151,8 +149,7 @@ def resolve_intake(pipeline, params, action):
     """intake.retry / intake.dismiss. One transaction under the lock: on failure nothing is recorded."""
     if not isinstance(params.get('id'), str) or not isinstance(params.get('teamId'), str):
         raise ValueError('입력과 대상 팀을 확인하세요.')
-    with pipeline.lock, connect(pipeline.db) as c:
-        c.execute('BEGIN IMMEDIATE')
+    with pipeline.write() as c:
         team_id = bound_team(c)
         issue = c.execute('SELECT id FROM intake_issues WHERE id=? AND team_id=?', (params['id'], team_id)).fetchone()
         if not issue or params['teamId'] != team_id:

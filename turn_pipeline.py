@@ -5,6 +5,7 @@ turn_intake (receive and quarantine turns), batch_queue (group them into jobs), 
 then external AI), candidate_review (edit and approve), privacy_holds (held and excluded messages),
 collection_settings and collection_status, team_relay (team requests); local_rpc dispatches RPC methods to them.
 """
+from contextlib import contextmanager
 import threading
 
 from ai.syncup_ai.config import load_env
@@ -32,3 +33,14 @@ class TurnPipeline:
         load_env()
         # Every external AI request passes this on-device gate first; tests replace the classifier.
         self.privacy = local_privacy.Gate(classifier_from_env())
+
+    @contextmanager
+    def write(self):
+        """The one write transaction of an RPC or worker step: self.lock, then BEGIN IMMEDIATE; rolled back on error.
+
+        Make network calls (the team client) before entering it. The classification run is the exception: its writes
+        take BEGIN IMMEDIATE without self.lock (batch_classification), so configure() can run during an AI call.
+        """
+        with self.lock, connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            yield c
