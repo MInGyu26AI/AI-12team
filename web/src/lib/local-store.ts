@@ -6,16 +6,24 @@ import { useCallback, useSyncExternalStore } from "react";
 
 const EVENT = "syncup:local-store";
 
-function read<T>(key: string, fallback: T): T {
+function readRaw(key: string): string | null {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function parse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
   } catch {
     return fallback;
   }
 }
 
-export function writeLocal<T>(key: string, value: T) {
+function writeLocal<T>(key: string, value: T) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {}
@@ -41,13 +49,10 @@ export function useLocal<T>(key: string, fallback: T): [T, (value: T) => void] {
     [key],
   );
   const getSnapshot = () => {
-    let raw: string | null = null;
-    try {
-      raw = localStorage.getItem(key);
-    } catch {}
+    const raw = readRaw(key);
     const hit = cache.get(key);
     if (hit && hit.raw === raw) return hit.value as T; // 같은 값이면 같은 객체 (무한 렌더 방지)
-    const value = raw ? read(key, fallback) : fallback;
+    const value = parse(raw, fallback);
     cache.set(key, { raw, value });
     return value;
   };

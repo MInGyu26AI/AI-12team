@@ -1,6 +1,7 @@
 // 가짜 팀 서버. 브라우저 localStorage 에 저장해서 새로고침해도 승인한 카드가 남는다.
-// 충돌 판정은 하은 님 ai/syncup_ai/conflict.py 의 규칙 판정(shared/conflict.ts)과 같다.
+// 충돌 판정은 shared/conflict.ts 의 목업용 근사 판정이다 (실제는 팀 서버).
 import { checkNewCards } from "@shared/conflict";
+import { fmtHM, ymd } from "@shared/format";
 import { MOCK_DONE_TODOS, mockCards } from "@shared/mock";
 import type { Conflict, RelatedCard, Resolution } from "@shared/types";
 import type { TeamApi } from "./types";
@@ -9,7 +10,7 @@ const KEY = "syncup:mock-board:v2";
 
 interface State {
   board: RelatedCard[]; // approved + dismissed(충돌 처리로 밀려난 결정), 승인 순서대로
-  resolutions: Record<string, { resolution: Resolution; note?: string }>;
+  resolutions: Record<string, { resolution: Resolution; note?: string; at?: string }>; // 충돌 id → 처리 (처리 순서대로)
   done: string[]; // 완료한 할 일 id
 }
 
@@ -60,7 +61,13 @@ function openConflicts(s: State): Conflict[] {
       const r = s.resolutions[x.id]?.resolution;
       return !r || r === "discuss";
     })
-    .map((x) => ({ ...x, ...s.resolutions[x.id] }));
+    .map((x) => ({ ...x, resolution: s.resolutions[x.id]?.resolution }));
+}
+
+// 기존 유지 → 새 결정을 내림 / 새 결정으로 변경 → 기존 결정을 내림 / 둘 다 유효·논의 요청 → 둘 다 둠
+function demote(card: RelatedCard, loserId: string | null, choice: Resolution): RelatedCard {
+  if (card.id !== loserId) return card;
+  return { ...card, status: "dismissed", decisionState: choice === "adopt-new" ? "superseded" : "rejected" };
 }
 
 export function createMockApi(): TeamApi {
@@ -70,7 +77,7 @@ export function createMockApi(): TeamApi {
       const s = load();
       const ids = new Set(s.board.map((c) => c.id));
       const added = cards.filter((c) => !ids.has(c.id)).map((c) => ({ ...c, status: "approved" as const }));
-      const conflicts = checkNewCards(added, approved(s)); // 서버의 /items/approve 충돌 검사
+      const conflicts = checkNewCards(added, approved(s)); // 목업은 승인하자마자 판정한다 (실제는 팀 서버가 나중에)
       save({ ...s, board: [...s.board, ...added] });
       return { conflicts };
     },
@@ -86,12 +93,12 @@ export function createMockApi(): TeamApi {
       await delay();
       const s = load();
       const [aId, bId] = id.split("__");
-      // 기존 유지 → 새 결정을 내림 / 새 결정으로 변경 → 기존 결정을 내림 / 논의 요청 → 둘 다 두고 경고 유지
       const loser = choice === "keep-existing" ? bId : choice === "adopt-new" ? aId : null;
+      const now = new Date();
       save({
         ...s,
-        board: s.board.map((c) => (c.id === loser ? { ...c, status: "dismissed" } : c)),
-        resolutions: { ...s.resolutions, [id]: { resolution: choice, ...(note ? { note } : {}) } },
+        board: s.board.map((c) => demote(c, loser, choice)),
+        resolutions: { ...s.resolutions, [id]: { resolution: choice, ...(note ? { note } : {}), at: `${ymd(now)} ${fmtHM(now)}` } },
       });
     },
     async getDoneTodos() {
@@ -101,6 +108,16 @@ export function createMockApi(): TeamApi {
     async setTodoDone(id, done) {
       const s = load();
       save({ ...s, done: done ? [...new Set([...s.done, id])] : s.done.filter((x) => x !== id) });
+    },
+    // 목업 카드는 충돌 검사를 바로 끝내므로 다시 시작할 검사가 없다
+    async retryCheck() {
+      await delay();
+    },
+    async getHistory() {
+      await delay();
+      const s = load();
+      const events = Object.values(s.resolutions).map((r) => ({ resolution: r.resolution, note: r.note ?? "", at: r.at ?? "" }));
+      return { records: s.board, events };
     },
   };
 }

@@ -3,19 +3,27 @@
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { RegisteredTeamNotice } from "@/components/registered-team-notice";
 import { Button } from "@/components/ui/button";
-import { useTeam } from "@/lib/team";
-import { useExtensionBridge } from "@/lib/use-extension-bridge";
 import { USE_MOCK } from "@/lib/api";
+import { useDemoTeam } from "@/lib/team";
 
 const COLORS = ["#4F46E5", "#3B9AE1", "#C2407A", "#3F9D52", "#D9670B", "#7E22CE"];
 
-// 초대 링크로 들어온 팀원 (서버 붙기 전에는 이 브라우저의 목업 팀에 참여)
 export function JoinForm({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
+  if (USE_MOCK) return <DemoJoin code={code} />;
+  return (
+    <RegisteredTeamNotice title="팀 연결 확인" linkLabel="등록된 팀 확인하기" className="max-w-md py-16">
+      현재 내부 시연은 관리자가 사용자와 팀 소속을 등록합니다. 초대 코드만으로 소속이나 권한을 만들지 않습니다.
+    </RegisteredTeamNotice>
+  );
+}
+
+// 초대 링크로 들어온 팀원 (목업 모드 전용, 이 브라우저의 목업 팀에 참여)
+function DemoJoin({ code }: { code: string }) {
   const router = useRouter();
-  const [team, setTeam] = useTeam();
-  const ext = useExtensionBridge();
+  const [team, setTeam] = useDemoTeam();
   const [name, setName] = useState("");
 
   const join = () => {
@@ -26,12 +34,10 @@ export function JoinForm({ params }: { params: Promise<{ code: string }> }) {
       ? team.members.map((m) => (m.name === n ? { ...m, status: "joined" as const } : m))
       : [...team.members, { name: n, initial: n.slice(1, 2) || n[0]!, color: COLORS[team.members.length % COLORS.length]!, ai: "ChatGPT", status: "joined" as const }];
     setTeam({ ...team, members, me: n });
-    if (ext.available) ext.updateSettings({ teamName: team.name, projectTopic: team.topic, userName: n });
     toast.success(`${team.name}에 참여했어요`);
     router.push("/collect");
   };
 
-  if (!USE_MOCK) return <div className="mx-auto max-w-md space-y-4 px-gutter py-16"><h1 className="text-2xl font-bold">팀 연결 확인</h1><p>현재 내부 시연은 관리자가 사용자와 팀 소속을 등록합니다. 초대 코드만으로 소속이나 권한을 만들지 않습니다.</p><a href="/collect" className="underline">등록된 팀 확인하기</a></div>;
   return (
     <div className="mx-auto max-w-md space-y-6 px-gutter py-16">
       <div className="space-y-2 text-center">

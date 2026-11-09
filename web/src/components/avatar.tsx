@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const FALLBACK = "#9CA3AF";
 
 export function Avatar({ name, size = "md", className }: { name: string | null | undefined; size?: "sm" | "md"; className?: string }) {
-  const [team] = useTeam();
+  const team = useTeam();
   const m: TeamMember | null = memberOf(team, name);
   const label = m?.initial ?? (name ? name.slice(-2, -1) || name[0] : "?");
   return (

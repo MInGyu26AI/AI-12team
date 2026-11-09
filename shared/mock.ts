@@ -38,10 +38,8 @@ export const MOCK_TEAM: Team = {
   ],
 };
 
-export const MOCK_TEAM_CODE = MOCK_TEAM.code;
-export const TEAM_MEMBERS = MOCK_TEAM.members.map((m) => m.name);
 // 담당자 인식용 이름 목록 (우리 실제 팀원도 함께)
-export const DEMO_KNOWN_NAMES = [...TEAM_MEMBERS, "김동균", "김민규", "김단비", "김하은"];
+export const DEMO_KNOWN_NAMES = [...MOCK_TEAM.members.map((m) => m.name), "김동균", "김민규", "김단비", "김하은"];
 
 const card = (c: Partial<RelatedCard> & Pick<RelatedCard, "id" | "sentence" | "tag" | "content" | "source">): RelatedCard => ({
   relevance: "related",

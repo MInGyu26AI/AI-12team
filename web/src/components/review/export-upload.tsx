@@ -5,7 +5,7 @@ import { FileArchive, Sparkles } from "lucide-react";
 import { ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { Utterance } from "@shared/classify";
+import type { Utterance } from "@shared/utterance";
 import { readChatGPTExport, type ExportConversation } from "@/lib/chatgpt-export";
 
 export function ExportUpload({ busy, onClassify }: { busy: boolean; onClassify: (u: Utterance[]) => void }) {

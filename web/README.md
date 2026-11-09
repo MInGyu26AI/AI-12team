@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 싱크업 팀 웹 (Next.js)
 
-## Getting Started
+승인함(`/review`), 대화 수집(`/collect`), 팀 결정 기록(`/board`)과 소개·설치 화면이다. 웹·확장 공용 타입과 표시 규칙은 `../shared`에 있다.
 
-First, run the development server:
+## 모드 (`.env.example`)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+| 변수 | 값 | 동작 |
+|---|---|---|
+| `NEXT_PUBLIC_USE_MOCK` | `true` | 예시 데이터 데모. 팀 보드는 이 브라우저(localStorage)에 저장하고, 붙여넣은 대화는 브라우저 안 규칙 분류기(`shared/classify.ts`)로 분류한다. 실제 승인 증거가 아니다. |
+| | `false` (기본) | 실제 모드. 로컬 수집기 RPC로 후보를 읽고 팀 서버에 승인한다. 팀과 사용자는 관리자가 미리 등록한다. |
+| `NEXT_PUBLIC_LOCAL_BRIDGE` | `false` (기본) | 브라우저 확장(web-bridge 콘텐츠 스크립트)을 거쳐 로컬 수집기에 닿는다. |
+| | `true` | 웹 서버의 `/api/local`이 로컬 수집기에 직접 중계한다. 루트의 `local_web.cjs`로만 실행한다. |
+
+## 실행
+
+```sh
+npm ci
+npm run dev        # http://localhost:3000
+npm run lint
+npm run build      # 빌드 결과는 .next-integration (next.config.ts distDir)
+npm test           # 승인함 후보·체크 계산, 승인 요청, 공유 폴러 시험 (node:test)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+로컬 브리지로 검증할 때는 저장소 루트에서 실행한다. 자세한 순서는 루트의 `통합_사용법.md` 3절에 있다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node local_web.cjs
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 구조
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/(marketing)`: 첫 화면·소개·이용 방법·확장 설치
+- `src/app/(app)`: 대화 수집·승인함·팀 결정 기록, 목업 모드의 팀 만들기·참여
+- `src/lib/api`: 팀 결정 기록 API (`mock.ts` 목업, `real.ts` 로컬 수집기 RPC)
+- `src/lib/local-collector.ts`: 로컬 수집기 상태를 화면 전체가 나눠 쓰는 폴러
+- `src/lib/rpc.ts`: 로컬 수집기 RPC (확장 경유 또는 `/api/local`)

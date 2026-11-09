@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, GitCompareArrows, Layers, MessagesSquare, ShieldCheck, Shuffle, UserCheck, Zap } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -35,7 +36,8 @@ const DIFFERENTIATORS = [
 
 const PRIVACY = [
   "처음 설정할 때 무엇을 수집하고 무엇을 외부 AI로 보내는지 먼저 안내해요.",
-  "점심·약속·병원 같은 개인 내용은 버리고, 전화번호·이메일·계좌·주민번호는 외부 AI로 보내기 전에 가려요.",
+  "이 기기의 개인정보 검사가 점심·약속·병원 같은 개인 내용으로 본 발화는 외부 AI와 팀에 보내지 않고, 전화번호·이메일·계좌·주민번호는 외부 AI로 보내기 전에 가려요.",
+  "대화 원문은 이 기기에만 남았다가, 그 대화 묶음의 처리가 모두 끝나고 7일이 지나면 지워져요.",
   "팀 서버에는 내가 승인한 카드와 확인한 근거 문장만 올라가요.",
   "수집 종료 시각이 지나면 새 대화 수집과 외부 전송을 멈춰요. 언제든 일시정지할 수 있어요.",
 ];
@@ -112,7 +114,7 @@ export default function AboutPage() {
             </li>
             <li>
               <span className="mr-2 rounded-full bg-tag-personal-soft px-2 py-0.5 text-xs font-semibold text-tag-personal">개인</span>
-              프로젝트와 상관없는 내용 → 저장하지 않음
+              프로젝트와 상관없는 내용 → 팀에 올리지 않음
             </li>
           </ul>
           <p className="mt-4 text-xs text-muted-foreground break-keep">
@@ -141,8 +143,8 @@ export default function AboutPage() {
           <Link href="/guide" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "h-11 px-6")}>
             이용 방법 보기
           </Link>
-          <Link href="/team/new" className={cn(buttonVariants({ size: "lg" }), "h-11 bg-brand px-6 hover:bg-brand-hover")}>
-            팀 만들고 시작하기
+          <Link href={START.href} className={cn(buttonVariants({ size: "lg" }), "h-11 bg-brand px-6 hover:bg-brand-hover")}>
+            {START.label}
           </Link>
         </div>
       </section>

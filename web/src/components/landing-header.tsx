@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { buttonVariants } from "@/components/ui/button";
+import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -34,11 +35,13 @@ export function LandingHeader() {
           })}
         </nav>
         <div className="ml-auto flex gap-2">
-          <Link href="/collect" className={cn(buttonVariants({ variant: "outline" }), "h-9 px-3.5")}>
-            로그인
-          </Link>
-          <Link href="/team/new" className={cn(buttonVariants(), "h-9 bg-brand px-3.5 hover:bg-brand-hover")}>
-            팀 만들기
+          {START.href !== "/collect" && (
+            <Link href="/collect" className={cn(buttonVariants({ variant: "outline" }), "h-9 px-3.5")}>
+              대화 수집
+            </Link>
+          )}
+          <Link href={START.href} className={cn(buttonVariants(), "h-9 bg-brand px-3.5 hover:bg-brand-hover")}>
+            {START.short}
           </Link>
         </div>
       </div>
