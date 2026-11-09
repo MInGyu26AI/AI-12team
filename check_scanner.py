@@ -12,17 +12,32 @@ import collector
 from check_local_privacy import work_gate
 
 SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
+PROMPT = "DB는 Supabase로 확정했어. 이메일 demo@example.com"
+# src/excerpt.rs limits
+MAX_EXCERPTS = 24
+MAX_EXCERPT_CHARS = 600
 
 
 def job_id(key):
     return hashlib.sha256(key.encode()).hexdigest()
 
 
+def split_last_line(text):
+    """Splits `text` inside its last line, as when a log is read while that line is being written."""
+    cut = text.rstrip("\n").rfind("\n") + 10
+    return text[:cut], text[cut:]
+
+
+def decision_answers(probability):
+    """A classification answer: a decision adopted with `probability`, every other question unlikely."""
+    return {"answers": [{"type": "predicate", "name": k, "probability": probability if k in ("decision", "adopted") else 0.01}
+                        for k in collector.QUESTIONS]}
+
+
 def fake_api(_db, endpoint, _body):
     """Mock OpenAI: every turn is an adopted decision, drafted as the Supabase card."""
     if endpoint == "decisions":
-        return {"answers": [{"type": "predicate", "name": k, "probability": 0.95 if k in ("decision", "adopted") else 0.01}
-                            for k in collector.QUESTIONS]}
+        return decision_answers(0.95)
     card = {"kind": "decision", "text": "DB로 Supabase를 사용한다.", "n": 1, "quote": "DB는 Supabase로 확정했어."}
     return {"output": [{"content": [{"type": "output_text", "text": json.dumps({"cards": [card]}, ensure_ascii=False)}]}]}
 
@@ -39,11 +54,14 @@ class CodexScannerChecks(unittest.TestCase):
         self.sessions.mkdir(parents=True)
         db = self.db = self.root / "private.sqlite"
         collector.initialize(db)
-        with collector.connect(db) as c:
-            c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.project, self.start, self.start + 600))
+        self.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.project, self.start, self.start + 600))
         with collector.connect(self.codex / "state_5.sqlite") as c:
             c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,"
                       "source TEXT DEFAULT 'cli')")
+
+    def execute(self, statement, params=()):
+        with collector.connect(self.db) as c:
+            return c.execute(statement, params).fetchall()
 
     def event(self, kind, payload, offset):
         at = datetime.fromtimestamp(self.start + offset, timezone.utc).isoformat()
@@ -59,14 +77,14 @@ class CodexScannerChecks(unittest.TestCase):
                       (chat, str(file), int((self.start + created) * 1000), cwd, json.dumps(source)))
         return file
 
-    def turn(self, turn_id, cwd=None, aborted=False, began=10, ended=11):
-        """One turn: a user prompt with a secret, records that are not evidence, and the final answer."""
+    def turn(self, turn_id, cwd=None, aborted=False, began=10, ended=11, prompt=PROMPT):
+        """One turn: a user prompt (by default with a secret), records that are not evidence, and the final answer."""
         def message(role, kind, text, **extra):
             return {"type": "message", "role": role, "content": [{"type": kind, "text": text}], **extra}
         return "".join([
             self.event("event_msg", {"type": "task_started", "turn_id": turn_id}, began),
             self.event("turn_context", {"cwd": cwd or self.project}, began),
-            self.event("response_item", message("user", "input_text", "DB는 Supabase로 확정했어. 이메일 demo@example.com"), began),
+            self.event("response_item", message("user", "input_text", prompt), began),
             self.event("response_item", message("assistant", "output_text", "SHOULD_NOT_COLLECT", phase="commentary"), began),
             self.event("response_item", {"type": "function_call_output", "output": "TOOL_SECRET"}, began),
             self.event("response_item", message("user", "input_text", "<environment_context>IGNORE_META"), began),
@@ -82,8 +100,7 @@ class CodexScannerChecks(unittest.TestCase):
         collector.scan(self.db, self.codex)
 
     def jobs(self):
-        with collector.connect(self.db) as c:
-            return [dict(r) for r in c.execute("SELECT * FROM jobs ORDER BY rowid")]
+        return [dict(r) for r in self.execute("SELECT * FROM jobs ORDER BY rowid")]
 
     def job_ids(self):
         return {job["id"] for job in self.jobs()}
@@ -110,11 +127,11 @@ class CodexScannerChecks(unittest.TestCase):
         self.scan()
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("valid/first")}, "restart duplicate")
-        second = self.turn("second")
-        self.append(valid, second[:-7])
+        written, rest = split_last_line(self.turn("second"))
+        self.append(valid, written)
         self.scan()
         self.assertEqual(len(self.jobs()), 1, "incomplete turn collected")
-        self.append(valid, second[-7:])
+        self.append(valid, rest)
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("valid/first"), job_id("valid/second")})
 
@@ -126,7 +143,7 @@ class CodexScannerChecks(unittest.TestCase):
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("main/x")}, "Codex subagent instructions collected as human evidence")
 
-    def test_threads_outside_project_window_or_sessions_folder_excluded(self):
+    def test_threads_and_turns_outside_project_window_or_sessions_folder_excluded(self):
         self.append(self.add_chat("main"), self.turn("x"))
         self.append(self.add_chat("wrong-project", cwd="/other"), self.turn("x", cwd="/other"))
         self.append(self.add_chat("old", created=-10), self.turn("x"))
@@ -139,8 +156,7 @@ class CodexScannerChecks(unittest.TestCase):
     def test_turn_overlapping_pause_excluded(self):
         valid = self.add_chat("valid")
         self.append(valid, self.turn("before-pause"))
-        with collector.connect(self.db) as c:
-            c.execute("INSERT INTO pauses VALUES(?,?)", (self.start + 20, self.start + 30))
+        self.execute("INSERT INTO pauses VALUES(?,?)", (self.start + 20, self.start + 30))
         self.append(valid, self.turn("paused", began=19, ended=21))
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("valid/before-pause")})
@@ -151,14 +167,23 @@ class CodexScannerChecks(unittest.TestCase):
         self.scan()
         self.append(valid, self.turn("second", began=40, ended=41))
         for stopped in ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start"):
-            with collector.connect(self.db) as c:
-                c.execute(stopped)
+            self.execute(stopped)
             self.scan()
             self.assertEqual(self.job_ids(), {job_id("valid/first")}, stopped)
-        with collector.connect(self.db) as c:
-            c.execute("UPDATE settings SET end=?", (self.start + 600,))
+        self.execute("UPDATE settings SET end=?", (self.start + 600,))
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("valid/first"), job_id("valid/second")})
+
+    def test_long_turn_is_cut_to_the_excerpt_limits(self):
+        long_sentence = "가" * (MAX_EXCERPT_CHARS + 100) + "."
+        prompt = " ".join([long_sentence] + [f"문장 {i}." for i in range(MAX_EXCERPTS + 5)])
+        self.append(self.add_chat("long"), self.turn("x", prompt=prompt))
+        self.scan()
+        [job] = self.jobs()
+        evidence = json.loads(job["evidence"])
+        self.assertEqual([e["n"] for e in evidence], list(range(1, MAX_EXCERPTS + 1)))
+        self.assertEqual(evidence[0]["text"], "가" * MAX_EXCERPT_CHARS)
+        self.assertEqual({e["role"] for e in evidence}, {"user"}, "the final answer did not fit")
 
     def test_broken_line_is_reported_and_later_threads_still_scanned(self):
         # The broken thread is listed first, so stopping at its error would leave the valid thread unread.
@@ -189,8 +214,7 @@ class CodexScannerChecks(unittest.TestCase):
         with patch.object(collector, "call_api", side_effect=fake_api):
             collector.classify(self.db, job, work_gate())
             collector.draft(self.db, job, work_gate())
-        with collector.connect(self.db) as c:
-            card = c.execute("SELECT * FROM cards WHERE job=?", (job["id"],)).fetchone()
+        [card] = self.execute("SELECT * FROM cards WHERE job=?", (job["id"],))
         self.assertEqual((card["status"], card["adopted"]), ("ready", 1))
         self.assertIn(card["quote"], json.loads(job["evidence"])[0]["text"])
 
