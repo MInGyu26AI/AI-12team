@@ -1,8 +1,18 @@
 """Offline intake, independent rejection, fresh approval and sanitized diagnostics."""
+import argparse
+import contextlib
+import io
 import json
+from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
+import tempfile
 import unittest
 from unittest.mock import patch
+import urllib.error
+import uuid
+
+import app
 
 from batch_classification import classify_queued
 from candidate_review import list_candidates
@@ -10,11 +20,14 @@ import collection_loop
 from collection_settings import configure
 from collection_status import collection_status
 from diagnostics import failure
-from local_fixtures import PipelineFixture
+from local_fixtures import Client, PipelineFixture, private_db
 from local_rpc import dispatch
 from storage import connect
 import turn_intake
 from turn_pipeline import TurnPipeline
+
+BOUND_USER = str(uuid.UUID(int=1))
+BOUND_TEAM = str(uuid.UUID(int=2))
 
 
 class LocalRecovery(PipelineFixture):
@@ -83,6 +96,37 @@ class LocalRecovery(PipelineFixture):
             with self.assertLogs('syncup',level='WARNING'), self.assertRaises(InterruptedError):
                 collection_loop.watch(self.db,None,pipeline=self.pipeline)
         self.assertEqual(len(list_candidates(self.pipeline)),1)
+
+
+class TeamRecoveryStart(unittest.TestCase):
+    """app.py --integrated restarts offline on an existing binding only when the team server is unreachable."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.state = Path(temp.name)
+        self.db = private_db(self.state, bound=False)
+        with connect(self.db) as c:
+            c.execute("INSERT INTO sharing VALUES(1,?,?,?)", (Client.api_url, BOUND_USER, BOUND_TEAM))
+        self.key = self.state / 'team.key'
+        self.key.write_text('k' * 43)
+        self.key.chmod(0o600)
+        self.srv = SimpleNamespace(db=self.db, team_client=None)
+        self.args = SimpleNamespace(team_api=Client.api_url, team_token_file=self.key, integrated=True, team_id=None)
+
+    def connect_team(self, answer):
+        with patch('team_client.TeamClient.request', side_effect=answer):
+            return app._connect_team(self.srv, self.args, argparse.ArgumentParser())
+
+    def test_unreachable_server_starts_in_recovery(self):
+        with self.assertLogs('syncup', level='WARNING'):
+            self.assertIsNone(self.connect_team(urllib.error.URLError(OSError('offline'))))
+
+    def test_other_user_or_malformed_answer_stops_the_start(self):
+        other = dict(user_id=str(uuid.uuid4()), name='다른 사람', teams=[])
+        for answer in ([other], [dict(user_id=BOUND_USER, name='나', teams='not a list')]):
+            with self.subTest(answer=answer), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.connect_team(answer)
 
 
 if __name__ == '__main__':

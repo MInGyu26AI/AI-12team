@@ -5,8 +5,7 @@ import math
 import time
 
 from ai.syncup_ai.schema import SUBTOPICS
-from collection_session import set_paused
-from team_client import bind_sharing
+from collection_session import bind_sharing, set_paused
 
 CONFIGURABLE = {'teamId', 'projectTopic', 'enabledSubtopics', 'turnsPerBatch', 'endsAt', 'autoCollect'}
 MAX_TOPIC = 1200

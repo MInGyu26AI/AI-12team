@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from ai.syncup_ai.llm import DEFAULT_CHAT_MODEL, DEFAULT_DECISIONS_MODEL
 from card_contract import MAX_TEXT
 from collection_session import active, config
 import local_privacy
@@ -26,9 +27,6 @@ QUESTIONS = {
 KIND_MIN = 0.7
 PRIVATE_MAX = 0.3
 ADOPTED_MIN = 0.8
-# The same models as ai/syncup_ai/llm.py (DecisionsClient, OpenAIResponses).
-DECISIONS_MODEL = "gpt-6-luna"
-DRAFT_MODEL = "gpt-6.1-terra"
 API_TIMEOUT = 60
 # A failed job's state is FAILED_PREFIX + the state it failed in ('new' or 'draft'); a retry strips it again.
 FAILED_PREFIX = "failed_"
@@ -106,7 +104,7 @@ def classify(db, job, gate=None):
     if allowed is None:
         return
     evidence, fragments = allowed
-    body = {"model": DECISIONS_MODEL, "input": json.dumps(evidence, ensure_ascii=False), "questions": decision_questions()}
+    body = {"model": DEFAULT_DECISIONS_MODEL, "input": json.dumps(evidence, ensure_ascii=False), "questions": decision_questions()}
     result = send(db, "decisions", body, fragments)
     scores = {a["name"]: a["probability"] for a in result["answers"] if a["type"] == "predicate"}
     if set(scores) != set(QUESTIONS) or not all(isinstance(v, (float, int)) and 0 <= v <= 1 for v in scores.values()):
@@ -132,7 +130,7 @@ def draft(db, job, gate=None):
     if allowed is None:
         return
     evidence, fragments = allowed
-    body = {"model": DRAFT_MODEL, "store": False, "reasoning": {"effort": "low"}, "instructions": DRAFT_INSTRUCTIONS,
+    body = {"model": DEFAULT_CHAT_MODEL, "store": False, "reasoning": {"effort": "low"}, "instructions": DRAFT_INSTRUCTIONS,
             "input": json.dumps({"requested": [dict(c) for c in cards], "excerpts": evidence}, ensure_ascii=False),
             "text": {"format": draft_schema(kinds)}}
     result = send(db, "responses", body, fragments)

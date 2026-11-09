@@ -1,7 +1,6 @@
 """Chrome Native Messaging transport; the running local service owns all state."""
 import argparse
 import json
-import os
 from pathlib import Path
 import re
 import struct
@@ -9,22 +8,37 @@ import sys
 import urllib.error
 import urllib.request
 
-from secure_http import RPC_LIMIT
+from private_files import SECRET_TOKEN, read_private_file
+from secure_http import RPC_LIMIT, NoRedirect
 
 # Replies stay under Chrome's 1 MiB cap on host-to-extension messages.
 RESPONSE_LIMIT = 1_000_000
 EXTENSION_ID = re.compile('[a-p]{32}')
+# connection.json, as app.py writes it: {url, token} for the local RPC endpoint.
+CONNECTION_LIMIT = 4096
+RPC_URL = re.compile(r'http://127\.0\.0\.1:\d+/rpc')
+
+
+def read_connection(path):
+    """(url, token) from connection.json, checked like the web bridge does (web/src/app/api/local/route.ts): a regular
+    file, not a link, owned and readable by the current user only, at most 4096 bytes, a loopback /rpc URL and a
+    43-character token."""
+    data = read_private_file(path, CONNECTION_LIMIT + 1, '연결 파일은 현재 사용자만 읽을 수 있어야 합니다.')
+    if len(data) > CONNECTION_LIMIT:
+        raise ValueError('연결 파일이 너무 큽니다.')
+    config = json.loads(data)
+    if not isinstance(config.get('url'), str) or not RPC_URL.fullmatch(config['url']):
+        raise ValueError('로컬 연결 주소 오류')
+    if not isinstance(config.get('token'), str) or not SECRET_TOKEN.fullmatch(config['token']):
+        raise ValueError('로컬 연결 인증 오류')
+    return config['url'], config['token']
 
 
 def request(connection, payload):
-    if os.name != 'nt' and connection.stat().st_mode & 0o077:
-        raise ValueError('연결 파일은 현재 사용자만 읽을 수 있어야 합니다.')
-    config = json.loads(connection.read_text())
-    if not re.fullmatch(r'http://127\.0\.0\.1:\d+/rpc', config['url']):
-        raise ValueError('로컬 연결 주소 오류')
-    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config['token']}
-    req = urllib.request.Request(config['url'], json.dumps(payload).encode(), headers)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    url, token = read_connection(connection)
+    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token}
+    req = urllib.request.Request(url, json.dumps(payload).encode(), headers)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     try:
         with opener.open(req, timeout=20) as response:
             return json.load(response)

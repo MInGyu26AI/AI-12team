@@ -10,7 +10,7 @@ from card_contract import MAX_TEXT, card_label
 from collection_session import bound_team, config, session_state
 from html_page import card_html, esc, page
 from storage import connect
-from team_client import NETWORK_ERRORS, TeamClient
+from team_client import TEAM_ERRORS, TeamClient
 from turn_intake import unresolved_issues
 
 SOURCE_LABELS = SITE_LABEL | {'manual': '직접 입력', 'chatgpt-export': 'ChatGPT 내보내기'}
@@ -49,7 +49,7 @@ def _team_picker(client, binding, token):
     """(html, TeamChoice) of the team selection; a team server outage shows an alert instead."""
     try:
         profile = client.me()
-    except NETWORK_ERRORS:
+    except TEAM_ERRORS:
         return '<p role="alert">팀 연결을 확인할 수 없습니다. 팀 승인은 잠시 차단됩니다.</p>', TeamChoice()
     teams = {t['id']: t['name'] for t in profile['teams']}
     choice = TeamChoice(teams, binding['team_id'], teams.get(binding['team_id']))
@@ -184,5 +184,5 @@ def render_team_board(db, client):
         body = (f'<nav><b>싱크업</b><a href="/">개인 검토함</a></nav><header><h1>{esc(name)} · 팀 보드</h1></header>'
                 f'<p>최근 승인 카드 {len(rows)}장</p>' + ''.join(card_html(row['packet']) for row in rows))
         return 200, page('팀 보드', body, True)
-    except (*NETWORK_ERRORS, KeyError, TypeError):
+    except (*TEAM_ERRORS, KeyError, TypeError):
         return 503, page('팀 연결 확인', '<p role="alert">팀 권한이나 연결을 확인할 수 없습니다.</p><a href="/">개인 검토함</a>')
