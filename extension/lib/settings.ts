@@ -15,8 +15,8 @@ export interface Settings {
   projectTopic: string;
   userName: string;
   autoCollect: boolean; // false = 수집 일시정지 또는 종료 시각 지남
-  // 대화 N회(질문+답변)마다 분류. 덜 찬 묶음은 수동 보내기("지금 분류하기"·"싱크업에 보내기"·선택 보내기)만 바로 보내고,
-  // 일시정지·종료 시각에는 보내지 않고 로컬 수집기에 남긴다
+  // 대화 N회(질문+답변)마다 분류. 덜 찬 묶음은 수동 보내기("지금 분류하기"·"싱크업에 보내기"·선택 보내기)만 바로 보낸다.
+  // 수동 보내기도 수집 중일 때만 된다. 일시정지·종료 시각에는 남은 대화를 로컬 수집기에 두고, 다시 켜면 다음 묶음에 합친다
   turnsPerBatch?: number;
   endsAt?: string | null; // 수집 종료 시각 (ISO). 지나면 수집기가 새 수집과 AI 요청을 멈춘다
   bufferedTurns?: number;
