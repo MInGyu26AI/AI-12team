@@ -11,6 +11,10 @@ class PrivacyBlocked(RuntimeError):
     """An outgoing AI request still carried something the gate did not allow."""
 
 
+# Hold reasons of a request the outbound check refused.
+BLOCK_REASONS = ('secret_in_payload', 'blocked_fragment')
+
+
 def blocked_reason(text: str, fragments: list[str]) -> str | None:
     """'secret_in_payload' or 'blocked_fragment' when text must not leave the device, else None."""
     if secret_values(text):

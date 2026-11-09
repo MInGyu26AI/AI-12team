@@ -225,6 +225,18 @@ class Integrity(IntegrityFixture):
         with connect(self.board) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 0)
 
+    def test_demo_board_checks_host_and_path_before_the_secret(self):
+        with server(Board, self.board) as srv:
+            connection = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+            try:
+                connection.putrequest("POST", "/elsewhere")
+                connection.putheader("Authorization", b"Bearer \xe9")
+                connection.putheader("Content-Length", "0")
+                connection.endheaders()
+                self.assertEqual(connection.getresponse().status, 403)
+            finally:
+                connection.close()
+
     def test_batch_draft_rollback(self):
         self.card()
         with connect(self.db) as c:

@@ -22,7 +22,7 @@ import sqlite3
 import time
 
 from ai.syncup_ai import config as ai_config
-from outbound_guard import message_fragments
+from outbound_guard import BLOCK_REASONS, blocked_reason, message_fragments
 from privacy_model import ModelFailure, ModelOutputError, ModelTimeout, ModelUnavailable, classifier_from_env
 from privacy_rules import PERSONAL_TOKEN, SECRET_TOKEN, apply_rules, personal_categories, secret_values
 
@@ -162,6 +162,17 @@ def _user_exclusions(db, job: str) -> set[str]:
         return {r[0] for r in c.execute('SELECT message_id FROM privacy_overrides WHERE job=?', (job,))}
 
 
+def _context_exclusions(db, job: str) -> set[str]:
+    """Messages of an earlier batch that must not go out as context: the user's exclusions and the ones its
+    outbound check refused (held with a block reason)."""
+    excluded = _user_exclusions(db, job)
+    with closing(sqlite3.connect(db, timeout=10)) as c:
+        row = c.execute('SELECT detail FROM privacy_jobs WHERE job=?', (job,)).fetchone()
+    if row:
+        excluded |= {d['id'] for d in json.loads(row[0]) if d.get('decision') == HOLD and d.get('reason') in BLOCK_REASONS}
+    return excluded
+
+
 def _blocked_pieces(original: str, result: Result) -> list[str]:
     """Text an outgoing payload must not carry: secrets, personal spans and, unless allowed, the message itself."""
     pieces = secret_values(original) + [s for s in result.spans if len(s) >= 4]
@@ -220,7 +231,7 @@ class Gate:
 
     def review_job(self, db, job: str, messages: list[dict], context_messages: list[dict], context: dict,
                    context_job: str | None = None) -> JobReview:
-        """context_messages come from context_job; the user's exclusions there apply to them as well."""
+        """context_messages come from context_job; what the user or the outbound check excluded there stays local."""
         identity = self._identity()
         topic = context.get('projectTopic') if isinstance(context.get('projectTopic'), str) else ''
         excluded = _user_exclusions(db, job)
@@ -235,7 +246,7 @@ class Gate:
                 allowed.append(dict(m, text=result.sanitized, masked=result.sanitized != original or bool(m.get('masked')),
                                     privacy=result.reason))
             fragments += _blocked_pieces(original, result)
-        context_excluded = _user_exclusions(db, context_job) if context_job else set()
+        context_excluded = _context_exclusions(db, context_job) if context_job else set()
         context_allowed = []
         for m in context_messages:
             original = str(m.get('text', ''))
@@ -243,11 +254,14 @@ class Gate:
             if result.decision == ALLOW:
                 context_allowed.append(dict(m, text=result.sanitized, privacy=result.reason))
             fragments += _blocked_pieces(original, result)
+        fragments = sorted(set(fragments), key=len, reverse=True)
+        # Context is reference only: leave out a context message that carries a blocked piece instead of holding this
+        # batch for good (the user cannot exclude a message of an earlier batch).
+        context_allowed = [m for m in context_allowed if not blocked_reason(m['text'], fragments)]
         clean_context = {k: apply_rules(v)[0] if isinstance(v, str) else v for k, v in context.items()}
         decision, reason = _job_decision(detail)
         self.record(db, job, decision, reason, identity, detail)
-        return JobReview(decision, reason, identity, allowed, context_allowed, clean_context,
-                         sorted(set(fragments), key=len, reverse=True), detail)
+        return JobReview(decision, reason, identity, allowed, context_allowed, clean_context, fragments, detail)
 
     def record(self, db, job, decision, reason, identity, detail):
         with closing(sqlite3.connect(db, timeout=10)) as c, c:

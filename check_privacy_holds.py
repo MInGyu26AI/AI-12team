@@ -97,6 +97,33 @@ class FailClosed(PrivacyFixture):
         self.assertEqual(dispatch(self.pipeline, 'privacy.list', {})['items'], [])
         self.assertEqual(collection_status(self.pipeline)['counts']['privacyExcluded'], 1)
 
+    def test_refused_message_is_not_sent_as_next_batch_context(self):
+        # The batch is held because 'w' repeats a phrase of the excluded 'p'; 'w' must not leak as the next batch's context.
+        personal = '허리 통증으로 병원 가야 해서, 회의록 정리는 내일 할게'
+        work = '회의록 정리는 내일 할게. API 명세도 같이 올릴게'
+        self.pipeline.privacy = Gate(Scripted({personal: dict(label='personal', personal=[personal])}))
+        configure(self.pipeline, dict(turnsPerBatch=2))
+        turn_intake.append(self.pipeline, [self.message('p', personal), self.message('w', work)], True)
+        self.run_offline()
+        turn_intake.append(self.pipeline, [self.message('c', 'PostgreSQL도 검토했다.'), self.message('d', '배포는 금요일에 하자')], True)
+        self.run_offline()
+        self.assertEqual(len(self.requests), 1)
+        self.assertFalse(leaked(self.requests, 'API 명세도 같이 올릴게'))
+
+    def test_context_message_carrying_a_blocked_piece_is_left_out(self):
+        # The earlier batch was sent; its tail repeats a phrase of a message the user's current batch keeps local.
+        shared = '회의록 정리는 내일 할게. 배포 문서도 확인했어'
+        personal = '허리 통증으로 병원 가야 해서, 회의록 정리는 내일 할게'
+        self.pipeline.privacy = Gate(Scripted({personal: dict(label='personal', personal=[personal])}))
+        configure(self.pipeline, dict(turnsPerBatch=2))
+        turn_intake.append(self.pipeline, [self.message('a', 'API 일정을 공유했다.'), self.message('b', shared)], True)
+        self.run_offline()
+        turn_intake.append(self.pipeline, [self.message('p', personal), self.message('w', 'PostgreSQL도 검토했다.')], True)
+        self.run_offline()
+        self.assertEqual(len(self.requests), 2, 'the batch goes out without the conflicting context instead of holding for good')
+        self.assertEqual(dispatch(self.pipeline, 'privacy.list', {})['items'], [])
+        self.assertFalse(leaked(self.requests[1:], '배포 문서도 확인했어'))
+
     def test_recheck_after_restart_asks_the_model_again(self):
         unclear = 'API 명세 일정은 다시 정하자'
         self.pipeline.privacy = Gate(Scripted({unclear: dict(label='bogus')}))  # malformed: cached as invalid, held

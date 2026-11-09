@@ -19,9 +19,11 @@ class Board(SecureHandler):
         body += f'<p>승인된 카드 {len(rows)}장</p>' + "".join(card_html(r) for r in rows)
         self.reply(200, page("팀 보드", body, True))
 
+    def authorized(self):
+        return hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + self.server.secret)
+
     def do_POST(self):
-        authorized = hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + self.server.secret)
-        if not self.valid_host() or self.path != "/items/approve" or not authorized:
+        if not self.valid_host() or self.path != "/items/approve" or not self.authorized():
             return self.reply(403, "거절됨")
         try:
             packet = json.loads(self.body())
