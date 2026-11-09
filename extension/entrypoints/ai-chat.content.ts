@@ -97,21 +97,19 @@ function wireSendButtons(site: SiteAdapter, overlay: ChatOverlay, isReady: () =>
   });
 }
 
-// 팝업의 상태 확인(ping)과 백그라운드의 화면 안내(toast)
+// 팝업의 상태 확인(ping)과 백그라운드의 화면 안내(toast). ping 은 sendResponse 로 바로 답한다
+// (Promise 를 돌려주는 답은 Chrome 148 미만에서 팝업에 닿지 않는다). toast 는 답하지 않는다
 function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay) {
-  browser.runtime.onMessage.addListener((msg: TabPing | TabToast) => {
-    if (msg?.type === 'toast') {
-      overlay.showToast(msg.text, msg.tone);
-      return;
-    }
+  browser.runtime.onMessage.addListener((msg: TabPing | TabToast, _sender, sendResponse) => {
+    if (msg?.type === 'toast') overlay.showToast(msg.text, msg.tone);
     if (msg?.type !== 'ping') return;
     const { messages, selector, guessedRoles } = site.extract();
-    return Promise.resolve<TabPingResult>({
+    sendResponse({
       site: site.label,
       onConversation: site.isConversationPage(),
       messageCount: messages.length,
       selector,
       guessedRoles,
-    });
+    } satisfies TabPingResult);
   });
 }

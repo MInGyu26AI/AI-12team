@@ -48,6 +48,15 @@ const showToast = (tabId: number | undefined, toast: TabToast) => {
   if (tabId) browser.tabs.sendMessage(tabId, toast).catch(() => {});
 };
 
+// 모든 요청에 답한다. 실패는 팝업 오류로 남기고 { ok: false, error } 로 돌려준다
+async function answer(message: BgRequest, sender: Browser.runtime.MessageSender) {
+  try {
+    return await handleRequest(message, sender);
+  } catch (error) {
+    return recordFailure(error, message?.type === 'refresh' ? 'refresh' : 'request');
+  }
+}
+
 async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Browser.tabs.Tab) {
   const url = tab?.url ?? '';
   const site = siteForUrl(url);
@@ -64,9 +73,12 @@ export default defineBackground(() => {
   void refreshStatusOrRecordFailure();
   browser.alarms.create('refresh', { periodInMinutes: 0.5 });
   browser.alarms.onAlarm.addListener(() => void refreshStatusOrRecordFailure());
-  browser.runtime.onMessage.addListener((message: BgRequest, sender) =>
-    handleRequest(message, sender).catch((error) => recordFailure(error, message?.type === 'refresh' ? 'refresh' : 'request')),
-  );
+  // 리스너가 Promise 를 돌려주는 응답은 Chrome 148 부터라 그 전 버전에서는 보낸 쪽이 undefined 를 받는다.
+  // 그래서 sendResponse 로 답하고, true 를 돌려 답할 때까지 채널을 열어 둔다
+  browser.runtime.onMessage.addListener((message: BgRequest, sender, sendResponse) => {
+    answer(message, sender).then(sendResponse, (error) => sendResponse({ ok: false, error: errorText(error) }));
+    return true;
+  });
   browser.runtime.onInstalled.addListener(() => {
     browser.contextMenus.create({
       id: SELECTION_MENU_ID,

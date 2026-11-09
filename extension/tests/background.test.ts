@@ -56,7 +56,15 @@ const messages = (count: number): CollectedMessage[] =>
     collectedAt: '2026-11-09T12:00:00Z',
   }));
 
-const send = async (message: unknown, sender: object) => (await fakeBrowser.runtime.onMessage.trigger(message, sender, () => {}))[0];
+// Chrome 처럼 sendResponse 로 받은 답을 돌려준다. Chrome 148 미만은 리스너가 돌려준 Promise 를 답으로 쓰지 않으므로,
+// 리스너가 true(답할 때까지 채널을 열어 둠)를 돌려주는지도 확인한다
+async function send(message: unknown, sender: object) {
+  let respond: (response: unknown) => void = () => {};
+  const response = new Promise((resolve) => (respond = resolve));
+  const [keepsChannelOpen] = await fakeBrowser.runtime.onMessage.trigger(message, sender, respond);
+  expect(keepsChannelOpen).toBe(true);
+  return response;
+}
 const fromPage = (url: string) => ({ url, tab: { id: 1 }, id: fakeBrowser.runtime.id });
 const fromPopup = () => ({ id: fakeBrowser.runtime.id, url: `chrome-extension://${fakeBrowser.runtime.id}/popup.html` });
 const lastError = async () => (await collectStateItem.getValue()).lastError;
