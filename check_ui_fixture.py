@@ -2,7 +2,6 @@
 
     python check_ui_fixture.py MARKER_FILE   # writes the connection file path to MARKER_FILE once ready
 """
-import json
 from pathlib import Path
 import secrets
 import signal
@@ -43,9 +42,7 @@ def main(marker):
             srv.db=test.db
             srv.pipeline=pipeline
             srv.rpc_secret=secrets.token_urlsafe(32)
-            connection=test.state/'connection.json'
-            connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{srv.server_port}/rpc',token=srv.rpc_secret)))
-            connection.chmod(0o600)
+            connection,_=test.native_host(srv)
             marker.write_text(str(connection))
             print('가상 UI 검사 준비됨 · 연결 파일 경로만 기록, 실제 대화·외부 AI 사용 없음',flush=True)
             while True:
