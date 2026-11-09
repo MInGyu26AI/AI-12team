@@ -26,6 +26,9 @@ class Board(SecureHandler):
         try:
             packet = json.loads(self.body())
             validate_packet(packet)
+            if "version" in packet:
+                # Team (version 2) cards only go to a team server; this board stores the five version 1 fields.
+                raise ValueError("로컬 보드는 v1 승인만 받습니다.")
             with connect(self.server.db) as c:
                 c.execute("INSERT INTO records VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING", tuple(packet[k] for k in PACKET_FIELDS))
                 saved = dict(c.execute("SELECT * FROM records WHERE id=?", (packet["id"],)).fetchone())

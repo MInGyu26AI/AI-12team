@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import collector
 import delivery
 from demo_board import Board
-from local_fixtures import first_line, free_ports, get_page, post, server, wait_until, work_gate
+from local_fixtures import first_line, free_ports, get_page, post, public_card, server, wait_until, work_gate
 from review_page import Review
 from runtime import child_environment
 from storage import connect, initialize, runtime_lock
@@ -217,6 +217,13 @@ class Integrity(IntegrityFixture):
         with server(Board, self.board) as srv:
             for payload in (None, [], {}, dict(id="x",label="unknown",text="x",quote="x",speaker="AI")):
                 self.assertEqual(post(srv, "/items/approve", payload, True)[0], 400)
+
+    def test_demo_board_refuses_team_packets(self):
+        packet = dict(id="x", label="결정", text="DB = SQLite", quote="SQLite로 결정했다.", speaker="사용자", version=2, card=public_card())
+        with server(Board, self.board) as srv:
+            self.assertEqual(post(srv, "/items/approve", packet, True)[0], 400)
+        with connect(self.board) as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 0)
 
     def test_batch_draft_rollback(self):
         self.card()
