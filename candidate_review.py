@@ -90,10 +90,15 @@ def update_candidate(pipeline, identifier, patch):
 
 
 def dismiss_candidate(pipeline, params):
-    """candidates.dismiss"""
-    with connect(pipeline.db) as c:
-        c.execute('''UPDATE candidate_details SET dismissed=1 WHERE id=? AND team_id=(SELECT team_id FROM sharing)
-                AND id IN (SELECT id FROM cards WHERE status='ready')''', (params.get('id'),))
+    """candidates.dismiss: only a current-team candidate still in review; anything else is an error."""
+    if not isinstance(params.get('id'), str):
+        raise ValueError('제외할 후보를 확인하세요.')
+    with pipeline.lock, connect(pipeline.db) as c:
+        c.execute('BEGIN IMMEDIATE')
+        updated = c.execute('''UPDATE candidate_details SET dismissed=1 WHERE id=? AND team_id=(SELECT team_id FROM sharing)
+                AND id IN (SELECT id FROM cards WHERE status='ready')''', (params['id'],))
+        if updated.rowcount != 1:
+            raise ValueError('제외할 수 있는 후보가 없습니다.')
     return dict(ok=True)
 
 

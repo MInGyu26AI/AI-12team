@@ -166,6 +166,18 @@ class LocalFunctional(PipelineFixture):
         with connect(self.db) as c:
             self.assertEqual(c.execute('SELECT state FROM outbox').fetchone()[0],'blocked')
 
+    def test_dismiss_requires_a_candidate_still_in_review(self):
+        card=self.candidate()
+        dispatch(self.pipeline,'candidates.approve',dict(ids=[card],teamId='a'))
+        for params in (dict(id='missing'),dict(id=card),dict(id=None)):
+            with self.subTest(params=params), self.assertRaises(ValueError):
+                dispatch(self.pipeline,'candidates.dismiss',params)
+        turn_intake.append(self.pipeline,[self.message('two')],True)
+        classify_queued(self.pipeline)
+        other=next(c['id'] for c in list_candidates(self.pipeline) if c['id']!=card)
+        for _ in range(2):
+            self.assertEqual(dispatch(self.pipeline,'candidates.dismiss',dict(id=other)),dict(ok=True))
+
     def test_retry_parameter_validation(self):
         unreachable=AssertionError('invalid retry must not reach the database')
         with patch('batch_classification.connect',side_effect=unreachable), patch('candidate_review.connect',side_effect=unreachable):
