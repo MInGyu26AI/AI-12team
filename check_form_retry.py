@@ -160,6 +160,12 @@ class IntegrationForms(PipelineFixture):
         self.assertIn('팀 연결을 확인하지 못했습니다',body.decode())
         self.assertEqual(self.snapshot()['outbox'],[])
 
+    def test_page_names_the_real_source_and_the_configured_ai(self):
+        self.candidate()
+        markup=get_page(self.review())[1]
+        self.assertIn('출처 · 직접 입력',markup)
+        self.assertNotIn('OpenAI에서 분류',markup)
+
     def test_legacy_team_delivery_without_pipeline_uses_destination_scope(self):
         card=self.blocked()
         srv=self.review()

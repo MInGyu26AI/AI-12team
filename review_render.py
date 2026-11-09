@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import time
 
+from ai.syncup_ai.classify import SITE_LABEL
 from card_contract import MAX_TEXT, card_label
 from collector import config
 from html_page import card_html, esc, page
@@ -12,6 +13,7 @@ from storage import connect
 from team_client import NETWORK_ERRORS
 from turn_intake import unresolved_issues
 
+SOURCE_LABELS = SITE_LABEL | {'manual': '직접 입력', 'chatgpt-export': 'ChatGPT 내보내기'}
 CARDS = """SELECT cards.*,jobs.evidence,outbox.state AS delivery_state,outbox.detail AS delivery_detail,
     outbox.attempts,outbox_destinations.team_id AS approved_team
     FROM cards JOIN jobs ON jobs.id=cards.job LEFT JOIN outbox ON outbox.id=cards.id
@@ -22,7 +24,10 @@ FAILED_BATCHES = """SELECT j.* FROM jobs j JOIN job_context x ON x.job=j.id
 LEGACY_FAILED_JOBS = "SELECT * FROM jobs WHERE state LIKE 'failed_%'"
 LEGACY_NOTE = ('새 Codex·Claude Code 대화의 발췌를 OpenAI에서 분류하고 초안을 작성합니다. '
                '아래에서 승인한 문구와 근거만 팀 보드에 올라갑니다.')
+PIPELINE_NOTE = ('확장 프로그램과 Codex·Claude Code 대화의 발췌를 이 기기의 개인정보 검사를 거친 뒤 설정한 AI로 분류합니다. '
+                 '아래에서 승인한 문구와 근거만 팀 보드에 올라갑니다.')
 LEGACY_EMPTY = '아직 후보가 없습니다. 선택한 프로젝트에서 새 Codex 또는 Claude Code 대화를 시작하면 완료된 발화를 확인합니다.'
+PIPELINE_EMPTY = '아직 후보가 없습니다. 확장 프로그램이나 선택한 프로젝트의 Codex·Claude Code 대화에서 완료된 발화를 확인합니다.'
 
 
 @dataclass
@@ -67,7 +72,7 @@ def _team_picker(client, binding, token):
 
 def _session_controls(cfg, state, token, pipeline):
     end = dt.datetime.fromtimestamp(cfg["end"]).strftime("%m/%d %H:%M")
-    note = LEGACY_NOTE
+    note = PIPELINE_NOTE if pipeline else LEGACY_NOTE
     html = f'<p><strong>{esc(Path(cfg["project"]).name)}</strong> · {end}까지</p><p class="note">{note}</p>'
     if state != "종료":
         action, label = ("resume", "재개") if cfg["paused"] else ("pause", "일시중지")
@@ -84,9 +89,9 @@ def _issues_html(issues):
 
 
 def _source_label(evidence):
-    label = "Claude Code" if evidence and evidence[0].get("source") == "claude-code" else "Codex"
     if not evidence:
-        return label
+        return "Codex"
+    label = SOURCE_LABELS.get(evidence[0].get("source", "codex"), "Codex")
     return label + " · 추가 답변" if evidence[0].get("continuation_of") else label
 
 
@@ -168,7 +173,7 @@ def review_page(server, client, pipeline):
         body += (f'<form method="post" action="/retry">{view.retry_token}<input type="hidden" name="id" value="{esc(j["id"])}">'
                  f'처리 실패 · {esc(j["detail"])} <button>다시 시도</button></form>')
     if not rows:
-        body += f'<article>{LEGACY_EMPTY}</article>'
+        body += f'<article>{PIPELINE_EMPTY if pipeline else LEGACY_EMPTY}</article>'
     body += ''.join(_card_article(r, view) for r in rows)
     return page("개인 검토함", body, True)
 
@@ -184,7 +189,7 @@ def team_board_page(db, client):
             return 403, page('팀 선택 필요', '<a href="/">개인 검토함에서 접근 가능한 팀을 선택하세요.</a>')
         rows = client.items(team_id)
         body = (f'<nav><b>싱크업</b><a href="/">개인 검토함</a></nav><header><h1>{esc(name)} · 팀 보드</h1></header>'
-                f'<p>최근 승인 카드 {len(rows)}장 (최대 200장)</p>' + ''.join(card_html(row['packet']) for row in rows))
+                f'<p>최근 승인 카드 {len(rows)}장</p>' + ''.join(card_html(row['packet']) for row in rows))
         return 200, page('팀 보드', body, True)
     except (*NETWORK_ERRORS, KeyError, TypeError):
         return 503, page('팀 연결 확인', '<p role="alert">팀 권한이나 연결을 확인할 수 없습니다.</p><a href="/">개인 검토함</a>')
