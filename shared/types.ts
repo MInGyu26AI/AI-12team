@@ -57,7 +57,7 @@ interface CandidateFields {
   deliveryState?: "pending" | "sent" | "blocked";
 }
 
-// 팀 서버가 보드 카드에 붙이는 필드 (team_records.py board)
+// 팀 서버가 보드 카드에 붙이는 필드 (team_board.py board)
 interface BoardFields {
   decisionState?: "active" | "review" | "superseded" | "rejected";
   conflictCheckStatus?: "pending" | "running" | "complete" | "failed" | "not-required";
