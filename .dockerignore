@@ -5,16 +5,9 @@
 !cloud_server.py
 !team_server.py
 !team_records.py
-!app.py
-!collector.py
-!delivery.py
+!secure_http.py
 !diagnostics.py
-!storage.py
-!runtime.py
-!team_client.py
 !card_contract.py
-!local_privacy.py
-!retention.py
 !ai/
 !ai/syncup_ai/
 !ai/syncup_ai/*.py
