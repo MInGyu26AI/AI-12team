@@ -18,7 +18,7 @@ npm ci
 npm run dev        # http://localhost:3000
 npm run lint
 npm run build      # 빌드 결과는 .next-integration (next.config.ts distDir)
-npm test           # 승인함 후보·체크 계산 시험 (node:test)
+npm test           # 승인함 후보·체크 계산, 승인 요청, 공유 폴러 시험 (node:test)
 ```
 
 로컬 브리지로 검증할 때는 저장소 루트에서 실행한다. 자세한 순서는 루트의 `통합_사용법.md` 3절에 있다.

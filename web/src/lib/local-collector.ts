@@ -74,7 +74,8 @@ export async function refreshCollector(): Promise<void> {
   }
 }
 
-function subscribe(listener: () => void, need: Need) {
+/** 구독 시작 (첫 구독이면 폴링을 시작). 돌려준 함수로 끝낸다 */
+export function watchCollector(listener: () => void, need: Need) {
   const firstForCandidates = need === "candidates" && !wantsCandidates();
   listeners.set(listener, need);
   if (!timer) timer = setInterval(() => void refreshCollector(), POLL_MS);
@@ -95,12 +96,13 @@ function subscribe(listener: () => void, need: Need) {
 }
 
 const SERVER_SNAPSHOT = USE_MOCK ? MOCK : INITIAL;
-const currentSnapshot = () => (USE_MOCK ? MOCK : snapshot);
+/** 지금 상태 (목업 모드는 늘 같은 빈 상태) */
+export const readCollector = () => (USE_MOCK ? MOCK : snapshot);
 const serverSnapshot = () => SERVER_SNAPSHOT;
 
 function useSnapshot(need: Need): Snapshot {
-  const subscribeTo = useCallback((listener: () => void) => (USE_MOCK ? () => {} : subscribe(listener, need)), [need]);
-  return useSyncExternalStore(subscribeTo, currentSnapshot, serverSnapshot);
+  const subscribeTo = useCallback((listener: () => void) => (USE_MOCK ? () => {} : watchCollector(listener, need)), [need]);
+  return useSyncExternalStore(subscribeTo, readCollector, serverSnapshot);
 }
 
 /** 상태만 필요한 곳 (헤더의 팀 이름·아바타) */
