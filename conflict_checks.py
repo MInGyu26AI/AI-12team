@@ -5,6 +5,7 @@ transaction, and recorded in a second transaction only while the same lease stil
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import functools
 import time
 
 from psycopg.types.json import Jsonb
@@ -21,7 +22,6 @@ CHECK_SLICE_PAIRS = 30  # pairs one pass handles before the scheduler looks agai
 # A lease must outlast one judgement (CONFLICT_CHECK_SECONDS in ai/syncup_ai/config.py).
 LEASE = timedelta(minutes=3)
 RETRY_DELAY = timedelta(seconds=30)
-CONFLICT_POLICY_SHA256 = conflict_policy_fingerprint()
 SKIPPED_DETAIL = '비활성 결정 비교 제외'
 # outcome of a pair that did not complete -> (check state, detail shown on the board)
 FAILURES = {
@@ -49,6 +49,12 @@ class Lease:
     @property
     def candidate_ids(self):
         return {card['id'] for card in self.existing}
+
+
+@functools.cache
+def current_policy():
+    """The conflict policy fingerprint, computed on first use: the CLI loads ai/.env in main(), after imports."""
+    return conflict_policy_fingerprint()
 
 
 def enqueue(c, team_id, packet):
@@ -131,8 +137,8 @@ def _lease_or_skip(c, team_id, job):
 
 def _checkpoint(c, team_id, job, row, new):
     """The saved pair list and attempt count; rebuilt from scratch when missing or made under another policy."""
-    progress = job['progress']
-    if progress and progress.get('policy') == CONFLICT_POLICY_SHA256:
+    progress, policy = job['progress'], current_policy()
+    if progress and progress.get('policy') == policy:
         return progress, job['attempts']
     # Only cards with a decision state take part; legacy-format approvals have none and are never compared.
     earlier = c.execute('''SELECT r.packet,r.approved_by::text,r.approved_at FROM syncup.shared_cards r
@@ -142,7 +148,7 @@ def _checkpoint(c, team_id, job, row, new):
     ids = [card['id'] for card in ordered_candidates(new, [board_card(r) for r in earlier])]
     # A policy change restarts the comparison with a fresh attempt budget.
     attempts = 0 if progress else job['attempts']
-    return dict(ids=ids, cursor=0, skipped=0, policy=CONFLICT_POLICY_SHA256), attempts
+    return dict(ids=ids, cursor=0, skipped=0, policy=policy), attempts
 
 
 def _live_decision(c, team_id, card_id):
@@ -193,7 +199,7 @@ def _ai_judgement(request, diagnostic):
         llm = None
     decider = decider_from_env()
     # Recorded before the call, so a failed attempt still shows which policy and models it asked for.
-    diagnostic.update(policy_sha256=CONFLICT_POLICY_SHA256,
+    diagnostic.update(policy_sha256=current_policy(),
                       requested_models=dict(chat=model_fingerprint(llm), decisions=model_fingerprint(decider)))
     return check_conflicts(request, llm, decider=decider, allow_rules=False)
 

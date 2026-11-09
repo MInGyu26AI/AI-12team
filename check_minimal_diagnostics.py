@@ -1,11 +1,15 @@
 """Synthetic engines, real PostgreSQL/HTTP; no external AI or user conversation."""
 import hashlib
 import json
+import os
+from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from check_team_integration import TeamIntegration, checked, decisions_model
 from check_teams import own_tests
-from diagnostics import check_finished, check_started, checked_count, model_fingerprint
+from conflict_checks import current_policy
+from diagnostics import check_finished, check_started, checked_count, conflict_policy_fingerprint, model_fingerprint
 
 SECRET = 'SYNTHETIC_PRIVATE_TOKEN_AND_PERSONAL_TEXT_739'
 
@@ -26,6 +30,22 @@ class MetadataContract(unittest.TestCase):
         result = dict(ok=True, checkStatus='complete', results=[dict(cardId='new', judgements=[])])
         self.assertEqual(check_finished(check_started(1, 0), result, 'new', set(), 0, 'complete')['checked_count'], 0)
         self.assertIsNone(model_fingerprint(object()))
+
+    def test_policy_fingerprint_reads_settings_loaded_after_import(self):
+        # team_server.py imports conflict_checks before main() loads ai/.env into the environment.
+        current_policy.cache_clear()
+        self.addCleanup(current_policy.cache_clear)
+        before = conflict_policy_fingerprint()
+        with patch.dict(os.environ, AI_MODEL='synthetic-model-from-dotenv'):
+            self.assertEqual(current_policy(), conflict_policy_fingerprint())
+            self.assertNotEqual(current_policy(), before)
+
+    def test_unreadable_policy_source_is_logged(self):
+        with patch.object(Path, 'read_bytes', side_effect=OSError(SECRET)), \
+                self.assertLogs('syncup', level='WARNING') as logs:
+            self.assertIsNone(conflict_policy_fingerprint())
+        self.assertIn('conflict_policy', logs.output[0])
+        self.assertNotIn(SECRET, ''.join(logs.output))
 
 
 class DiagnosticPersistence(TeamIntegration):

@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import psycopg
 
-from cloud_server import CloudHandler, settings
+from cloud_server import CloudHandler, main, settings
+from team_access import DatabaseSetupError
 from team_server import TeamServer
 
 ROOT = Path(__file__).resolve().parent
@@ -96,6 +97,20 @@ class CloudBoundary(unittest.TestCase):
                 with patch.dict(os.environ, {key: value}):
                     with self.assertRaises(ValueError):
                         settings()
+
+    def test_startup_names_fixed_reasons_but_never_driver_errors(self):
+        verified = 'host=db.example.com sslmode=verify-full password=FAKE_DO_NOT_LOG'
+        generic = 'Cloud configuration or restricted DB connection failed; credentials are not logged.'
+        for dsn, db_error, message in [
+                ('host=db.example.com sslmode=require', None, 'Database TLS hostname verification is required.'),
+                (verified, DatabaseSetupError('migrate-integration hint'), 'migrate-integration hint'),
+                (verified, psycopg.OperationalError('FAKE_DO_NOT_LOG'), generic)]:
+            with self.subTest(message=message):
+                env = dict(SYNCUP_DATABASE_URL=dsn, SYNCUP_PUBLIC_HOST='synthetic.example.com')
+                with patch.dict(os.environ, env, clear=True), patch('cloud_server.verify_database', side_effect=db_error):
+                    with self.assertRaises(SystemExit) as stop:
+                        main()
+                self.assertEqual(str(stop.exception), message)
 
 
 if __name__ == '__main__':

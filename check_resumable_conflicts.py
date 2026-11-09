@@ -113,7 +113,7 @@ class ResumableChecks(TeamIsolation):
             return checked(req)
         self.api.conflict_engine = engine
         self.run_due_checks()
-        with patch('conflict_checks.CONFLICT_POLICY_SHA256', 'changed-policy'):
+        with patch('conflict_checks.current_policy', return_value='changed-policy'):
             self.run_due_checks()
         self.assertEqual(self.job()['progress']['cursor'], 30)
         self.assertEqual(len(seen), 60)
