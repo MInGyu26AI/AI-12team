@@ -1,9 +1,12 @@
 """Real SQLite checks with deterministic AI; no external calls."""
 from datetime import datetime, timezone
+import http.server
 import io
 import json
+from pathlib import Path
 import sqlite3
 import struct
+import tempfile
 import threading
 import time
 import unittest
@@ -14,7 +17,7 @@ from collection_settings import configure
 from collection_status import collection_status
 from local_fixtures import PipelineFixture
 from local_rpc import dispatch
-from native_host import read_frame
+from native_host import read_frame, request as native_request
 from storage import connect
 import turn_intake
 
@@ -183,6 +186,59 @@ class PipelineTest(PipelineFixture):
                 with self.assertRaises(ValueError):
                     dispatch(self.pipeline, method,params)
         self.assertEqual(sent,[],'no remote call without a target id')
+
+class NativeHostConnection(unittest.TestCase):
+    """native_host reads connection.json as strictly as the web bridge (web/src/app/api/local/route.ts)."""
+
+    def setUp(self):
+        temp=tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.folder=Path(temp.name)
+
+        class Local(http.server.BaseHTTPRequestHandler):
+            def log_message(self,*args):
+                pass
+
+            def do_POST(self):
+                redirect=self.path=='/rpc' and self.server.redirect
+                body=json.dumps(dict(redirected=True) if redirect else dict(ok=True,path=self.path)).encode()
+                self.send_response(302 if redirect else 200)
+                if redirect:
+                    self.send_header('Location','/followed')
+                self.send_header('Content-Length',str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server=http.server.HTTPServer(('127.0.0.1',0),Local)
+        self.server.redirect=False
+        threading.Thread(target=self.server.serve_forever,daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+
+    def connection(self,name='connection',mode=0o600,**changes):
+        path=self.folder/f'{name}.json'
+        config=dict(url=f'http://127.0.0.1:{self.server.server_port}/rpc',token='t'*43)
+        path.write_text(json.dumps(dict(config,**changes)))
+        path.chmod(mode)
+        return path
+
+    def test_a_private_connection_file_reaches_the_service(self):
+        self.assertEqual(native_request(self.connection(),{}),dict(ok=True,path='/rpc'))
+
+    def test_unsafe_connection_files_are_refused(self):
+        link=self.folder/'link.json'
+        link.symlink_to(self.connection())
+        cases=dict(link=link,group_readable=self.connection('group',0o640),bad_token=self.connection('token',token='short'),
+                   remote_url=self.connection('remote',url='http://10.0.0.1:1/rpc'),
+                   oversized=self.connection('large',padding='x'*5000))
+        for name,path in cases.items():
+            with self.subTest(case=name), self.assertRaises((OSError,ValueError)):
+                native_request(path,{})
+
+    def test_redirects_are_not_followed(self):
+        self.server.redirect=True
+        self.assertEqual(native_request(self.connection(),{}),dict(redirected=True))
+
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
