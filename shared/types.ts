@@ -50,7 +50,7 @@ interface AppFields {
   status: CardStatus;
 }
 
-// 로컬 수집기가 후보에 붙이는 필드 (integration.py candidates)
+// 로컬 수집기가 후보에 붙이는 필드 (candidate_review.list_candidates)
 interface CandidateFields {
   classificationMethod?: "chat" | "decisions" | "manual";
   evidence?: { messageId: string; role: "user" | "assistant"; roleGuessed: boolean; quote: string };

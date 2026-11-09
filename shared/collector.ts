@@ -5,7 +5,7 @@ import type { ClassificationOutput, Subtopic } from "./types";
 export const NATIVE_HOST = "com.syncup.collector";
 export const LOCAL_RPC_VERSION = 1;
 
-// 수집한 발화 한 건 (turns.append). site 는 integration.py clean_message 가 받는 값
+// 수집한 발화 한 건 (turns.append). site 는 turn_intake.clean_message 가 받는 값 (INTAKE_SITES)
 export interface CollectedMessage {
   id: string; // 사이트의 메시지 id (없으면 내용 해시)
   site: "chatgpt" | "manual" | "chatgpt-export"; // manual = 붙여넣기, chatgpt-export = 내보내기 파일
