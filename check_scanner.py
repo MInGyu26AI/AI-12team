@@ -1,9 +1,9 @@
-"""Offline integration checks against synthetic Codex logs and SQLite files."""
+"""Rust scanner checks for Codex logs, using synthetic rollout logs and SQLite index files."""
 import hashlib
 import json
-import sqlite3
 import tempfile
 import time
+import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -11,118 +11,164 @@ from unittest.mock import patch
 import collector
 from check_local_privacy import work_gate
 
+SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
 
-def run_checks(root):
-    start = time.time() - 60
-    project = str(root / "project")
-    codex = root / "codex"
-    sessions = codex / "sessions"
-    sessions.mkdir(parents=True)
-    db = root / "private.sqlite"
-    collector.initialize(db)
-    with collector.connect(db) as c:
-        c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (project, start, start + 600))
-    with sqlite3.connect(codex / "state_5.sqlite") as c:
-        c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,source TEXT DEFAULT 'cli')")
 
-    def event(kind, payload, at=start + 10):
-        return json.dumps({"type": kind, "timestamp": datetime.fromtimestamp(at, timezone.utc).isoformat(), "payload": payload}, ensure_ascii=False) + "\n"
+def job_id(key):
+    return hashlib.sha256(key.encode()).hexdigest()
 
-    def add_chat(chat, cwd=project, created=start + 1, location=None, source="cli", meta_source="cli"):
-        file = location or sessions / (chat + ".jsonl")
-        file.write_text(event("session_meta", {"id": chat, "cwd": cwd, "source": meta_source}), encoding="utf-8")
-        with sqlite3.connect(codex / "state_5.sqlite") as c:
-            c.execute("INSERT INTO threads VALUES(?,?,?,?,0,?)", (chat, str(file), int(created * 1000), cwd, json.dumps(source)))
+
+def fake_api(_db, endpoint, _body):
+    """Mock OpenAI: every turn is an adopted decision, drafted as the Supabase card."""
+    if endpoint == "decisions":
+        return {"answers": [{"type": "predicate", "name": k, "probability": 0.95 if k in ("decision", "adopted") else 0.01}
+                            for k in collector.QUESTIONS]}
+    card = {"kind": "decision", "text": "DB로 Supabase를 사용한다.", "n": 1, "quote": "DB는 Supabase로 확정했어."}
+    return {"output": [{"content": [{"type": "output_text", "text": json.dumps({"cards": [card]}, ensure_ascii=False)}]}]}
+
+
+class CodexScannerChecks(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.start = time.time() - 60
+        self.project = str(self.root / "project")
+        self.codex = self.root / "codex"
+        self.sessions = self.codex / "sessions"
+        self.sessions.mkdir(parents=True)
+        db = self.db = self.root / "private.sqlite"
+        collector.initialize(db)
+        with collector.connect(db) as c:
+            c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.project, self.start, self.start + 600))
+        with collector.connect(self.codex / "state_5.sqlite") as c:
+            c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,"
+                      "source TEXT DEFAULT 'cli')")
+
+    def event(self, kind, payload, offset):
+        at = datetime.fromtimestamp(self.start + offset, timezone.utc).isoformat()
+        return json.dumps({"type": kind, "timestamp": at, "payload": payload}, ensure_ascii=False) + "\n"
+
+    def add_chat(self, chat, cwd=None, created=1, location=None, source="cli", meta_source="cli"):
+        """Writes a rollout log holding only its session metadata and lists it in the index."""
+        cwd = cwd or self.project
+        file = location or self.sessions / (chat + ".jsonl")
+        file.write_text(self.event("session_meta", {"id": chat, "cwd": cwd, "source": meta_source}, 10), encoding="utf-8")
+        with collector.connect(self.codex / "state_5.sqlite") as c:
+            c.execute("INSERT INTO threads VALUES(?,?,?,?,0,?)",
+                      (chat, str(file), int((self.start + created) * 1000), cwd, json.dumps(source)))
         return file
 
-    def turn(turn_id, cwd=project, aborted=False, began=start + 10, ended=start + 11):
+    def turn(self, turn_id, cwd=None, aborted=False, began=10, ended=11):
+        """One turn: a user prompt with a secret, records that are not evidence, and the final answer."""
+        def message(role, kind, text, **extra):
+            return {"type": "message", "role": role, "content": [{"type": kind, "text": text}], **extra}
         return "".join([
-            event("event_msg", {"type": "task_started", "turn_id": turn_id}, began),
-            event("turn_context", {"cwd": cwd}, began),
-            event("response_item", {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "DB는 Supabase로 확정했어. 이메일 demo@example.com"}]}, began),
-            event("response_item", {"type": "message", "role": "assistant", "phase": "commentary", "content": [{"type": "output_text", "text": "SHOULD_NOT_COLLECT"}]}, began),
-            event("response_item", {"type": "function_call_output", "output": "TOOL_SECRET"}, began),
-            event("response_item", {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "<environment_context>IGNORE_META"}]}, began),
-            event("response_item", {"type": "message", "role": "assistant", "phase": "final_answer", "content": [{"type": "output_text", "text": "연결 작업을 정리했습니다."}]}, ended),
-            event("event_msg", {"type": "turn_aborted" if aborted else "task_complete", "turn_id": turn_id}, ended),
+            self.event("event_msg", {"type": "task_started", "turn_id": turn_id}, began),
+            self.event("turn_context", {"cwd": cwd or self.project}, began),
+            self.event("response_item", message("user", "input_text", "DB는 Supabase로 확정했어. 이메일 demo@example.com"), began),
+            self.event("response_item", message("assistant", "output_text", "SHOULD_NOT_COLLECT", phase="commentary"), began),
+            self.event("response_item", {"type": "function_call_output", "output": "TOOL_SECRET"}, began),
+            self.event("response_item", message("user", "input_text", "<environment_context>IGNORE_META"), began),
+            self.event("response_item", message("assistant", "output_text", "연결 작업을 정리했습니다.", phase="final_answer"), ended),
+            self.event("event_msg", {"type": "turn_aborted" if aborted else "task_complete", "turn_id": turn_id}, ended),
         ])
 
-    def append(file, text):
+    def append(self, file, text):
         with file.open("a", encoding="utf-8") as f:
             f.write(text)
 
-    def count():
-        with collector.connect(db) as c:
-            return c.execute("SELECT count(*) FROM jobs").fetchone()[0]
+    def scan(self):
+        collector.scan(self.db, self.codex)
 
-    valid = add_chat("valid")
-    append(valid, turn("first"))
-    collector.scan(db, codex)
-    assert count() == 1
-    with collector.connect(db) as c:
-        job = c.execute("SELECT * FROM jobs").fetchone()
-        assert job["id"] == hashlib.sha256(b"valid/first").hexdigest()
+    def jobs(self):
+        with collector.connect(self.db) as c:
+            return [dict(r) for r in c.execute("SELECT * FROM jobs ORDER BY rowid")]
+
+    def job_ids(self):
+        return {job["id"] for job in self.jobs()}
+
+    def test_complete_turn_becomes_one_masked_job(self):
+        self.append(self.add_chat("valid"), self.turn("first"))
+        self.scan()
+        [job] = self.jobs()
+        self.assertEqual((job["id"], job["state"], job["detail"]), (job_id("valid/first"), "new", ""))
         evidence = json.loads(job["evidence"])
-        assert [e["role"] for e in evidence] == ["user", "user", "assistant"]
-        assert "[가림]" in evidence[1]["text"]
-        assert all(s not in job["evidence"] for s in ["demo@example.com", "TOOL_SECRET", "SHOULD_NOT_COLLECT", "IGNORE_META"])
-        first_job = dict(job)
-    collector.scan(db, codex)
-    assert count() == 1, "restart duplicate"
-    partial = turn("second")
-    append(valid, partial[:-7])
-    collector.scan(db, codex)
-    assert count() == 1, "incomplete turn collected"
-    append(valid, partial[-7:])
-    collector.scan(db, codex)
-    assert count() == 2
-    print("PASS complete turn, exact IDs, redaction, role filtering, resume and partial writes")
+        self.assertEqual([(e["n"], e["role"]) for e in evidence], [(1, "user"), (2, "user"), (3, "assistant")])
+        self.assertEqual(evidence[0]["text"], "DB는 Supabase로 확정했어.")
+        self.assertIn("[가림]", evidence[1]["text"])
+        for excerpt in evidence:
+            self.assertEqual(set(excerpt), {"n", "role", "text", "conversationId", "turnId", "at"})
+            self.assertEqual((excerpt["conversationId"], excerpt["turnId"]), ("valid", job["id"]))
+            self.assertAlmostEqual(excerpt["at"], self.start + 11, places=2)
+        for hidden in ("demo@example.com", "TOOL_SECRET", "SHOULD_NOT_COLLECT", "IGNORE_META"):
+            self.assertNotIn(hidden, job["evidence"])
 
-    for i, source in enumerate(({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})):
-        append(add_chat(f"child-index-{i}", source=source), turn("x"))
-        append(add_chat(f"child-meta-{i}", meta_source=source), turn("x"))
-    collector.scan(db, codex)
-    assert count() == 2, "Codex subagent instructions collected as human evidence"
-    print("PASS Codex subagents excluded by either index source or session metadata")
+    def test_rescans_and_partly_written_turns_collect_each_turn_once(self):
+        valid = self.add_chat("valid")
+        self.append(valid, self.turn("first"))
+        self.scan()
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id("valid/first")}, "restart duplicate")
+        second = self.turn("second")
+        self.append(valid, second[:-7])
+        self.scan()
+        self.assertEqual(len(self.jobs()), 1, "incomplete turn collected")
+        self.append(valid, second[-7:])
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id("valid/first"), job_id("valid/second")})
 
-    append(add_chat("wrong-project", cwd="/other"), turn("x", cwd="/other"))
-    append(add_chat("old", created=start - 10), turn("x"))
-    append(add_chat("outside", location=root / "outside.jsonl"), turn("x"))
-    append(add_chat("wrong-context"), turn("x", cwd="/other"))
-    append(add_chat("aborted"), turn("x", aborted=True))
-    collector.scan(db, codex)
-    assert count() == 2
-    with collector.connect(db) as c:
-        c.execute("INSERT INTO pauses VALUES(?,?)", (start + 20, start + 30))
-    append(valid, turn("paused", began=start + 19, ended=start + 21))
-    collector.scan(db, codex)
-    assert count() == 2
-    with collector.connect(db) as c:
-        c.execute("UPDATE settings SET paused=1")
-    collector.scan(db, root / "absent-index")
-    with collector.connect(db) as c:
-        c.execute("UPDATE settings SET paused=0,end=start")
-    collector.scan(db, root / "absent-index")
-    assert count() == 2
-    print("PASS project/path/start boundaries, abort, pause overlap and expiry")
+    def test_subagent_threads_excluded_by_index_or_session_source(self):
+        self.append(self.add_chat("main"), self.turn("x"))
+        for i, source in enumerate(SUBAGENT_SOURCES):
+            self.append(self.add_chat(f"child-index-{i}", source=source), self.turn("x"))
+            self.append(self.add_chat(f"child-meta-{i}", meta_source=source), self.turn("x"))
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id("main/x")}, "Codex subagent instructions collected as human evidence")
 
-    with collector.connect(db) as c:
-        c.execute("UPDATE settings SET end=?", (start + 600,))
-    def fake_api(_db, endpoint, _body):
-        if endpoint == "decisions":
-            return {"answers": [{"type": "predicate", "name": k, "probability": 0.95 if k in ["decision", "adopted"] else 0.01} for k in collector.QUESTIONS]}
-        card = {"kind": "decision", "text": "DB로 Supabase를 사용한다.", "n": 1, "quote": "DB는 Supabase로 확정했어."}
-        return {"output": [{"content": [{"type": "output_text", "text": json.dumps({"cards": [card]}, ensure_ascii=False)}]}]}
-    with patch.object(collector, "call_api", side_effect=fake_api):
-        collector.classify(db, first_job, work_gate())
-        collector.draft(db, first_job, work_gate())
-    with collector.connect(db) as c:
-        card = c.execute("SELECT * FROM cards WHERE job=?", (first_job["id"],)).fetchone()
-        assert card["status"] == "ready" and card["adopted"] == 1
-        assert card["quote"] in evidence[0]["text"]
-    print("PASS Rust jobs feed existing Python classification and grounded draft contract (mock API)")
+    def test_threads_outside_project_window_or_sessions_folder_excluded(self):
+        self.append(self.add_chat("main"), self.turn("x"))
+        self.append(self.add_chat("wrong-project", cwd="/other"), self.turn("x", cwd="/other"))
+        self.append(self.add_chat("old", created=-10), self.turn("x"))
+        self.append(self.add_chat("outside", location=self.root / "outside.jsonl"), self.turn("x"))
+        self.append(self.add_chat("wrong-context"), self.turn("x", cwd="/other"))
+        self.append(self.add_chat("aborted"), self.turn("x", aborted=True))
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id("main/x")})
+
+    def test_turn_overlapping_pause_excluded(self):
+        valid = self.add_chat("valid")
+        self.append(valid, self.turn("before-pause"))
+        with collector.connect(self.db) as c:
+            c.execute("INSERT INTO pauses VALUES(?,?)", (self.start + 20, self.start + 30))
+        self.append(valid, self.turn("paused", began=19, ended=21))
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id("valid/before-pause")})
+
+    def test_paused_or_expired_collection_waits_until_resumed(self):
+        self.append(self.add_chat("valid"), self.turn("first"))
+        for stopped in ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start"):
+            with collector.connect(self.db) as c:
+                c.execute(stopped)
+            self.scan()
+            self.assertEqual(self.jobs(), [], stopped)
+        with collector.connect(self.db) as c:
+            c.execute("UPDATE settings SET end=?", (self.start + 600,))
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id("valid/first")})
+
+    def test_jobs_feed_python_classification_and_grounded_draft(self):
+        self.append(self.add_chat("valid"), self.turn("first"))
+        self.scan()
+        [job] = self.jobs()
+        with patch.object(collector, "call_api", side_effect=fake_api):
+            collector.classify(self.db, job, work_gate())
+            collector.draft(self.db, job, work_gate())
+        with collector.connect(self.db) as c:
+            card = c.execute("SELECT * FROM cards WHERE job=?", (job["id"],)).fetchone()
+        self.assertEqual((card["status"], card["adopted"]), ("ready", 1))
+        self.assertIn(card["quote"], json.loads(job["evidence"])[0]["text"])
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory() as tmp:
-        run_checks(Path(tmp))
+    unittest.main(verbosity=2)
