@@ -157,6 +157,28 @@ class CodexScannerChecks(unittest.TestCase):
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("valid/first")})
 
+    def test_broken_line_is_reported_and_later_threads_still_scanned(self):
+        # The broken thread is listed first, so stopping at its error would leave the valid thread unread.
+        broken = self.add_chat("broken")
+        self.append(broken, self.turn("before") + "{not json\n" + self.turn("after"))
+        self.append(self.add_chat("valid"), self.turn("first"))
+        with self.assertRaises(ValueError):
+            self.scan()
+        self.assertEqual(self.job_ids(), {job_id("broken/before"), job_id("valid/first")})
+        with self.assertRaises(ValueError, msg="the broken line was skipped instead of reported again"):
+            self.scan()
+        self.assertEqual(len(self.jobs()), 2)
+
+    def test_shrunk_log_is_reported_and_later_threads_still_scanned(self):
+        shrunk = self.add_chat("shrunk")
+        self.append(shrunk, self.turn("first"))
+        self.scan()
+        shrunk.write_text(shrunk.read_text(encoding="utf-8").splitlines(keepends=True)[0], encoding="utf-8")
+        self.append(self.add_chat("valid"), self.turn("first"))
+        with self.assertRaises(ValueError):
+            self.scan()
+        self.assertEqual(self.job_ids(), {job_id("shrunk/first"), job_id("valid/first")})
+
     def test_jobs_feed_python_classification_and_grounded_draft(self):
         self.append(self.add_chat("valid"), self.turn("first"))
         self.scan()

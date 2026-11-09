@@ -303,6 +303,7 @@ fn scan(db_path: &Path, codex: &Path, sqlite_root: &Path) -> Result<()> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let sessions = codex.join("sessions").canonicalize()?;
     let sanitizer = Sanitizer::new()?;
+    let mut failed = false;
     for (chat, filename, created, source, cwd) in chats {
         if !active(&db)? {
             break;
@@ -314,48 +315,68 @@ fn scan(db_path: &Path, codex: &Path, sqlite_root: &Path) -> Result<()> {
             continue;
         }
         let born = created as f64 / 1000.0;
-        if overlaps_pause(&db, born, born)? {
-            continue;
+        let thread = scan_thread(&mut db, &chat, &filename, born, &sessions, &cfg, &sanitizer);
+        if thread.is_err() {
+            failed = true;
         }
-        let path = match Path::new(&filename).canonicalize() {
-            Ok(p) => p,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e.into()),
-        };
-        if !path.starts_with(&sessions) || !path.is_file() {
-            continue;
-        }
-        let pos: Option<u64> = db
-            .query_row("SELECT pos FROM cursors WHERE chat=?1", [&chat], |r| {
-                r.get(0)
-            })
-            .optional()?;
-        let size = path.metadata()?.len();
-        if pos.is_some_and(|p| size < p) {
-            return Err("Codex log shrank; checkpoint requires review".into());
-        }
-        if pos == Some(size) {
-            continue;
-        }
-        let mut reader = BufReader::new(File::open(path)?);
-        let mut first = String::new();
-        reader.read_line(&mut first)?;
-        if !first.ends_with('\n') {
-            continue;
-        }
-        let meta: Value = serde_json::from_str(&first)?;
-        if !same_project(&meta["payload"]["cwd"], &cfg.project)
-            || meta["payload"]["id"] != chat
-            || is_subagent(&meta["payload"]["source"])
-        {
-            continue;
-        }
-        if let Some(pos) = pos {
-            reader.seek(SeekFrom::Start(pos))?;
-        }
-        extract(&mut db, &mut reader, &chat, &cfg, &sanitizer)?;
     }
-    Ok(())
+    if failed {
+        Err("Codex log failed validation".into())
+    } else {
+        Ok(())
+    }
+}
+
+/// Reads one thread's log from its cursor; an error here leaves the other threads to be scanned.
+fn scan_thread(
+    db: &mut Connection,
+    chat: &str,
+    filename: &str,
+    born: f64,
+    sessions: &Path,
+    cfg: &Settings,
+    sanitizer: &Sanitizer,
+) -> Result<()> {
+    if overlaps_pause(db, born, born)? {
+        return Ok(());
+    }
+    let path = match Path::new(filename).canonicalize() {
+        Ok(p) => p,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    if !path.starts_with(sessions) || !path.is_file() {
+        return Ok(());
+    }
+    let pos: Option<u64> = db
+        .query_row("SELECT pos FROM cursors WHERE chat=?1", [chat], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    let size = path.metadata()?.len();
+    if pos.is_some_and(|p| size < p) {
+        return Err("Codex log shrank; checkpoint requires review".into());
+    }
+    if pos == Some(size) {
+        return Ok(());
+    }
+    let mut reader = BufReader::new(File::open(path)?);
+    let mut first = String::new();
+    reader.read_line(&mut first)?;
+    if !first.ends_with('\n') {
+        return Ok(());
+    }
+    let meta: Value = serde_json::from_str(&first)?;
+    if !same_project(&meta["payload"]["cwd"], &cfg.project)
+        || meta["payload"]["id"] != chat
+        || is_subagent(&meta["payload"]["source"])
+    {
+        return Ok(());
+    }
+    if let Some(pos) = pos {
+        reader.seek(SeekFrom::Start(pos))?;
+    }
+    extract(db, &mut reader, chat, cfg, sanitizer)
 }
 
 fn main() {
