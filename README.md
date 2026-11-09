@@ -1,96 +1,88 @@
-# SyncUp local collector
+# 싱크업 (SyncUp)
 
-Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 Mac 프로그램이다. 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버는 클라우드 이미지(`Dockerfile.cloud`)로도 실행할 수 있다.
+팀원들이 각자 AI와 나눈 대화(ChatGPT 웹, Codex, Claude Code)에서 결정·조사·할 일을 골라, 본인이 승인한 것만 팀 결정 기록에 모으고 결정끼리 어긋나면 알려 주는 서비스. 2026 인공지능학과 대학 연합 해커톤 출품작.
 
-`--integrated`를 붙이면 ChatGPT Chrome 확장, 팀 웹(`web/`), AI 분류 모듈(`ai/`)을 함께 쓰는 통합 모드로 실행한다. 통합 모드에는 팀 서버 연결(`--team-api`)이 필요하다. 실행 절차는 [통합 사용법](통합_사용법.md), 당시 검증 결과는 [통합 검증](통합_검증.md)에 있다. 설계와 최근 검증 근거는 [docs/README.md](docs/README.md)에서 시작한다.
+- 웹: https://syncup-ashen.vercel.app
+- 확장 내려받기: https://syncup-ashen.vercel.app/install
 
-## 빌드
+## 구성
 
-Python 3.11 이상과 Rust 2024 edition을 지원하는 도구 모음이 필요하다. 검증한 Rust 버전은 1.95.0이며 개인 검토 앱에는 Python 추가 패키지가 없다. 선택 사항인 팀 서버에만 `requirements-team.txt`의 PostgreSQL 드라이버가 필요하다. 이 저장소 루트에서 실행한다.
+| 폴더 | 내용 | 담당 |
+|---|---|---|
+| `extension/` | ChatGPT 대화를 로컬 수집기로 보내는 Chrome 확장 (WXT) | 김단비 |
+| `web/` | 대화 수집·승인함·팀 결정 기록 화면 (Next.js) | 김단비 |
+| `shared/` | 웹·확장 공용 타입·표시 규칙·목업 데이터 | 김단비 |
+| `ai/` | 분류·충돌 판정 (Python) | 김하은 |
+| `collector/` | Mac 로컬 수집기: 대화 접수·개인정보 필터·후보 검토·승인 전송, 확장과 잇는 Native Messaging 호스트 (Python), 확장 없이 웹을 잇는 실행기 `local_web.cjs` (Node) | 김동균 |
+| `scanner/` | Codex·Claude Code 대화 기록을 읽는 스캐너 (Rust) | 김동균 |
+| `server/` | 팀 서버 API·관리 도구·DB 스키마 (PostgreSQL). 클라우드 이미지는 루트의 `Dockerfile.cloud` | 김동균 |
+| `contract/` | 수집기와 팀 서버가 함께 쓰는 승인 카드 검증·진단 기록·HTTP 기반 | 김동균 |
+| `checks/` | 검사 (`run_checks.py`, `check_*.py`·`check_*.cjs`, 공용 도우미 `repo_paths.py`·`local_fixtures.py`) | 김동균 |
+| `docs/` | 분류 기준표, 구조·실행·팀 서버·개인정보 문서 | 김민규·김단비 (분류 기준표), 김동균 |
 
-```sh
-cargo build --release --locked
-mkdir -p bin
-cp target/release/syncup-collector bin/syncup-collector
-```
+## 흐름
 
-실행 파일은 Git에 포함하지 않는다. 다른 위치에 빌드 결과를 저장하도록 `CARGO_TARGET_DIR`를 지정했다면 그 위치에서 실행 파일을 복사한다.
+1. 확장이 ChatGPT 대화를, 스캐너가 지정한 프로젝트의 Codex·Claude Code 대화를 읽어 Mac 로컬 수집기에 모음
+2. 기기 안에서 민감정보를 가리고 개인 내용을 거른 뒤, 남은 발췌만 외부 AI로 분류
+3. 승인함(웹 `/review`, 본인만 봄)에서 후보를 확인·수정·승인
+4. 승인한 카드와 근거 발췌만 팀 서버로 → 팀 서버가 기존 결정과 충돌 검사
+5. 팀 결정 기록(`/board`)에서 충돌 경고 확인·처리
 
-## 실행
+## 빠른 시작
 
-실행 환경에 `OPENAI_API_KEY`를 준비한 뒤, 수집할 프로젝트와 새 상태 폴더를 지정한다. 키를 소스나 명령 인수에 직접 넣지 않는다.
-
-외부 AI로 보내기 전에 기기 안 Ollama 모델이 발췌를 먼저 검사한다. 기본 모델은 `127.0.0.1:11434`의 `gemma4:e4b-it-qat`이고 `SYNCUP_LOCAL_PRIVACY_MODEL`로 바꿀 수 있다. 모델이 없거나 응답이 잘못되면 그 발췌는 보내지 않고 보류한다. 필터 설명은 [데이터 흐름과 처리 경계](docs/design.md)에 있다.
-
-```sh
-python3 app.py run --project /절대/경로/프로젝트 --state /절대/경로/새-상태-폴더
-```
-
-기본 개인 검토함은 `http://127.0.0.1:8876/`, 로컬 보드는 `http://127.0.0.1:8877/`이다. 새 상태 폴더의 기본 수집 기간은 120분이다. 개인 검토함에서 일시중지할 수 있다. 이미 승인한 전송 대기열은 수집 일시중지·종료 후에도 처리한다.
-
-팀 서버를 쓸 때는 관리자가 발급한 개인 연결 키 파일을 지정한다. 개인 검토함에서 공유 대상 팀을 선택하며, 승인 시 대상 팀과 사용자·서버가 고정된다. 이후 팀을 바꿔도 기존 대기열은 원래 팀으로만 전송한다. 팀 소속이 해제되거나 키가 폐기되면 전송을 차단한다.
-
-```sh
-python3 app.py run --project /프로젝트 --state /개인-상태 \
-  --team-api https://팀서버주소 --team-token-file /안전한/개인연결.key
-```
-
-[팀 서버 설치·사용법](팀_서버_사용법.md)과 [팀 격리 검증 범위](팀_격리_검증.md)를 참고한다. 기존 로컬 승인은 원격 팀에 자동 전송하지 않는다. 상태 폴더를 다른 사용자나 다른 서버에 재연결할 수 없으며, 그 경우 새 폴더가 필요하다.
-
-수집 대상은 해당 프로젝트에서 수집 시작 이후 생성된 새 Codex·Claude Code 세션이다. 기기 안 필터를 통과한 발췌는 공유 승인 전에 외부 OpenAI API로 보내 분류·초안을 만든다. 팀 공유 승인은 외부 AI 분석 동의와 별개다. 통합 모드에서는 ChatGPT Chrome 확장과 선택한 내보내기·붙여넣기 입력도 지원한다. 일반 Claude 웹 자동 수집은 포함하지 않는다.
-
-Node의 환경 파일 옵션을 사용하는 실행 방법과 포트·기간·Claude 설정 폴더 변경은 [사용법](사용법.md)에 설명했다.
-
-## 저장 위치와 OS 활성화
-
-현재 실행은 **macOS만 활성화**되어 있다. Windows·Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 두 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다.
-
-| 항목 | 우선순위 |
-| --- | --- |
-| Codex 루트 | `--codex-dir` → `CODEX_HOME` → 사용자 홈의 `.codex` |
-| Codex SQLite 폴더 | `--codex-sqlite-dir` → Codex 루트 `config.toml`의 `sqlite_home` → `CODEX_SQLITE_HOME` → Codex 루트 |
-| Claude 루트 | `--claude-dir` → `CLAUDE_CONFIG_DIR` → 사용자 홈의 `.claude` |
-| Claude 프로젝트 폴더명 | `--claude-project-name` → `CLAUDE_CODE_PROJECT_DIR_NAME` → 프로젝트 경로에서 계산 |
-
-Claude 폴더명 환경 변수는 `CLAUDE_CONFIG_DIR` 또는 `--claude-dir`을 함께 지정했을 때 반영한다. 모든 경로는 `~`를 확장한다. 상대 경로는 실행 디렉터리를 기준으로 하되 `config.toml` 안의 `sqlite_home`은 해당 설정 폴더를 기준으로 한다. 프로젝트·관리자·프로필별 Codex 설정 병합은 구현하지 않았으므로 그런 설정에서 DB를 옮겼다면 `--codex-sqlite-dir`로 실제 위치를 지정한다.
-
-수집기는 DB 폴더의 가장 높은 버전 `state_*.sqlite`를 선택한다. 필요한 `threads` 필드가 없으면 오류로 처리하며 이전 DB로 조용히 돌아가지 않는다. JSONL 내부 형식 변경에 대한 자동 호환까지 보장하지는 않는다.
+### 웹만 (예시 데이터)
 
 ```sh
-python3 app.py run --project /프로젝트 --state /새-상태 \
-  --codex-dir /대화/Codex --codex-sqlite-dir /색인/Codex \
-  --claude-dir /대화/Claude --claude-project-name work
+cd web
+npm ci
+NEXT_PUBLIC_USE_MOCK=true npm run dev   # http://localhost:3000
 ```
 
-Windows용 실행 파일명은 `syncup-collector.exe`, macOS·Linux는 `syncup-collector`다. OS별 네이티브 빌드가 필요하다. Windows 잠금은 `msvcrt`, macOS·Linux 잠금은 `fcntl`을 사용한다. 검증한 실행 파일은 Apple Silicon Mac에서 빌드했다.
+수집기 없이 예시 데이터로 화면만 본다 (모드 설명은 [web/README.md](web/README.md)).
+
+### 전체 (macOS)
+
+준비물과 명령은 [docs/running.md](docs/running.md#준비물)에 있다. 순서는 이렇다.
+
+1. [스캐너 빌드](docs/running.md#스캐너-빌드)
+2. [개인정보 모델 받기](docs/running.md#개인정보-모델-준비) (`ollama pull`)
+3. 팀 서버 주소와 개인 연결 키 받기. 이 Mac에서 직접 띄우려면 [한 기기에서 써 보기](docs/team-server.md#한-기기에서-써-보기)
+4. [수집기 실행](docs/running.md#통합-모드) (`--integrated`)
+5. [확장 연결](docs/running.md#확장-연결). 확장 없이 [웹만 연결](docs/running.md#웹-연결)해도 된다
 
 ## 검사
 
-`model` 묶음을 뺀 모든 검사는 임시 데이터와 가짜 AI 응답만 쓴다. 진입점은 `run_checks.py` 하나이며, 필요한 환경별로 묶여 있다. 고른 묶음의 검사는 하나가 실패해도 끝까지 돌고, 하나라도 실패하면 종료 코드가 0이 아니다.
+저장소 루트에서 실행한다. 고른 묶음의 검사는 하나가 실패해도 끝까지 돌고, 하나라도 실패하면 종료 코드가 0이 아니다.
 
 ```sh
-python3 run_checks.py            # local: Docker·Rust·로컬 모델 없이 (기본값)
-python3 run_checks.py rust       # 먼저 Rust 실행 파일(bin/syncup-collector)을 빌드해야 한다
-python3 run_checks.py team       # Docker와 requirements-team.txt 가 필요하다
-python3 run_checks.py all        # local + rust + team
-python3 run_checks.py --list     # 어떤 검사가 무엇을 다루는지 목록만 출력
+python3 checks/run_checks.py            # local (기본값)
+python3 checks/run_checks.py rust team  # 묶음 여러 개
+python3 checks/run_checks.py all        # local + rust + team
+python3 checks/run_checks.py --list     # 검사마다 다루는 범위만 출력
 ```
 
-| 묶음 | 필요 환경 | 다루는 범위 |
-|---|---|---|
-| `local` | macOS (로컬 앱 회귀 검사가 `app.py run` 을 실제로 띄움), Python 3, Node, `web/`·`extension/` 에서 각각 `npm ci` (웹 연결 검사가 Next를 띄우고, 두 단위 시험이 각 프로젝트의 러너로 돈다) | 로컬 수집·배치·후보, 개인정보 필터, 보존 정책, 재시도·복구, 웹 연결, 웹·확장 단위 시험, AI 모듈, 가림 공용 사례(Python·TS) |
-| `rust` | Rust 빌드 결과 | Codex·Claude Code 로그 스캐너, 이식성 |
-| `team` | Docker, `python3 -m pip install -r requirements-team.txt` | 팀 격리(RLS), 로컬 ↔ 팀 서버 통합, 충돌 검사 재개, DB 운영·복구, 클라우드 HTTP 경계, 진단 기록 (격리·통합 검사는 `check_server_recovery.py` 가 상속으로 함께 실행) |
-| `model` | 로컬 Ollama 와 기본 개인정보 모델(`privacy_model.DEFAULT_MODEL`) (선택 측정, `all` 에 포함하지 않음) | 실제 로컬 개인정보 모델 측정과 모델 → 필터 → 승인 흐름 (다른 모델은 `check_local_privacy_model.py --model …` 로 직접 실행) |
+| 묶음 | 필요 환경 |
+|---|---|
+| `local` | macOS, Python 3.11 이상, Node, `web/`·`extension/`에서 각각 `npm ci` |
+| `rust` | macOS, 빌드한 스캐너 실행 파일 `bin/syncup-collector` |
+| `team` | macOS (수집기와 확장 연결도 함께 띄움), Docker, `python3 -m pip install -r server/requirements.txt` |
+| `model` | Ollama와 기본 개인정보 모델 (`gemma4:e4b-it-qat`). 실제 모델 측정이라 느리고 `all`에 들어가지 않음 |
 
-팀 서버 검사는 실제 PostgreSQL 컨테이너를 따로 만들고 가상 사용자·팀 데이터만 쓴 뒤 종료한다. 기존 DB나 팀 서버를 검사 대상으로 쓰지 않는다. 외부 API를 부르는 `selfcheck.py --live` 는 러너에 넣지 않았다. `check_ui_fixture.py` 는 화면 확인용 합성 서비스를 띄우는 도구라 검사 목록에 없다.
+`model`을 뺀 검사는 임시 데이터와 가짜 AI 응답만 쓴다. `team`은 검사용 PostgreSQL 컨테이너를 따로 띄웠다가 지운다.
 
-가림 규칙은 Python(`ai/syncup_ai/mask.py`)과 웹 목업용 TypeScript 사본(`shared/classify.ts`) 두 곳에 있다. 둘 다 `shared/mask-cases.json` 의 같은 기대 결과로 검사하므로, 한쪽 규칙을 고치면 사례를 먼저 더하고 두 구현을 함께 맞춘다.
+## 문서
 
-## 저장소 범위
+- [docs/architecture.md](docs/architecture.md): 구조와 데이터 흐름, 로컬 RPC 목록
+- [docs/running.md](docs/running.md): 수집기 실행, 웹·확장 연결
+- [docs/team-server.md](docs/team-server.md): 팀 서버 설치·운영·백업
+- [docs/privacy.md](docs/privacy.md): 외부로 보내기 전 개인정보 처리, 보존 기간
+- [docs/classification.md](docs/classification.md): 분류 기준표
+- [web/README.md](web/README.md) · [extension/README.md](extension/README.md) · [ai/README.md](ai/README.md): 영역별 안내
+- [CLAUDE.md](CLAUDE.md): 서비스 기획 요약과 화면 규칙
+- 검증 기록·진행 현황: 팀 노션
 
-소스·의존성 잠금 파일·검사 코드·사용 문서만 관리한다. 키 파일, 대화 JSONL, SQLite 상태, 백업, 로그, 캐시와 실행 파일은 `.gitignore`로 제외한다. 검사 데이터는 코드에서 생성한 가상 값이다. 제외한 기존 로컬 파일은 삭제하지 않는다.
+## 알아둘 것
 
-Claude 로그는 내부 형식에 의존하며 변경 시 수집이 누락될 수 있다. 자동 가림은 일부 패턴만 처리한다. 실제 사용 전 대상 프로젝트와 외부 AI 분석 범위를 확인한다. [과거 대화 가져오기 검토안](기존_대화_가져오기_검토안.md)은 제안이며 실행 가능한 기능이 아니다.
-
-검증 범위와 Linux·Windows 검증 환경 선택지는 [호환성 검증 기록](호환성_검증.md)에 구분했다.
+- 로컬 수집기는 macOS에서만 돈다. Windows·Linux 코드는 남아 있지만 꺼 두었다 ([docs/running.md](docs/running.md#지원-os)).
+- Codex·Claude Code 기록은 각 도구의 내부 파일 형식을 그대로 읽는다. 도구 버전이 바뀌면 수집이 빠질 수 있다.
+- 공개 레포다. API 키, `.env`, 연결 키 파일, `connection.json`, 대화 기록(`*.jsonl`), 상태 DB(`*.sqlite`)는 커밋하지 않는다. `.gitignore`가 막아 두었지만 새 파일을 올릴 때 한 번 더 확인한다.
