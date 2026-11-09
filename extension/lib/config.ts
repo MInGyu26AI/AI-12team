@@ -16,14 +16,16 @@ export function normalizeWebUrl(input: string): string | null {
   }
 }
 
-/**
- * web-bridge 콘텐츠 스크립트가 실제로 동작하는 주소인지.
- * manifest 의 matches(localhost:3000, *.vercel.app) 밖의 주소는 콘텐츠 스크립트가 안 붙으므로 카드 넘기기가 안 된다.
- */
+// web-bridge 콘텐츠 스크립트가 붙는 주소 (manifest content_scripts.matches). 이 밖의 주소는 카드 넘기기가 안 된다.
+// 스크립트가 붙어도 설정한 주소 하나에서만 답한다 (settings.ts isTrustedWebOrigin)
+const LOCAL_WEB_ORIGINS = [LOCAL_WEB_URL, 'http://127.0.0.1:3000'];
+export const WEB_BRIDGE_MATCHES = [...LOCAL_WEB_ORIGINS.map((origin) => `${origin}/*`), 'https://*.vercel.app/*'];
+
+/** web-bridge 콘텐츠 스크립트가 붙는 주소인지 (WEB_BRIDGE_MATCHES 와 같은 범위) */
 export function bridgeSupported(origin: string) {
   try {
     const u = new URL(origin);
-    return origin === LOCAL_WEB_URL || origin === 'http://127.0.0.1:3000' || (u.protocol === 'https:' && u.hostname.endsWith('.vercel.app'));
+    return LOCAL_WEB_ORIGINS.includes(origin) || (u.protocol === 'https:' && u.hostname.endsWith('.vercel.app'));
   } catch {
     return false;
   }

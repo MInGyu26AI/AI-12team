@@ -25,7 +25,12 @@ export const settingsItem = storage.defineItem<Settings>('local:settings', {
 });
 
 // 예전에 저장된 설정에는 새 필드가 없을 수 있으므로 항상 이 함수들로 읽는다
-export const webUrlOf = (s: Settings) => s.webUrl || DEFAULT_WEB_URL;
+export const webUrlOf = (s: Pick<Settings, 'webUrl'>) => s.webUrl || DEFAULT_WEB_URL;
+/**
+ * 이 출처의 페이지가 로컬 수집기 RPC(개인 후보 읽기·승인 등)를 부를 수 있는지. 사용자가 설정한 개인 검토함 주소 하나만 믿는다.
+ * 로컬 개발 주소도 팝업에서 그 주소를 골랐을 때만 믿는다 (통합_사용법.md 4장).
+ */
+export const isTrustedWebOrigin = (s: Pick<Settings, 'webUrl'>, origin: string) => origin === webUrlOf(s);
 export const turnsOf = (s: Settings) => Math.min(Math.max(Math.round(s.turnsPerBatch ?? TURNS_PER_BATCH), 1), 50);
 export const endsAtOf = (s: Settings) => (s.endsAt ? new Date(s.endsAt) : null);
 export const isEnded = (s: Settings, now = Date.now()) => {

@@ -2,8 +2,7 @@ import { NATIVE_HOST } from '@shared/collector';
 import type { ExtStatus } from '@shared/bridge';
 import type { RelatedCard } from '@shared/types';
 import { isShareable } from '@shared/labels';
-import { settingsItem, pendingItem, collectStateItem, webUrlOf } from '@/lib/settings';
-import { LOCAL_WEB_URL } from '@/lib/config';
+import { settingsItem, pendingItem, collectStateItem, isTrustedWebOrigin } from '@/lib/settings';
 import { selectionMessage } from '@/lib/selection';
 
 // 로컬 수집기에 닿지 못한 실패(연결)와 수집기가 요청을 거절한 실패를 구분한다. 상태 새로 고침이 성공하면 연결 실패와
@@ -61,7 +60,7 @@ export default defineBackground(() => {
       const settings = await settingsItem.getValue();
       const origin = sender.url ? new URL(sender.url).origin : '';
       const own = !sender.tab && sender.id === browser.runtime.id;
-      const web = [webUrlOf(settings), LOCAL_WEB_URL, 'http://127.0.0.1:3000'].includes(origin);
+      const web = isTrustedWebOrigin(settings, origin);
       const chat = ['https://chatgpt.com', 'https://chat.openai.com'].includes(origin);
       if (message.type === 'collect' && chat) return await collect(message.messages, message.trigger !== 'auto');
       if (!own && !web) throw new Error('허용되지 않은 연결 화면');

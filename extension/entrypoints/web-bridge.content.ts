@@ -1,12 +1,13 @@
 import { BRIDGE_FROM_EXT, BRIDGE_FROM_WEB } from '@shared/bridge';
-import { LOCAL_WEB_URL } from '@/lib/config';
-import { settingsItem, webUrlOf } from '@/lib/settings';
+import { WEB_BRIDGE_MATCHES } from '@/lib/config';
+import { isTrustedWebOrigin, settingsItem } from '@/lib/settings';
 
+// 스크립트는 WEB_BRIDGE_MATCHES 전체에 붙지만 팝업에서 설정한 주소의 페이지에만 답한다.
+// 주소를 바꾼 뒤 이미 열린 탭도 새로고침 없이 따르도록 메시지마다 확인한다.
 export default defineContentScript({
-  matches: ['http://localhost:3000/*','http://127.0.0.1:3000/*','https://*.vercel.app/*'],
-  async main(ctx) {
-    const allowed = async () => [webUrlOf(await settingsItem.getValue()), LOCAL_WEB_URL, 'http://127.0.0.1:3000'].includes(location.origin);
-    if (!await allowed()) return;
+  matches: WEB_BRIDGE_MATCHES,
+  main(ctx) {
+    const allowed = async () => isTrustedWebOrigin(await settingsItem.getValue(), location.origin);
     const receive = async (event: MessageEvent) => {
       if (event.source !== window || event.origin !== location.origin || event.data?.source !== BRIDGE_FROM_WEB || event.data.type !== 'rpc' || !await allowed()) return;
       const message = event.data;
