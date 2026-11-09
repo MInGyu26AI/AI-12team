@@ -81,8 +81,10 @@ pub fn scan(db_path: &Path, codex_dir: &Path, index_dir: &Path) -> Result<()> {
         if !thread.selected(&cfg) {
             continue;
         }
-        if scan_thread(&mut db, &thread, &sessions, &cfg, &excerpts).is_err() {
-            failed = true;
+        match scan_thread(&mut db, &thread, &sessions, &cfg, &excerpts) {
+            Ok(()) => {}
+            Err(e) if review_db::is_database_error(&*e) => return Err(e),
+            Err(_) => failed = true,
         }
     }
     if failed {
@@ -144,7 +146,8 @@ fn is_subagent(source: &Value) -> bool {
             .is_some_and(|s| s == "subagent" || s.starts_with("subagent_"))
 }
 
-/// Reads one thread's log on from its cursor. An error fails this thread only; the scan goes on and reports it.
+/// Reads one thread's log on from its cursor. A log error fails this thread only; the scan goes on and
+/// reports it.
 fn scan_thread(
     db: &mut Connection,
     thread: &Thread,

@@ -1,10 +1,12 @@
 """Rust scanner checks for Codex logs, using synthetic rollout logs and SQLite index files."""
 import hashlib
 import json
+import sqlite3
 import subprocess
 import tempfile
 import time
 import unittest
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -28,6 +30,14 @@ def job_id(key):
 def run_scanner(*args):
     """Runs the built scanner directly, past the check in collector.scan() that collection is running."""
     return subprocess.run([str(collector_binary()), *map(str, args)], env=child_environment(), capture_output=True)
+
+
+@contextmanager
+def write_lock(db):
+    """Holds the database's write lock, as another process in the middle of a write would; reads still work."""
+    with closing(sqlite3.connect(db, isolation_level=None)) as lock:
+        lock.execute("BEGIN IMMEDIATE")
+        yield
 
 
 def split_last_line(text):
@@ -224,6 +234,17 @@ class CodexScannerChecks(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.scan()
         self.assertEqual(self.job_ids(), {job_id("shrunk/first"), job_id("valid/first")})
+
+    def test_locked_database_ends_the_scan_within_its_time_limit(self):
+        # Every thread has a turn to store, so waiting out the lock once per thread would pass collector.scan's limit.
+        chats = [f"chat-{i}" for i in range(4)]
+        for chat in chats:
+            self.append(self.add_chat(chat), self.turn("first"))
+        with write_lock(self.db), self.assertRaises(ValueError):
+            self.scan()
+        self.assertEqual(self.jobs(), [])
+        self.scan()
+        self.assertEqual(self.job_ids(), {job_id(f"{chat}/first") for chat in chats})
 
     def test_jobs_feed_python_classification_and_grounded_draft(self):
         self.append(self.add_chat("valid"), self.turn("first"))

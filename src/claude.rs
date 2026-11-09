@@ -46,8 +46,10 @@ pub fn scan(db_path: &Path, claude_dir: &Path, project_name: Option<&str>) -> Re
             let Some(session) = session_id(&path, &uuid) else {
                 continue;
             };
-            if scan_transcript(&mut db, &path, session, &cfg, &excerpts).is_err() {
-                failed = true;
+            match scan_transcript(&mut db, &path, session, &cfg, &excerpts) {
+                Ok(()) => {}
+                Err(e) if review_db::is_database_error(&*e) => return Err(e),
+                Err(_) => failed = true,
             }
         }
     }
@@ -111,7 +113,7 @@ fn chat_key(session: &str) -> String {
     format!("claude-code/{session}")
 }
 
-/// Reads one transcript and stores its new turns. An error fails this transcript only; the scan goes on
+/// Reads one transcript and stores its new turns. A log error fails this transcript only; the scan goes on
 /// and reports it.
 fn scan_transcript(
     db: &mut Connection,
