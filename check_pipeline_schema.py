@@ -70,6 +70,15 @@ class PipelineSchema(unittest.TestCase):
                 approve(c, dict(id='c',text='승인',quote='SQLite로 결정했다.').__getitem__, binding)
             self.assertFalse(c.execute('SELECT * FROM outbox').fetchall())
 
+    def test_new_database_writes_no_migration_backups(self):
+        fresh = Path(self.temp.name) / 'fresh' / 'private.sqlite'
+        fresh.parent.mkdir()
+        initialize(fresh)
+        ensure_pipeline_schema(fresh)
+        self.assertEqual(list(fresh.parent.glob('*.bak.sqlite')), [])
+        ensure_pipeline_schema(self.db)
+        self.assertEqual(len(list(self.db.parent.glob('private.sqlite.integration-*.bak.sqlite'))), 1, 'existing cards are backed up')
+
     def test_unexpected_cards_schema_stops_the_migration(self):
         changed = dict(PRIVATE_SCHEMA, cards=PRIVATE_SCHEMA['cards'].replace('UNIQUE(job,kind),', 'UNIQUE(job, kind),'))
         with patch.dict('pipeline_schema.PRIVATE_SCHEMA', changed), self.assertRaisesRegex(ValueError, 'cards'):

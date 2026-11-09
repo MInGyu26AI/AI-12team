@@ -58,7 +58,8 @@ def ensure_pipeline_schema(db):
         c.commit()
         if c.execute("SELECT 1 FROM sqlite_master WHERE name='integration_settings'").fetchone():
             return
-        backup_before_migration(db, 'integration')
+        if c.execute('SELECT 1 FROM cards LIMIT 1').fetchone():  # only the cards rebuild can lose data
+            backup_before_migration(db, 'integration')
         c.execute('PRAGMA foreign_keys=OFF')
         c.execute('BEGIN IMMEDIATE')
         _rebuild_cards_without_kind_limit(c)

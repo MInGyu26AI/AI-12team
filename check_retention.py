@@ -143,9 +143,9 @@ class Retention(unittest.TestCase):
         self.assertEqual(result['backupsDeleted'], 1)
         self.assertEqual((old.exists(), fresh.exists(), other.exists()), (False, True, True))
         later = retention.sweep(self.db, now=t0 + 8 * DAY)
-        # 8 days on, the fresh backup and the pipeline's own migration backups have expired too; other files stay.
+        # 8 days on, the fresh backup has expired too; other files stay. A new database writes no migration backups.
         self.assertEqual(later['purgedIssues'], 1)
-        self.assertGreaterEqual(later['backupsDeleted'], 2)
+        self.assertEqual(later['backupsDeleted'], 1)
         self.assertEqual((fresh.exists(), other.exists(), list(folder.glob('private.sqlite.*.bak.sqlite'))), (False, True, []))
         self.assertGreater(later['cacheDeleted'], 0)
         self.assertEqual(later['backupErrors'], 0)

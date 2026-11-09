@@ -95,14 +95,15 @@ def backup_before_migration(db, tag):
 
 
 def initialize(db, board=False):
-    initialize_v1(db, board)
+    created = initialize_v1(db, board)
     if board:
         return
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("PRAGMA user_version").fetchone()[0] == 2:
             return
-        backup_before_migration(db, "v1")
+        if not created:  # a database created just now has nothing to keep
+            backup_before_migration(db, "v1")
         c.execute("""CREATE TABLE sharing(id INTEGER PRIMARY KEY CHECK(id=1),
             api_url TEXT NOT NULL, user_id TEXT NOT NULL, team_id TEXT)""")
         c.execute("""CREATE TRIGGER frozen_identity BEFORE UPDATE OF api_url,user_id ON sharing
@@ -118,13 +119,13 @@ def initialize(db, board=False):
 
 
 def initialize_v1(db, board=False):
-    """Create the version 1 schema, or convert unversioned tables to it."""
+    """Create the version 1 schema, or convert unversioned tables to it. True when it created an empty database."""
     schema = BOARD_SCHEMA if board else PRIVATE_SCHEMA
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         version = c.execute("PRAGMA user_version").fetchone()[0]
         if version == 1 or (version == 2 and not board):
-            return
+            return False
         if version != 0:
             raise ValueError("지원하지 않는 DB 버전입니다.")
         tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
@@ -157,3 +158,4 @@ def initialize_v1(db, board=False):
         if c.execute("PRAGMA foreign_key_check").fetchall():
             raise ValueError("기존 DB 참조 오류입니다. 변환을 취소했습니다.")
         c.execute("PRAGMA user_version=1")
+    return not tables
