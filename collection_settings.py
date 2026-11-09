@@ -1,11 +1,11 @@
-"""Collection settings of the turn pipeline: stored options and profile, the active-session check, collection.configure."""
+"""Collection settings of the turn pipeline: stored options and profile, the classifier context, collection.configure."""
 from datetime import datetime
 import json
 import math
 import time
 
 from ai.syncup_ai.schema import SUBTOPICS
-from collector import active, set_paused
+from collection_session import set_paused
 from storage import connect
 from team_client import bind_sharing
 
@@ -38,19 +38,6 @@ def local_profile(c):
     binding = c.execute('SELECT * FROM sharing').fetchone()
     return dict(user_id=binding['user_id'], name=binding['user_id'],
                 teams=[dict(id=binding['team_id'], name=binding['team_id'])])
-
-
-def require_active(db, team=None, start=None):
-    """(settings, binding) while collection runs for this team and session; ValueError otherwise."""
-    with connect(db) as c:
-        s = c.execute('SELECT * FROM settings').fetchone()
-        binding = c.execute('SELECT * FROM sharing').fetchone()
-        if not active(s):
-            raise ValueError('수집이 일시중지되었거나 종료되었습니다.')
-        team_changed = not binding or not binding['team_id'] or (team and binding['team_id'] != team)
-        if team_changed or (start is not None and start != s['start']):
-            raise ValueError('수집 세션이나 대상 팀이 변경되었습니다.')
-        return dict(s), dict(binding)
 
 
 def classification_context(c, team_id, profile):

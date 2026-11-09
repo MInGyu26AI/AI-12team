@@ -9,7 +9,8 @@ import sys
 import urllib.error
 import urllib.request
 
-RPC_LIMIT = 4 * 1024 * 1024  # review_page.RPC_LIMIT is the same limit on the local service
+from secure_http import RPC_LIMIT
+
 # Replies stay under Chrome's 1 MiB cap on host-to-extension messages.
 RESPONSE_LIMIT = 1_000_000
 EXTENSION_ID = re.compile('[a-p]{32}')
@@ -21,11 +22,11 @@ def request(connection, payload):
     config = json.loads(connection.read_text())
     if not re.fullmatch(r'http://127\.0\.0\.1:\d+/rpc', config['url']):
         raise ValueError('로컬 연결 주소 오류')
-    req = urllib.request.Request(config['url'],json.dumps(payload).encode(),
-          {'Content-Type':'application/json','Authorization':'Bearer '+config['token']})
+    headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config['token']}
+    req = urllib.request.Request(config['url'], json.dumps(payload).encode(), headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with opener.open(req,timeout=20) as response:
+        with opener.open(req, timeout=20) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
         return json.load(error)

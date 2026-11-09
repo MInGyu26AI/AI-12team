@@ -1,4 +1,4 @@
-"""Public card validation shared by local approval and the team trust boundary, and the card label table."""
+"""Approval packets and public cards: validation shared by local approval and the team trust boundary, and the labels."""
 import math
 from datetime import date
 
@@ -14,6 +14,8 @@ KIND_LABELS = {KIND_OF_TAG[tag]: label for tag, label in LABELS.items()}
 UNADOPTED_LABEL = '결정 · 채택 미확인'
 TAG_OF_LABEL = {label: tag for tag, label in LABELS.items()} | {UNADOPTED_LABEL: 'decision'}
 PUBLIC_FIELDS = set(RELATED_FIELDS) | {'classificationMethod'}
+# Version 1 approval packet (the loopback demo board stores exactly these).
+PACKET_FIELDS = ('id', 'label', 'text', 'quote', 'speaker')
 
 
 def card_label(kind, adopted):
@@ -47,7 +49,7 @@ def validate_card(card):
 
 
 def validate_v2(packet):
-    if set(packet) != {'id', 'label', 'text', 'quote', 'speaker', 'version', 'card'} or type(packet['version']) is not int or packet['version'] != 2:
+    if set(packet) != {*PACKET_FIELDS, 'version', 'card'} or type(packet['version']) is not int or packet['version'] != 2:
         raise ValueError('승인 형식 오류')
     card = packet['card']
     validate_card(card)
@@ -56,6 +58,19 @@ def validate_v2(packet):
         raise ValueError('승인 문구와 카드가 다릅니다.')
     if card['tag'] in ('decision', 'todo') and packet['speaker'] != '사용자':
         raise ValueError('AI 제안은 결정이나 할 일로 승인할 수 없습니다.')
+
+
+def validate_packet(packet):
+    if not isinstance(packet, dict):
+        raise ValueError('승인 형식 오류')
+    if packet.get('version') == 2:
+        validate_v2(packet)
+    elif set(packet) != set(PACKET_FIELDS):
+        raise ValueError('승인 형식 오류')
+    if any(not isinstance(packet[k], str) or not packet[k].strip() or len(packet[k]) > MAX_TEXT for k in PACKET_FIELDS):
+        raise ValueError('승인 값 오류')
+    if packet['label'] not in (*KIND_LABELS.values(), UNADOPTED_LABEL) or packet['speaker'] not in ('사용자', 'AI'):
+        raise ValueError('승인 유형 오류')
 
 
 def board_card(row):

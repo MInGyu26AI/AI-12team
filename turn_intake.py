@@ -5,9 +5,10 @@ import time
 
 from ai.syncup_ai.mask import mask
 import batch_queue
-from collection_settings import classification_context, local_profile, require_active
+from collection_session import bound_team, require_active
+from collection_settings import classification_context, local_profile
+from stable_ids import digest
 from storage import connect
-from turn_pipeline import digest
 
 MESSAGE_FIELDS = ('id', 'text', 'conversationId', 'site', 'role', 'collectedAt')
 INTAKE_SITES = ('chatgpt', 'manual', 'chatgpt-export')
@@ -15,7 +16,7 @@ MAX_MESSAGE_TEXT = 20000
 MAX_MESSAGE_FIELD = 1200
 MAX_APPEND = 200
 # Quarantined input of one team that nobody retried or dismissed yet. Param: team id.
-UNRESOLVED_ISSUES = '''FROM intake_issues WHERE team_id=? AND id NOT IN (SELECT issue_id FROM intake_resolutions)
+UNRESOLVED_ISSUES = '''SELECT * FROM intake_issues WHERE team_id=? AND id NOT IN (SELECT issue_id FROM intake_resolutions)
     ORDER BY received'''
 # Jobs the Rust scanner queued that intake has not taken yet; every batch job has a job_context row.
 SCANNED_JOBS = "SELECT * FROM jobs WHERE state='new' AND id NOT IN (SELECT job FROM job_context)"
@@ -152,7 +153,7 @@ def resolve_intake(pipeline, params, action):
         raise ValueError('입력과 대상 팀을 확인하세요.')
     with pipeline.lock, connect(pipeline.db) as c:
         c.execute('BEGIN IMMEDIATE')
-        team_id = c.execute('SELECT team_id FROM sharing').fetchone()[0]
+        team_id = bound_team(c)
         issue = c.execute('SELECT id FROM intake_issues WHERE id=? AND team_id=?', (params['id'], team_id)).fetchone()
         if not issue or params['teamId'] != team_id:
             raise ValueError('현재 팀의 입력이 아닙니다.')
@@ -166,11 +167,11 @@ def resolve_intake(pipeline, params, action):
     return dict(ok=True, alreadyResolved=False, replacementId=replacement)
 
 
-def unresolved_issues(c, team_id, columns='*'):
-    return [dict(r) for r in c.execute(f'SELECT {columns} {UNRESOLVED_ISSUES}', (team_id,))]
+def unresolved_issues(c, team_id):
+    return [dict(r) for r in c.execute(UNRESOLVED_ISSUES, (team_id,))]
 
 
 def intake_issues(pipeline):
     """intake.issues"""
     with connect(pipeline.db) as c:
-        return dict(items=unresolved_issues(c, c.execute('SELECT team_id FROM sharing').fetchone()[0]))
+        return dict(items=unresolved_issues(c, bound_team(c)))

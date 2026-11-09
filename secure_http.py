@@ -3,6 +3,8 @@ check and bounded request bodies."""
 import http.server
 
 FORM_LIMIT = 64 * 1024
+# Largest local RPC request; the Chrome native host (native_host.py) enforces the same limit on its side.
+RPC_LIMIT = 4 * 1024 * 1024
 CONTENT_SECURITY_POLICY = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
                            "form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 

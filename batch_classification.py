@@ -5,17 +5,20 @@ import json
 from ai.syncup_ai.classify import handle_request as classify
 from batch_queue import previous_batch_tail
 from card_contract import KIND_OF_TAG, PUBLIC_FIELDS, validate_card
-from collection_settings import require_active
+from collection_session import require_active
 from diagnostics import failure
 from local_privacy import ALLOW, EXCLUDE, HOLD
 from outbound_guard import OutboundGuard, blocked_reason
+from stable_ids import digest
 from storage import connect
-from turn_pipeline import digest
 
 QUEUED_BATCHES = '''SELECT j.id,x.team_id,x.context,x.messages FROM jobs j JOIN job_context x ON x.job=j.id
     WHERE j.state='new' ORDER BY j.rowid'''
+# A team's batches whose classification failed, waiting for jobs.retry. Param: team id (and job id for FAILED_BATCH).
+FAILED_BATCHES = '''SELECT j.id,j.detail FROM jobs j JOIN job_context x ON x.job=j.id
+    WHERE x.team_id=? AND j.state='failed_new' '''
 FAILED_BATCH = '''SELECT x.context FROM job_context x JOIN jobs j ON j.id=x.job
-    WHERE x.job=? AND x.team_id=? AND j.state='failed_new' '''
+    WHERE x.team_id=? AND x.job=? AND j.state='failed_new' '''
 # Pipeline cards are never 'adoption unconfirmed': v2 packets carry the tag's label only (card_contract.validate_v2).
 ADOPTED = 1
 
@@ -138,12 +141,16 @@ def _mark_failed(pipeline, job, context, error):
                   ('분류 실패 · ' + type(error).__name__ + ' · 원문 보존, 재시도 가능', job['id']))
 
 
+def failed_batches(c, team_id):
+    return [dict(r) for r in c.execute(FAILED_BATCHES, (team_id,))]
+
+
 def retry_failed(pipeline, params):
     """jobs.retry: queue a failed batch again in the current session (local_rpc has validated id and teamId)."""
     with pipeline.lock, connect(pipeline.db) as c:
         c.execute('BEGIN IMMEDIATE')
         s, binding = require_active(pipeline.db, params.get('teamId'))
-        row = c.execute(FAILED_BATCH, (params['id'], binding['team_id'])).fetchone()
+        row = c.execute(FAILED_BATCH, (binding['team_id'], params['id'])).fetchone()
         if not row:
             raise ValueError('재시도할 작업이 없습니다.')
         context = json.loads(row[0])

@@ -1,25 +1,23 @@
 """collection.status: what the extension popup and the web show about the current collection session."""
 from datetime import datetime, timezone
 import json
-import time
 
 from ai.syncup_ai.batch import group_turns
 from collection_settings import local_profile, read_options
-from collector import active
+from batch_classification import failed_batches
+from collection_session import active, bound_team, session_state
 import local_privacy
 from storage import connect
 from turn_intake import unresolved_issues
 
-# Params for the next three: team id (and the session start for PENDING_BATCHES).
-PENDING_BATCHES = '''SELECT count(*) FROM jobs j JOIN job_context x ON x.job=j.id
+# Counts for collection.status. Params: team id (and the session start for PENDING_COUNT).
+PENDING_COUNT = '''SELECT count(*) FROM jobs j JOIN job_context x ON x.job=j.id
     WHERE x.team_id=? AND j.state='new' AND json_extract(x.context,'$.collectionStart')=?
     AND j.id NOT IN (SELECT job FROM privacy_jobs WHERE decision='hold')'''
-HELD_BATCHES = '''SELECT count(*) FROM jobs j JOIN job_context x ON x.job=j.id
+HELD_COUNT = '''SELECT count(*) FROM jobs j JOIN job_context x ON x.job=j.id
     WHERE x.team_id=? AND j.state='new' AND j.id IN (SELECT job FROM privacy_jobs WHERE decision='hold')'''
-EXCLUDED_BATCHES = '''SELECT count(*) FROM privacy_jobs p JOIN job_context x ON x.job=p.job
+EXCLUDED_COUNT = '''SELECT count(*) FROM privacy_jobs p JOIN job_context x ON x.job=p.job
     WHERE x.team_id=? AND p.decision='exclude' '''
-FAILED_BATCHES = '''SELECT j.id,j.detail FROM jobs j JOIN job_context x ON x.job=j.id
-    WHERE x.team_id=? AND j.state='failed_new' '''
 CANDIDATE_STATES = '''SELECT c.status,o.state,count(*) AS n FROM candidate_details d JOIN cards c ON c.id=d.id
     LEFT JOIN outbox o ON o.id=c.id WHERE d.team_id=? AND NOT d.dismissed GROUP BY c.status,o.state'''
 UNBATCHED_TURNS = '''SELECT conversation,message FROM intake WHERE team_id=? AND job IS NULL
@@ -29,19 +27,12 @@ RECENT_BATCHES = '''SELECT x.job,x.context,x.messages,MAX(i.received) AS receive
     JOIN jobs j ON j.id=x.job JOIN intake i ON i.job=x.job
     WHERE x.team_id=? AND j.state='done' GROUP BY x.job ORDER BY received DESC LIMIT 20'''
 # Cards the legacy collector drafted before the pipeline existed.
-LEGACY_CANDIDATES = "SELECT count(*) FROM cards WHERE status IN ('manual','ready') AND id NOT IN (SELECT id FROM candidate_details)"
+LEGACY_CANDIDATE_COUNT = '''SELECT count(*) FROM cards WHERE status IN ('manual','ready')
+    AND id NOT IN (SELECT id FROM candidate_details)'''
 
 
 def _iso(timestamp):
     return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
-
-
-def _state(settings):
-    if time.time() >= settings['end']:
-        return 'ended'
-    if settings['paused']:
-        return 'paused'
-    return 'collecting'
 
 
 def _candidate_counts(c, team_id):
@@ -56,13 +47,13 @@ def _candidate_counts(c, team_id):
     return counts
 
 
-def _counts(c, team_id, start, failures, issues):
+def _counts(c, team_id, start, failed, issues):
     return dict(_candidate_counts(c, team_id),
-                classificationPending=c.execute(PENDING_BATCHES, (team_id, start)).fetchone()[0],
-                classificationFailed=len(failures),
-                intakeIssues=len(issues),
-                privacyHeld=c.execute(HELD_BATCHES, (team_id,)).fetchone()[0],
-                privacyExcluded=c.execute(EXCLUDED_BATCHES, (team_id,)).fetchone()[0])
+                classificationPending=c.execute(PENDING_COUNT, (team_id, start)).fetchone()[0],
+                classificationFailed=failed,
+                intakeIssues=issues,
+                privacyHeld=c.execute(HELD_COUNT, (team_id,)).fetchone()[0],
+                privacyExcluded=c.execute(EXCLUDED_COUNT, (team_id,)).fetchone()[0])
 
 
 def _buffered_turns(c, team_id, start):
@@ -92,21 +83,21 @@ def collection_status(pipeline):
     with connect(pipeline.db) as c:
         profile = local_profile(c)
         s = dict(c.execute('SELECT * FROM settings').fetchone())
-        team_id = c.execute('SELECT team_id FROM sharing').fetchone()[0]
+        team_id = bound_team(c)
         options = read_options(c)
         buffered = _buffered_turns(c, team_id, s['start'])
         last_collected = c.execute(LAST_COLLECTED, (team_id, s['start'])).fetchone()[0]
-        failures = [dict(r) for r in c.execute(FAILED_BATCHES, (team_id,))]
-        issues = unresolved_issues(c, team_id, 'id,reason,received')
-        counts = _counts(c, team_id, s['start'], failures, issues)
-        legacy = c.execute(LEGACY_CANDIDATES).fetchone()[0]
+        failures = failed_batches(c, team_id)
+        issues = [dict(id=i['id'], reason=i['reason'], received=i['received']) for i in unresolved_issues(c, team_id)]
+        counts = _counts(c, team_id, s['start'], len(failures), len(issues))
+        legacy = c.execute(LEGACY_CANDIDATE_COUNT).fetchone()[0]
         recent = _recent_batches(c, team_id)
     team = next((t for t in profile['teams'] if t['id'] == team_id), None)
     return dict(
         version='1',
         configured=bool(team),
         autoCollect=active(s),
-        state=_state(s),
+        state=session_state(s),
         turnsPerBatch=options['turnsPerBatch'],
         bufferedTurns=buffered,
         endsAt=_iso(s['end']),

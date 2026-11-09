@@ -3,7 +3,7 @@ import hmac
 import json
 import sqlite3
 
-from delivery import PACKET_FIELDS, validate_packet
+from card_contract import PACKET_FIELDS, validate_packet
 from html_page import card_html, page
 from secure_http import SecureHandler
 from storage import connect

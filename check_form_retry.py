@@ -37,7 +37,7 @@ class Forms(HTMLParser):
             self.current=None
 
 
-class IntegrationForms(PipelineFixture):
+class IntegratedModeForms(PipelineFixture):
 
     def review(self):
         srv=self.enterContext(server(Review,self.db))

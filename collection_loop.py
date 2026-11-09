@@ -3,7 +3,8 @@ import subprocess
 import time
 
 import batch_classification
-from collector import active, config, process, scan
+from collection_session import active, config
+from collector import process, scan
 from delivery import deliver
 from diagnostics import failure
 import retention

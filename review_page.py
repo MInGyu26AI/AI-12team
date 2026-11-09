@@ -6,16 +6,16 @@ import sqlite3
 import urllib.parse
 
 from collection_settings import cache_profile
-from collector import active, set_paused
+from collection_session import active, set_paused
+from collector import FAILED_PREFIX
 from delivery import CURRENT_DESTINATION, DEMO_BOARD_DESTINATION, approve, reset_blocked
 from diagnostics import failure
 import local_rpc
-from review_render import review_page, team_board_page
-from secure_http import SecureHandler
+from review_render import render_review_page, render_team_board
+from secure_http import RPC_LIMIT, SecureHandler
 from storage import connect
 from team_client import bind_sharing
 
-RPC_LIMIT = 4 * 1024 * 1024  # native_host.RPC_LIMIT is the same request limit on the Chrome side
 BAD_INPUT = "입력값·인용 근거·대상 팀을 확인해 주세요. 팀을 바꿨다면 검토함을 새로고침한 뒤 승인하세요."
 STORAGE_FAILED = "로컬 저장을 확인하지 못했습니다. 같은 카드로 다시 시도해 주세요."
 TEAM_UNREACHABLE = "팀 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."
@@ -41,8 +41,8 @@ def _retry_job(review, c, get, profile):
     """Legacy collector retry: back to the state before 'failed_' and redraft manual cards."""
     if not active(c.execute('SELECT * FROM settings').fetchone()):
         raise ValueError('수집 시간이 종료되었거나 일시중지되었습니다.')
-    updated = c.execute("UPDATE jobs SET state=replace(state,'failed_',''),detail='' WHERE id=? AND state IN ('failed_new','failed_draft')",
-                        (get("id"),))
+    updated = c.execute("UPDATE jobs SET state=replace(state,?,''),detail='' WHERE id=? AND state IN (?,?)",
+                        (FAILED_PREFIX, get("id"), FAILED_PREFIX + "new", FAILED_PREFIX + "draft"))
     if updated.rowcount != 1:
         raise ValueError('재시도할 작업이 없습니다.')
     c.execute("UPDATE cards SET status='drafting' WHERE job=? AND status='manual'", (get("id"),))
@@ -78,7 +78,7 @@ FORM_ACTIONS = {'/pause': _pause, '/resume': _resume, '/retry': _retry_job, '/re
 
 
 class Review(SecureHandler):
-    # app.serve always sets both; small test servers may leave them out.
+    # app._open_review_server sets both; the team checks' servers set only team_client.
     @property
     def team_client(self):
         return getattr(self.server, 'team_client', None)
@@ -89,10 +89,10 @@ class Review(SecureHandler):
 
     def do_GET(self):
         if self.valid_host() and self.path == '/team-board' and self.team_client:
-            return self.reply(*team_board_page(self.server.db, self.team_client))
+            return self.reply(*render_team_board(self.server.db, self.team_client))
         if not self.valid_host() or self.path != "/":
             return self.reply(404, "페이지를 찾을 수 없습니다.")
-        self.reply(200, review_page(self.server, self.team_client, self.pipeline))
+        self.reply(200, render_review_page(self.server, self.team_client, self.pipeline))
 
     def do_POST(self):
         if self.path == '/rpc' and self.pipeline:
@@ -124,7 +124,8 @@ class Review(SecureHandler):
     def submit_form(self):
         """Run one form action; None means done (303), otherwise (status, text) to answer instead."""
         # Privacy-preserving browsers can send an opaque Origin on a form POST.
-        if not self.valid_host() or self.headers.get("Origin") not in (None, "null", f"http://127.0.0.1:{self.server.server_port}"):
+        allowed_origins = (None, "null", f"http://127.0.0.1:{self.server.server_port}")
+        if not self.valid_host() or self.headers.get("Origin") not in allowed_origins:
             return 403, "거절됨"
         fields = urllib.parse.parse_qs(self.body().decode(), strict_parsing=True)
         get = lambda k: fields[k][0]

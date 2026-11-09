@@ -17,7 +17,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from secure_http import SecureHandler
-from delivery import validate_packet
+from card_contract import validate_packet
 from diagnostics import failure
 
 

@@ -1,6 +1,7 @@
 """Team relay: forward the web's team.* requests through the local team client, scoped to the bound team."""
 from urllib.parse import quote
 
+from collection_session import bound_team
 from storage import connect
 
 READ_PATHS = {'team.board': 'board', 'team.history': 'history', 'team.conflicts': 'conflicts',
@@ -23,7 +24,7 @@ def _write_request(method, params):
 
 def relay(pipeline, method, params):
     with connect(pipeline.db) as c:
-        team_id = c.execute('SELECT team_id FROM sharing').fetchone()[0]
+        team_id = bound_team(c)
     if method in WRITE_METHODS:
         path, data = _write_request(method, params)
     elif method in READ_PATHS:

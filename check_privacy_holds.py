@@ -13,12 +13,11 @@ from batch_classification import classify_queued
 from collection_settings import configure
 from collection_status import collection_status
 import local_privacy
-from local_fixtures import HEALTH, KEEP, SECRETS, TOKEN, Client, PrivacyFixture, Scripted, leaked, offline, strings
+from local_fixtures import HEALTH, KEEP, SECRETS, TOKEN, PrivacyFixture, Scripted, leaked, offline, strings
 from local_privacy import Gate
 from local_rpc import dispatch
 from storage import connect
 import turn_intake
-from turn_pipeline import TurnPipeline
 
 
 class FailClosed(PrivacyFixture):
@@ -32,9 +31,7 @@ class FailClosed(PrivacyFixture):
                 self.assertEqual(self.requests, [])
                 counts = collection_status(self.pipeline)['counts']
                 self.assertEqual((counts['privacyHeld'], counts['classificationPending']), (1, 0))
-                restarted = TurnPipeline(self.db, Client())
-                restarted.llm_factory, restarted.decider_factory = self.pipeline.llm_factory, (lambda: None)
-                restarted.privacy = Gate(Scripted(mode=mode))
+                restarted = self.restarted(Gate(Scripted(mode=mode)))
                 with offline(self.requests):
                     classify_queued(restarted)
                 self.assertEqual(self.requests, [])
@@ -49,8 +46,7 @@ class FailClosed(PrivacyFixture):
         item = dispatch(self.pipeline, 'privacy.list', {})['items'][0]
         self.assertEqual([m['decision'] for m in item['messages']], ['allow', 'hold'])
         # Restart: still held, still nothing sent.
-        restarted = TurnPipeline(self.db, Client())
-        restarted.llm_factory, restarted.decider_factory, restarted.privacy = self.pipeline.llm_factory, (lambda: None), self.pipeline.privacy
+        restarted = self.restarted(self.pipeline.privacy)
         with offline(self.requests):
             classify_queued(restarted)
         self.assertEqual(self.requests, [])
@@ -107,9 +103,7 @@ class FailClosed(PrivacyFixture):
         turn_intake.append(self.pipeline, [self.message('m', unclear)], True)
         self.run_offline()
         job = dispatch(self.pipeline, 'privacy.list', {})['items'][0]['id']
-        restarted = TurnPipeline(self.db, Client())
-        restarted.llm_factory, restarted.decider_factory = self.pipeline.llm_factory, (lambda: None)
-        restarted.privacy = Gate(Scripted())  # the model now answers work; this process has not asked it anything yet
+        restarted = self.restarted(Gate(Scripted()))  # the model now answers work; this process has asked it nothing yet
         dispatch(restarted, 'privacy.recheck', dict(id=job, teamId='a'))
         with offline(self.requests):
             classify_queued(restarted)

@@ -107,8 +107,7 @@ class LocalModelBoundary(unittest.TestCase):
         for content in invalid:
             with self.subTest(content=content):
                 classifier = OllamaClassifier('fixture:1b')
-                unsupported = ModelError('local model HTTP 501')
-                unsupported.status = 501
+                unsupported = ModelError('local model HTTP 501', 501)
                 response = dict(message=dict(content=content))
                 with patch.object(classifier, '_call', side_effect=[unsupported, response, response]) as call:
                     with self.assertRaises(ModelOutputError):

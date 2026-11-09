@@ -5,12 +5,11 @@ import time
 import urllib.error
 import urllib.request
 
-from card_contract import KIND_LABELS, MAX_TEXT, PUBLIC_FIELDS, UNADOPTED_LABEL, card_label, validate_v2
+from card_contract import PUBLIC_FIELDS, card_label, validate_packet
 from diagnostics import failure
 from storage import connect
 
 MAX_ATTEMPTS = 5
-PACKET_FIELDS = ("id", "label", "text", "quote", "speaker")
 # The loopback demo board answers with {"id": ...}; anything longer is refused.
 ACK_LIMIT = 16 * 1024
 # Outbox rows whose recorded destination is the current sharing binding (same team, user and server).
@@ -18,19 +17,6 @@ CURRENT_DESTINATION = """id IN (SELECT d.id FROM outbox_destinations d JOIN shar
     ON s.team_id=d.team_id AND s.user_id=d.user_id AND s.api_url=d.api_url)"""
 # Outbox rows approved for the loopback demo board, which records no destination.
 DEMO_BOARD_DESTINATION = "id NOT IN (SELECT id FROM outbox_destinations)"
-
-
-def validate_packet(packet):
-    if not isinstance(packet, dict):
-        raise ValueError("승인 형식 오류")
-    if packet.get('version') == 2:
-        validate_v2(packet)
-    elif set(packet) != set(PACKET_FIELDS):
-        raise ValueError("승인 형식 오류")
-    if any(not isinstance(packet[k], str) or not packet[k].strip() or len(packet[k]) > MAX_TEXT for k in PACKET_FIELDS):
-        raise ValueError("승인 값 오류")
-    if packet["label"] not in (*KIND_LABELS.values(), UNADOPTED_LABEL) or packet["speaker"] not in ("사용자", "AI"):
-        raise ValueError("승인 유형 오류")
 
 
 def _approved_evidence(r, get):
@@ -162,7 +148,8 @@ def deliver(db, board_url, secret, team_client=None):
     """Send the next due approval once. Returns False when nothing was due."""
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
-        row = c.execute("SELECT * FROM outbox WHERE state='pending' AND next_attempt<=? ORDER BY created LIMIT 1", (time.time(),)).fetchone()
+        row = c.execute("SELECT * FROM outbox WHERE state='pending' AND next_attempt<=? ORDER BY created LIMIT 1",
+                        (time.time(),)).fetchone()
         if not row:
             return False
         destination = c.execute('SELECT * FROM outbox_destinations WHERE id=?', (row['id'],)).fetchone()

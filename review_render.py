@@ -3,24 +3,23 @@ from dataclasses import dataclass, field
 import datetime as dt
 import json
 from pathlib import Path
-import time
 
 from ai.syncup_ai.classify import SITE_LABEL
+from batch_classification import failed_batches
 from card_contract import MAX_TEXT, card_label
-from collector import config
+from collection_session import bound_team, config, session_state
 from html_page import card_html, esc, page
 from storage import connect
-from team_client import NETWORK_ERRORS
+from team_client import NETWORK_ERRORS, TeamClient
 from turn_intake import unresolved_issues
 
 SOURCE_LABELS = SITE_LABEL | {'manual': '직접 입력', 'chatgpt-export': 'ChatGPT 내보내기'}
+STATE_LABELS = {'ended': '종료', 'paused': '일시중지', 'collecting': '수집 중'}
 CARDS = """SELECT cards.*,jobs.evidence,outbox.state AS delivery_state,outbox.detail AS delivery_detail,
     outbox.attempts,outbox_destinations.team_id AS approved_team
     FROM cards JOIN jobs ON jobs.id=cards.job LEFT JOIN outbox ON outbox.id=cards.id
     LEFT JOIN outbox_destinations ON outbox_destinations.id=cards.id
     ORDER BY cards.rowid DESC"""
-FAILED_BATCHES = """SELECT j.* FROM jobs j JOIN job_context x ON x.job=j.id
-    WHERE x.team_id=? AND j.state='failed_new'"""
 LEGACY_FAILED_JOBS = "SELECT * FROM jobs WHERE state LIKE 'failed_%'"
 LEGACY_NOTE = ('새 Codex·Claude Code 대화의 발췌를 OpenAI에서 분류하고 초안을 작성합니다. '
                '아래에서 승인한 문구와 근거만 팀 보드에 올라갑니다.')
@@ -42,14 +41,8 @@ class TeamChoice:
 class ReviewView:
     token: str
     retry_token: str
-    client: object
+    client: TeamClient | None
     team: TeamChoice
-
-
-def _state_label(cfg):
-    if time.time() >= cfg["end"]:
-        return "종료"
-    return "일시중지" if cfg["paused"] else "수집 중"
 
 
 def _team_picker(client, binding, token):
@@ -74,7 +67,7 @@ def _session_controls(cfg, state, token, pipeline):
     end = dt.datetime.fromtimestamp(cfg["end"]).strftime("%m/%d %H:%M")
     note = PIPELINE_NOTE if pipeline else LEGACY_NOTE
     html = f'<p><strong>{esc(Path(cfg["project"]).name)}</strong> · {end}까지</p><p class="note">{note}</p>'
-    if state != "종료":
+    if state != "ended":
         action, label = ("resume", "재개") if cfg["paused"] else ("pause", "일시중지")
         html += f'<form method="post" action="/{action}">{token}<button>{label}</button></form>'
     return html
@@ -144,16 +137,16 @@ def _card_article(r, view):
     return html + f'<small>출처 · {_source_label(evidence)}</small>' + _card_state(r, evidence, view) + "</article>"
 
 
-def review_page(server, client, pipeline):
+def render_review_page(server, client, pipeline):
     """The whole review page for one GET."""
     cfg = config(server.db)
     token = f'<input type="hidden" name="csrf" value="{server.csrf}">'
     with connect(server.db) as c:
         binding = c.execute('SELECT * FROM sharing WHERE id=1').fetchone()
     retry_team = binding['team_id'] if binding else ''
-    state = _state_label(cfg)
+    state = session_state(cfg)
     body = (f'<nav><b>싱크업</b><a href="{server.board_url}">팀 보드 열기 ↗</a></nav>'
-            f'<header><h1>개인 검토함</h1><span class="state">{state}</span></header>')
+            f'<header><h1>개인 검토함</h1><span class="state">{STATE_LABELS[state]}</span></header>')
     team = TeamChoice()
     if client:
         picker, team = _team_picker(client, binding, token)
@@ -162,8 +155,8 @@ def review_page(server, client, pipeline):
     with connect(server.db) as c:
         rows = c.execute(CARDS).fetchall()
         if pipeline:
-            errors = c.execute(FAILED_BATCHES, (retry_team,)).fetchall()
-            body += _issues_html(unresolved_issues(c, retry_team, 'reason,message'))
+            errors = failed_batches(c, retry_team)
+            body += _issues_html(unresolved_issues(c, retry_team))
         else:
             errors = c.execute(LEGACY_FAILED_JOBS).fetchall()
     if cfg["status"]:
@@ -178,12 +171,12 @@ def review_page(server, client, pipeline):
     return page("개인 검토함", body, True)
 
 
-def team_board_page(db, client):
+def render_team_board(db, client):
     """(status, html) of the bound team's board as the team server returns it."""
     try:
         profile = client.me()
         with connect(db) as c:
-            team_id = c.execute('SELECT team_id FROM sharing WHERE id=1').fetchone()[0]
+            team_id = bound_team(c)
         name = next((t['name'] for t in profile['teams'] if t['id'] == team_id), None)
         if name is None:
             return 403, page('팀 선택 필요', '<a href="/">개인 검토함에서 접근 가능한 팀을 선택하세요.</a>')

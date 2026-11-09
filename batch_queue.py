@@ -2,9 +2,10 @@
 import json
 
 from ai.syncup_ai.batch import context_tail, take_ready_batches
-from collection_settings import classification_context, local_profile, read_options, require_active
+from collection_session import require_active
+from collection_settings import classification_context, local_profile, read_options
+from stable_ids import digest
 from storage import connect
-from turn_pipeline import digest
 
 UNBATCHED = '''SELECT rowid,* FROM intake WHERE team_id=? AND job IS NULL
     AND json_extract(message,'$.session')=? ORDER BY rowid'''

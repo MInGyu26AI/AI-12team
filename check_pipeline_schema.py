@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from card_contract import PUBLIC_FIELDS
-from delivery import approve, validate_packet
+from card_contract import PUBLIC_FIELDS, validate_packet
+from delivery import approve
 from local_fixtures import public_card
 from pipeline_schema import ensure_pipeline_schema
 from storage import PRIVATE_SCHEMA, connect, initialize

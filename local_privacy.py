@@ -23,7 +23,7 @@ import time
 
 from ai.syncup_ai import config as ai_config
 from outbound_guard import message_fragments
-from privacy_model import ModelError, ModelOutputError, ModelTimeout, ModelUnavailable, classifier_from_env
+from privacy_model import ModelFailure, ModelOutputError, ModelTimeout, ModelUnavailable, classifier_from_env
 from privacy_rules import PERSONAL_TOKEN, SECRET_TOKEN, apply_rules, personal_categories, secret_values
 
 # v3 invalidates cached answers accepted before strict JSON validation; v2 credential masking is retained.
@@ -34,7 +34,7 @@ TRANSIENT = ('model_unavailable', 'model_timeout', 'model_error')
 # The user asked for another look; the row stays 'hold' (nothing is sent) until the next run decides again.
 REQUESTED = ('recheck_requested', 'exclude_requested')
 RECHECK_SECONDS = 60
-# Hold reason for each model failure; any other ModelError is 'model_error'.
+# Hold reason for each model failure; any other ModelFailure (HTTP or protocol) is 'model_error'.
 FAILURE_REASON = {ModelUnavailable: 'model_unavailable', ModelTimeout: 'model_timeout', ModelOutputError: 'model_output'}
 
 _DEFAULT_GATE = None
@@ -178,7 +178,7 @@ class Gate:
             identity = self.classifier.identity()
             self.last_state.update(model=identity, available=True, reason=None)
             return identity
-        except (ModelUnavailable, ModelTimeout, ModelError) as error:
+        except ModelFailure as error:
             self.last_state.update(available=False, reason=FAILURE_REASON.get(type(error), 'model_error'))
             return None
 
@@ -196,7 +196,7 @@ class Gate:
         else:
             try:
                 label = self.classifier.classify(masked)
-            except (ModelTimeout, ModelUnavailable, ModelError, ModelOutputError) as error:
+            except ModelFailure as error:
                 return Result(HOLD, FAILURE_REASON.get(type(error), 'model_error'), rules=rules,
                               categories=personal_categories(masked, allowed))
             with closing(sqlite3.connect(db, timeout=10)) as c, c:

@@ -15,20 +15,28 @@ LOOPBACK = ('127.0.0.1', '::1')
 NUM_CTX = 8192
 
 
-class ModelUnavailable(RuntimeError):
-    pass
+class ModelFailure(RuntimeError):
+    """The local privacy model gave no usable answer; the gate holds the text."""
 
 
-class ModelTimeout(RuntimeError):
-    pass
+class ModelUnavailable(ModelFailure):
+    """Not configured, not installed, not reachable, or served remotely."""
 
 
-class ModelError(RuntimeError):
-    pass
+class ModelTimeout(ModelFailure):
+    """The runtime did not answer in time."""
 
 
-class ModelOutputError(RuntimeError):
-    pass
+class ModelError(ModelFailure):
+    """An HTTP or protocol failure. status is the HTTP code when there was one; the response body is never kept."""
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
+
+
+class ModelOutputError(ModelFailure):
+    """The answer was not one strict JSON object."""
 
 
 SYSTEM_PROMPT = """너는 이 기기 안에서만 실행되는 개인정보 필터다. 발화 하나를 받아 팀 프로젝트 업무 내용인지, 업무와 무관한 개인 내용인지 판단한다.
@@ -85,9 +93,7 @@ class OllamaClassifier:
         if response.status == 404:
             raise ModelUnavailable('local model is not installed')
         if response.status != 200 or len(data) > 2_000_000:
-            error = ModelError(f'local model HTTP {response.status}')
-            error.status = response.status  # code only; the response body is never kept
-            raise error
+            raise ModelError(f'local model HTTP {response.status}', response.status)
         try:
             return json.loads(data)
         except ValueError as error:
@@ -117,7 +123,7 @@ class OllamaClassifier:
         except ModelError as error:
             # Ollama 0.40 answers 501 "structured output is unavailable" for new-engine models: ask for plain JSON
             # instead. The answer is still parsed strictly and checked by judge(), so a bad answer holds.
-            if not self.structured or getattr(error, 'status', None) != 501:
+            if not self.structured or error.status != 501:
                 raise
             self.structured = False
             body.pop('format')

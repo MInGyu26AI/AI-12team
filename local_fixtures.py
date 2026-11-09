@@ -160,7 +160,6 @@ class PipelineFixture(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.temp = temp
         self.db = private_db(temp.name)
         self.ai = AI()
         self.pipeline = make_pipeline(self.db, lambda: self.ai, work_gate())
@@ -191,6 +190,12 @@ class PrivacyFixture(unittest.TestCase):
     def message(self, identifier, text, site='chatgpt', role='user'):
         return dict(id=identifier, site=site, conversationId='conv', role=role, roleGuessed=False, text=text,
                     collectedAt=datetime.now(timezone.utc).isoformat())
+
+    def restarted(self, privacy):
+        """A new pipeline on the same database, as after an app restart, with the same external AI."""
+        pipeline = TurnPipeline(self.db, Client())
+        pipeline.llm_factory, pipeline.decider_factory, pipeline.privacy = self.pipeline.llm_factory, (lambda: None), privacy
+        return pipeline
 
     def run_offline(self, reply=None):
         with offline(self.requests, reply):

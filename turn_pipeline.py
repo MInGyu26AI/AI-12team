@@ -5,8 +5,6 @@ turn_intake (receive and quarantine turns), batch_queue (group them into jobs), 
 then external AI), candidate_review (edit and approve), privacy_holds (held and excluded messages),
 collection_settings and collection_status, team_relay (team requests); local_rpc dispatches RPC methods to them.
 """
-import hashlib
-import json
 import threading
 
 from ai.syncup_ai.config import load_env
@@ -16,11 +14,6 @@ import local_privacy
 from pipeline_schema import ensure_pipeline_schema
 from privacy_model import classifier_from_env
 from storage import connect
-
-
-def digest(value):
-    """Stable id from JSON parts: intake messages, batches, cards and quarantined input."""
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 class TurnPipeline:

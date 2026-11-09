@@ -4,6 +4,7 @@ import json
 from ai.syncup_ai.evidence import locate_evidence, render_evidence
 from ai.syncup_ai.mask import has_mask_token, mask
 from card_contract import PUBLIC_FIELDS, validate_card
+from collection_session import bound_team
 from delivery import CURRENT_DESTINATION, approve, reset_blocked
 from storage import connect
 
@@ -32,12 +33,11 @@ def _candidate(row):
 def list_candidates(pipeline):
     """Candidates of the current team that are neither dismissed nor shared yet."""
     with connect(pipeline.db) as c:
-        team_id = c.execute('SELECT team_id FROM sharing').fetchone()[0]
-        rows = c.execute(CANDIDATES, (team_id,)).fetchall()
+        rows = c.execute(CANDIDATES, (bound_team(c),)).fetchall()
     return [_candidate(r) for r in rows]
 
 
-def sanitized_text(c, job, message_id):
+def _sanitized_text(c, job, message_id):
     """The text of one message as the local gate cleared it for the external AI, or ''."""
     row = c.execute("SELECT detail FROM privacy_jobs WHERE job=? AND decision='allow'", (job,)).fetchone()
     item = next((d for d in json.loads(row[0]) if d['id'] == message_id), None) if row else None
@@ -51,7 +51,7 @@ def _ground_sentence(c, job, card):
     source = next((m for m in messages if m['id'] == message_id), None)
     if not source or not isinstance(card['sentence'], str) or not card['sentence'].strip():
         raise ValueError('입력 발화에 있는 근거를 선택하세요.')
-    source_text = sanitized_text(c, job, message_id) or mask(source['text'])[0]
+    source_text = _sanitized_text(c, job, message_id) or mask(source['text'])[0]
     if card['sentence'] in source_text:
         card['evidence'].update(locate_evidence(card['sentence'], source_text, {}))
     elif render_evidence(source_text, card['evidence']) != card['sentence']:
@@ -130,7 +130,7 @@ def retry_delivery(pipeline, params):
     """
     with pipeline.lock, connect(pipeline.db) as c:
         c.execute('BEGIN IMMEDIATE')
-        if 'teamId' in params and params['teamId'] != c.execute('SELECT team_id FROM sharing').fetchone()[0]:
+        if 'teamId' in params and params['teamId'] != bound_team(c):
             raise ValueError('대상 팀이 변경되었습니다.')
         if not reset_blocked(c, params['id'], CURRENT_DESTINATION):
             raise ValueError('현재 팀에 재시도할 전송이 없습니다.')
