@@ -150,7 +150,7 @@
       "masked": true
     },
     {
-      "name": "이메일·전화번호 유지",
+      "name": "이메일·전화번호 가림",
       "input": "자료는 dongkyun@example.com 이나 010-1234-5678로 보내 줘",
       "absent": [
         "dongkyun@",
