@@ -227,7 +227,8 @@ class TeamIntegration(TeamIsolation):
             fail_second[0] = False
             calls.clear()
             self.run_due_checks()
-        self.assertEqual([len(body['questions']) for _, body in calls], [1, 1, 1])  # First pair was committed before failure.
+        # The first pair was committed before the failure, so only the remaining three are asked again.
+        self.assertEqual([len(body['questions']) for _, body in calls], [1, 1, 1])
         self.assertTrue(all(path == '/v1/decisions' for path, _ in calls))
         prompts = '\n'.join(body['input'] for _, body in calls)
         for marker in ('OTHER_TEAM_SENTINEL', 'INACTIVE_SENTINEL', 'TODO_SENTINEL'):
@@ -237,7 +238,8 @@ class TeamIntegration(TeamIsolation):
         self.assertEqual(next(c for c in board if c['id'] == 'new')['conflictCheckStatus'], 'complete')
         found = self.team_request('GET', 'conflicts')[1]['conflicts']
         self.assertEqual(len(found), 1)
-        self.assertEqual((found[0]['cardA']['id'], found[0]['cardB']['id'], found[0]['method']), ('alias', 'new', 'decisions'))
+        alert = found[0]
+        self.assertEqual((alert['cardA']['id'], alert['cardB']['id'], alert['method']), ('alias', 'new', 'decisions'))
 
     def test_uncertain_check_stays_failed_until_explicit_retry(self):
         calls = []
@@ -315,8 +317,8 @@ class TeamIntegration(TeamIsolation):
             self.run_due_checks()
             with self.team_db() as c:
                 row = c.execute("SELECT state,attempts FROM syncup.conflict_checks WHERE card_id='recovered'").fetchone()
-                # Retry budget resets after each committed pair; the review-state decision also participates.
-                self.assertEqual((row['state'], row['attempts']), ('complete', 1))
+            # Retry budget resets after each committed pair; the review-state decision also participates.
+            self.assertEqual((row['state'], row['attempts']), ('complete', 1))
             item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == 'recovered')
             self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=2, skipped=0))
 
@@ -325,10 +327,10 @@ class TeamIntegration(TeamIsolation):
         self.publish_card('legacy', '이전 버전 실패')
         with self.team_db() as c:
             # Rows from before checkpoints existed: an expired lease without progress, and an old failure.
-            c.execute("""UPDATE syncup.conflict_checks SET state='running',attempts=1,next_attempt=now()-interval '1 minute'
-                WHERE card_id='interrupted'""")
-            c.execute("""UPDATE syncup.conflict_checks SET state='failed',attempts=1,next_attempt=now()-interval '1 minute'
-                WHERE card_id='legacy'""")
+            c.execute("""UPDATE syncup.conflict_checks
+                SET state='running',attempts=1,next_attempt=now()-interval '1 minute' WHERE card_id='interrupted'""")
+            c.execute("""UPDATE syncup.conflict_checks
+                SET state='failed',attempts=1,next_attempt=now()-interval '1 minute' WHERE card_id='legacy'""")
         with patch('conflict_checks.check_conflicts') as engine:
             self.run_due_checks()
             engine.assert_not_called()
@@ -391,7 +393,8 @@ class TeamIntegration(TeamIsolation):
         self.assertEqual(board[0]['content'], '검토 후 승인 문구')
         self.assertFalse(rpc('candidates.list')['cards'])
         self.assertNotIn('messageId', json.dumps(board))
-        self.assertEqual(request(srv, 'POST', '/rpc', data=dict(version=1, method='collection.status', params={}))[0], 403)
+        unauthenticated = dict(version=1, method='collection.status', params={})
+        self.assertEqual(request(srv, 'POST', '/rpc', data=unauthenticated)[0], 403)
 
 
 def load_tests(loader, tests, pattern):

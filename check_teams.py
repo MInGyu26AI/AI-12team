@@ -315,8 +315,8 @@ class TeamIsolation(unittest.TestCase):
         for args, message in [(['--user', str(uuid.uuid4())], 'ForeignKeyViolation'),
                               (['--user', self.users['Alice'], '--days', '91'], 'Token validity must be 1 to 90 days')]:
             with self.subTest(message=message):
-                failed = subprocess.run([sys.executable, str(ROOT/'team_admin.py'), 'token', *args, '--output', str(path)],
-                                        env=dict(os.environ, SYNCUP_ADMIN_DATABASE_URL=self.admin_dsn),
+                command = [sys.executable, str(ROOT/'team_admin.py'), 'token', *args, '--output', str(path)]
+                failed = subprocess.run(command, env=dict(os.environ, SYNCUP_ADMIN_DATABASE_URL=self.admin_dsn),
                                         text=True, capture_output=True)
                 self.assertEqual(failed.returncode, 1)
                 self.assertIn(message, failed.stderr)

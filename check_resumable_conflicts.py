@@ -175,7 +175,7 @@ class ResumableChecks(TeamIsolation):
         completed = {x[-3:] for x in progress['ids'][:progress['cursor']]}
         time.sleep(.15)  # allow the killed process's in-flight HTTP response to drain
         restart_index = len(calls)
-        # Advance only the crash lease (normally 3 minutes) to keep the test bounded.
+        # Advance only the crash lease (conflict_checks.LEASE, 3 minutes) to keep the test bounded.
         self.make_check_due('new')
         with team_api_process(env) as api:
             self.assertEqual(request(api, 'GET', board, self.tokens['Dana'])[0], 200)
