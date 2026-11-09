@@ -3,11 +3,10 @@ import hmac
 import http.client
 import json
 import sqlite3
-import time
 import urllib.parse
 
 from collection_settings import cache_profile
-from collector import active
+from collector import active, set_paused
 from delivery import CURRENT_DESTINATION, DEMO_BOARD_DESTINATION, approve, reset_blocked
 from diagnostics import failure
 import local_rpc
@@ -31,13 +30,11 @@ def _check_retry_fields(fields, needs_team):
 
 
 def _pause(review, c, get, profile):
-    c.execute("INSERT INTO pauses(start) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM pauses WHERE end IS NULL)", (time.time(),))
-    c.execute("UPDATE settings SET paused=1")
+    set_paused(c, True)
 
 
 def _resume(review, c, get, profile):
-    c.execute("UPDATE pauses SET end=? WHERE end IS NULL", (time.time(),))
-    c.execute("UPDATE settings SET paused=0")
+    set_paused(c, False)
 
 
 def _retry_job(review, c, get, profile):

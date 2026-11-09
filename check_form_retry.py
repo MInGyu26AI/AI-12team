@@ -193,6 +193,20 @@ class StandaloneForms(IntegrityFixture):
         self.assertEqual(self.row('cards')['status'],'drafting')
         self.assertEqual(post(srv,'/retry',fields)[0],400)
 
+    def test_pause_is_recorded_once_and_resume_needs_time_left(self):
+        srv=self.enterContext(server(Review,self.db))
+        for _ in range(2):
+            self.assertEqual(post(srv,'/pause',{})[0],303)
+        with connect(self.db) as c:
+            self.assertEqual(c.execute('SELECT count(*) FROM pauses WHERE end IS NULL').fetchone()[0],1)
+        self.assertEqual(post(srv,'/resume',{})[0],400,'the session already ended')
+        with connect(self.db) as c:
+            c.execute('UPDATE settings SET end=?',(time.time()+300,))
+        self.assertEqual(post(srv,'/resume',{})[0],303)
+        with connect(self.db) as c:
+            self.assertEqual(c.execute('SELECT paused FROM settings').fetchone()[0],0)
+            self.assertEqual(c.execute('SELECT count(*) FROM pauses WHERE end IS NULL').fetchone()[0],0)
+
     def test_local_delivery_preserves_packet_and_rejects_noop(self):
         self.approve(self.card())
         srv=self.enterContext(server(Review,self.db))
