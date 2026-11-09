@@ -229,9 +229,19 @@ class KoreanCredentialRule(unittest.TestCase):
                 self.assertNotIn(value, out); self.assertIn('korean_credential', rules)
                 self.assertTrue(local_privacy.secret_values(text), 'outbound check also recognises it')
         for text in ('비밀번호는 최소 128자 이상으로 하자', '비밀번호 재설정 메일은 24시간 유효', '암호화 키 길이는 256비트',
-                     'OTP 6자리 입력 화면 만들자', '비밀번호 정책은 2026년 1월부터 적용'):
+                     'OTP 6자리 입력 화면 만들자', '비밀번호 정책은 2026년 1월부터 적용',
+                     # work tokens near credential words stay readable and do not trip the outbound check
+                     '비밀번호 해시는 PBKDF2-SHA256으로 하자', 'PIN 관련 이슈 https://github.com/x/y/issues/1234 확인',
+                     '보안코드 검사 로직은 utils/cvc.ts:120 에 있다', 'PIN 입력창 width=320px로 하자',
+                     '비밀번호는 내일 v2.0.123 배포 후에 바꾸자', '- 기존 세부 주제: OTP 재전송, v1.0.100 배포'):
             with self.subTest(text=text):
                 self.assertEqual(local_privacy.apply_rules(text), (text, []))
+                self.assertEqual(local_privacy.secret_values(text), [])
+
+    def test_long_unspaced_input_stays_fast(self):
+        started = time.monotonic()
+        local_privacy.apply_rules('OTP:abc;' * 2500); local_privacy.secret_values('OTP:abc;' * 2500)
+        self.assertLess(time.monotonic() - started, 1.0)
 
 
 class SemanticGate(Base):

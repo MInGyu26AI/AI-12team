@@ -240,6 +240,24 @@
         "\\\"access_token\\\": \\\"[액세스토큰]\\\""
       ],
       "masked": true
-    }
+    },
+    {"name": "과잉 가림 없음: 회의는 2026-11-09 오후 3시에 하자", "input": "회의는 2026-11-09 오후 3시에 하자", "absent": [], "present": ["회의는 2026-11-09 오후 3시에 하자"], "masked": false},
+    {"name": "과잉 가림 없음: 버전 v1.2.3을 배포하고 포트 8080을 열자", "input": "버전 v1.2.3을 배포하고 포트 8080을 열자", "absent": [], "present": ["버전 v1.2.3을 배포하고 포트 8080을 열자"], "masked": false},
+    {"name": "과잉 가림 없음: API 키 발급 절차를 문서로 정리하자", "input": "API 키 발급 절차를 문서로 정리하자", "absent": [], "present": ["API 키 발급 절차를 문서로 정리하자"], "masked": false},
+    {"name": "과잉 가림 없음: 토큰 수 상한은 4096으로 두자", "input": "토큰 수 상한은 4096으로 두자", "absent": [], "present": ["토큰 수 상한은 4096으로 두자"], "masked": false},
+    {"name": "과잉 가림 없음: 비밀번호 재설정 화면을 만들자", "input": "비밀번호 재설정 화면을 만들자", "absent": [], "present": ["비밀번호 재설정 화면을 만들자"], "masked": false},
+    {"name": "과잉 가림 없음: 커밋 a1b2c3d를 되돌리고 이슈 #123을 닫자", "input": "커밋 a1b2c3d를 되돌리고 이슈 #123을 닫자", "absent": [], "present": ["커밋 a1b2c3d를 되돌리고 이슈 #123을 닫자"], "masked": false},
+    {"name": "과잉 가림 없음: 참석자는 3명이고 예산은 120만원이다", "input": "참석자는 3명이고 예산은 120만원이다", "absent": [], "present": ["참석자는 3명이고 예산은 120만원이다"], "masked": false},
+    {"name": "과잉 가림 없음: 주문번호 20261109-0001을 확인하자", "input": "주문번호 20261109-0001을 확인하자", "absent": [], "present": ["주문번호 20261109-0001을 확인하자"], "masked": false},
+    {"name": "과잉 가림 없음: Authorization 헤더 이름은 그대로 둔다", "input": "Authorization 헤더 이름은 그대로 둔다", "absent": [], "present": ["Authorization 헤더 이름은 그대로 둔다"], "masked": false},
+    {"name": "과잉 가림 없음: access_token 필드는 응답에서 뺀다", "input": "access_token 필드는 응답에서 뺀다", "absent": [], "present": ["access_token 필드는 응답에서 뺀다"], "masked": false},
+    {"name": "과잉 가림 없음: 주소 입력란은 선택 항목으로 두자", "input": "주소 입력란은 선택 항목으로 두자", "absent": [], "present": ["주소 입력란은 선택 항목으로 두자"], "masked": false},
+    {"name": "과잉 가림 없음: React 18.3.1로 올리고 node 20을 쓰자", "input": "React 18.3.1로 올리고 node 20을 쓰자", "absent": [], "present": ["React 18.3.1로 올리고 node 20을 쓰자"], "masked": false},
+    {"name": "과잉 가림 없음: sk-proj 접두사 규칙을 문서에 적자", "input": "sk-proj 접두사 규칙을 문서에 적자", "absent": [], "present": ["sk-proj 접두사 규칙을 문서에 적자"], "masked": false},
+    {"name": "과잉 가림 없음: 계좌 연동 기능은 다음 학기에 하자", "input": "계좌 연동 기능은 다음 학기에 하자", "absent": [], "present": ["계좌 연동 기능은 다음 학기에 하자"], "masked": false},
+    {"name": "국제 표기 휴대전화", "input": "+82 10-1234-5678 로 연락 줘", "absent": ["1234", "5678"], "present": ["[연락처]", "로 연락 줘"], "masked": true},
+    {"name": "서울 유선전화", "input": "사무실 전화번호는 02-123-4567 이야", "absent": ["123-4567"], "present": ["[연락처]"], "masked": true},
+    {"name": "지역번호 유선전화 (계좌로 오인하지 않음)", "input": "본사 031-1234-5678 로 문의", "absent": ["1234-5678"], "present": ["[연락처]"], "masked": true},
+    {"name": "인터넷전화 070", "input": "상담 070 1234 5678", "absent": ["1234 5678"], "present": ["[연락처]"], "masked": true}
   ]
 }

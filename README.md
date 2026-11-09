@@ -66,22 +66,26 @@ Windows용 실행 파일명은 `syncup-collector.exe`, macOS·Linux는 `syncup-c
 
 ## 검사
 
-먼저 Rust 실행 파일을 빌드한다. 아래 검사는 임시 데이터와 가짜 AI 응답을 사용하며, 일부는 실제 루프백 HTTP 서버와 자식 프로세스를 실행한다. 외부 API를 호출하는 `selfcheck.py --live`는 별도 선택이며 아래 명령에는 포함하지 않는다.
+`model` 묶음을 뺀 모든 검사는 임시 데이터와 가짜 AI 응답만 쓴다. 진입점은 `run_checks.py` 하나이며, 필요한 환경별로 묶여 있다. 고른 묶음의 검사는 하나가 실패해도 끝까지 돌고, 하나라도 실패하면 종료 코드가 0이 아니다.
 
 ```sh
-python3 check_scanner.py
-python3 selfcheck.py
-python3 check_integrity.py
-python3 check_claude.py
-python3 check_portability.py
+python3 run_checks.py            # local: Docker·Rust·로컬 모델 없이 (기본값)
+python3 run_checks.py rust       # 먼저 Rust 실행 파일(bin/syncup-collector)을 빌드해야 한다
+python3 run_checks.py team       # Docker와 requirements-team.txt 가 필요하다
+python3 run_checks.py all        # local + rust + team
+python3 run_checks.py --list     # 어떤 검사가 무엇을 다루는지 목록만 출력
 ```
 
-팀 격리 검사는 PostgreSQL 드라이버와 실행 중인 Docker가 필요하다. 실제 PostgreSQL 컨테이너를 별도로 만들고 가상 사용자·팀 데이터만 사용한 뒤 종료한다. 기존 DB나 팀 서버를 검사 대상으로 사용하지 않는다.
+| 묶음 | 필요 환경 | 다루는 범위 |
+|---|---|---|
+| `local` | Python 3, Node, `web/` 에서 `npm ci` (웹 연결 검사가 Next를 띄움. TS 가림 검사는 `extension/` 의존성으로도 됨) | 로컬 수집·배치·후보, 개인정보 필터, 보존 정책, 재시도·복구, 웹 연결, AI 모듈, 가림 공용 사례(Python·TS) |
+| `rust` | Rust 빌드 결과 | Codex·Claude Code 로그 스캐너, 이식성 |
+| `team` | Docker, `python3 -m pip install -r requirements-team.txt` | 팀 격리(RLS), 로컬 ↔ 팀 서버 통합, 충돌 검사 재개, DB 운영·복구 |
+| `model` | 로컬 Ollama 모델 (선택 측정, `all` 에 포함하지 않음) | 실제 로컬 개인정보 모델 측정 |
 
-```sh
-python3 -m pip install -r requirements-team.txt
-python3 check_teams.py
-```
+팀 서버 검사는 실제 PostgreSQL 컨테이너를 따로 만들고 가상 사용자·팀 데이터만 쓴 뒤 종료한다. 기존 DB나 팀 서버를 검사 대상으로 쓰지 않는다. 외부 API를 부르는 `selfcheck.py --live` 는 러너에 넣지 않았다. `check_ui_fixture.py` 는 화면 확인용 합성 서비스를 띄우는 도구라 검사 목록에 없다.
+
+가림 규칙은 Python(`ai/syncup_ai/mask.py`)과 웹 목업용 TypeScript 사본(`shared/classify.ts`) 두 곳에 있다. 둘 다 `shared/mask-cases.json` 의 같은 기대 결과로 검사하므로, 한쪽 규칙을 고치면 사례를 먼저 더하고 두 구현을 함께 맞춘다.
 
 ## 저장소 범위
 
