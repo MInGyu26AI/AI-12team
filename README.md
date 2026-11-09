@@ -78,10 +78,10 @@ python3 run_checks.py --list     # 어떤 검사가 무엇을 다루는지 목�
 
 | 묶음 | 필요 환경 | 다루는 범위 |
 |---|---|---|
-| `local` | Python 3, Node, `web/` 에서 `npm ci` (웹 연결 검사가 Next를 띄움. TS 가림 검사는 `extension/` 의존성으로도 됨) | 로컬 수집·배치·후보, 개인정보 필터, 보존 정책, 재시도·복구, 웹 연결, AI 모듈, 가림 공용 사례(Python·TS) |
+| `local` | macOS (로컬 앱 회귀 검사가 `app.py run` 을 실제로 띄움), Python 3, Node, `web/` 에서 `npm ci` (웹 연결 검사가 Next를 띄움. TS 가림 검사는 `extension/` 의존성으로도 됨) | 로컬 수집·배치·후보, 개인정보 필터, 보존 정책, 재시도·복구, 웹 연결, AI 모듈, 가림 공용 사례(Python·TS) |
 | `rust` | Rust 빌드 결과 | Codex·Claude Code 로그 스캐너, 이식성 |
-| `team` | Docker, `python3 -m pip install -r requirements-team.txt` | 팀 격리(RLS), 로컬 ↔ 팀 서버 통합, 충돌 검사 재개, DB 운영·복구 |
-| `model` | 로컬 Ollama 모델 (선택 측정, `all` 에 포함하지 않음) | 실제 로컬 개인정보 모델 측정 |
+| `team` | Docker, `python3 -m pip install -r requirements-team.txt` | 팀 격리(RLS), 로컬 ↔ 팀 서버 통합, 충돌 검사 재개, DB 운영·복구 (격리·통합 검사는 `check_server_recovery.py` 가 상속으로 함께 실행) |
+| `model` | 로컬 Ollama 와 기본 개인정보 모델(`local_privacy.DEFAULT_MODEL`) (선택 측정, `all` 에 포함하지 않음) | 실제 로컬 개인정보 모델 측정 (다른 모델은 `check_local_privacy_model.py --model …` 로 직접 실행) |
 
 팀 서버 검사는 실제 PostgreSQL 컨테이너를 따로 만들고 가상 사용자·팀 데이터만 쓴 뒤 종료한다. 기존 DB나 팀 서버를 검사 대상으로 쓰지 않는다. 외부 API를 부르는 `selfcheck.py --live` 는 러너에 넣지 않았다. `check_ui_fixture.py` 는 화면 확인용 합성 서비스를 띄우는 도구라 검사 목록에 없다.
 

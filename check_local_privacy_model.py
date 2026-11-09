@@ -1,9 +1,11 @@
 """Measure the real on-device model behind the privacy gate on synthetic Korean sentences.
 
 Opt-in and slow: needs a local Ollama with the model installed. Only loopback sockets are allowed while
-it runs. Prints and writes counts, per-item decisions and latency; never real conversations.
+it runs. Prints the summary (counts and latency); with --output it also writes per-item decisions. Exits 1 when any
+personal sentence leaked. Never real conversations.
 
-    python check_local_privacy_model.py --model gemma3:12b --output eval.json
+    python check_local_privacy_model.py                                      # default model, prints the summary
+    python check_local_privacy_model.py --model gemma3:12b --output eval.json   # another model, also writes every row
 """
 import argparse
 from contextlib import ExitStack
@@ -115,12 +117,12 @@ def resident(classifier, model):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--model', required=True)
+    parser.add_argument('--model', default=local_privacy.DEFAULT_MODEL)
     parser.add_argument('--url', default=local_privacy.DEFAULT_URL)
     parser.add_argument('--timeout', type=float, default=180)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    if args.output.exists():
+    if args.output and args.output.exists():
         parser.error('output exists; choose a new path')
     real_connect = socket.socket.connect
     def loopback_only(sock, address):
@@ -166,8 +168,11 @@ def main():
                    p50_seconds=statistics.median(seconds), max_seconds=max(seconds),
                    work_lost=sum(r['outcome'] == 'lossy' for r in rows if r['kind'] in ('work', 'mixed')),
                    resident_gb=resident(classifier, args.model))
-    args.output.write_text(json.dumps(dict(summary=summary, rows=rows), ensure_ascii=False, indent=1))
+    if args.output:
+        args.output.write_text(json.dumps(dict(summary=summary, rows=rows), ensure_ascii=False, indent=1))
     print(json.dumps(summary, ensure_ascii=False))
+    if summary['leaks']:
+        raise SystemExit(f"leaks: {summary['leaks']} personal sentence(s) reached the outbound text")
 
 
 if __name__ == '__main__':

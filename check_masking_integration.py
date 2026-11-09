@@ -1,13 +1,13 @@
 """Synthetic SQLite input -> masked evidence -> edit -> approved payload checks."""
 import json
 import unittest
-from check_pipeline import PipelineTest
+import check_pipeline  # module import: PipelineTest is not collected (and run again) here
 from storage import connect
 
 
 class MaskingIntegration(unittest.TestCase):
-    setUp = PipelineTest.setUp
-    message = PipelineTest.message
+    setUp = check_pipeline.PipelineTest.setUp
+    message = check_pipeline.PipelineTest.message
 
     def test_semantic_mask_survives_review_and_approval_without_raw_quote(self):
         original = '서울시 가상로 123에서 회의하자.'
@@ -50,3 +50,7 @@ class MaskingIntegration(unittest.TestCase):
             payload = c.execute('SELECT payload FROM outbox').fetchone()[0]
             self.assertNotIn(secret, payload)
             self.assertTrue(json.loads(payload)['card']['masked'])
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

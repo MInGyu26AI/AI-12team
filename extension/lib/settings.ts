@@ -35,9 +35,8 @@ export const isEnded = (s: Settings, now = Date.now()) => {
 
 export const isConfigured = (s: Settings) => !!(s.teamName.trim() && s.projectTopic.trim() && s.userName.trim());
 
-// 수집·분류 상태는 로컬 수집기가 관리하므로 확장에는 확장 자신이 로컬 수집기를 부른 마지막 실패만 남긴다.
-// 상태 새로 고침이 성공하면 연결 실패(unreachable)와 새로 고침 자신의 실패(op='refresh')를 지운다.
-// 수집·지금 분류·설정 저장이 거절된 오류는 그 요청이 다시 성공할 때까지 남는다. 웹 화면 요청의 실패는 웹 화면이 알린다.
+// 확장 자신이 로컬 수집기를 부른 마지막 실패. unreachable: 수집기에 닿지 못함, op: 실패한 호출 종류.
+// 언제 지우는지는 background.ts 가 정한다.
 export interface CollectState {
   lastError: string | null;
   unreachable?: boolean;

@@ -39,7 +39,7 @@ export default function App() {
 
   useEffect(() => {
     const countShareable = (p: Parameters<Parameters<typeof pendingItem.watch>[0]>[0]) =>
-      setPendingCount(p.filter(isShareable).length); // '해당 없음'은 세지 않음
+      setPendingCount(p.filter(isShareable).length); // 수집기는 공유 후보만 보낸다. 방어용 필터 (배지와 같은 기준)
     settingsItem.getValue().then(setSettings);
     collectStateItem.getValue().then(setState);
     pendingItem.getValue().then(countShareable);

@@ -165,9 +165,8 @@ class Pipeline:
         return dict(newMessages=count, queued=bool(clean), intakeIssues=issues)
 
     def resolve_intake(self, params, action):
-        # Type-check id/teamId → lock (self.lock + BEGIN IMMEDIATE) → check the issue is the current team's (the same action again returns
-        # the earlier result; retry also runs require_active here) → queue the retry message, record the resolution.
-        # On failure everything rolls back: the issue's state is unchanged and no replacement message is stored.
+        # One transaction under the lock: on failure nothing is recorded (the issue's state is unchanged and no replacement
+        # message is stored).
         if not isinstance(params.get('id'),str) or not isinstance(params.get('teamId'),str):
             raise ValueError('입력과 대상 팀을 확인하세요.')
         with self.lock, connect(self.db) as c:
@@ -291,8 +290,7 @@ class Pipeline:
         return llm, decider
 
     def _store_cards(self, job, ctx, result):
-        # Check (require_active) → lock (BEGIN IMMEDIATE) → re-check (require_active) → insert cards and mark the job done in
-        # one transaction. On failure it rolls back: no card is stored and the job stays 'new' for _mark_failed.
+        # On failure the transaction rolls back: no card is stored and the job stays 'new' for _mark_failed.
         self.require_active(job['team_id'],ctx['collectionStart'])
         with connect(self.db) as c:
             c.execute('BEGIN IMMEDIATE')
@@ -558,8 +556,7 @@ class Pipeline:
         return dict(queued=True)
 
     def approve_candidates(self, params):
-        # Validate ids → client.me() outside the lock → lock (self.lock + BEGIN IMMEDIATE) → check the sharing binding against teamId and
-        # that fresh profile (no require_active) → queue each card. One failure rolls back the call: nothing from it is queued.
+        # client.me() is a network call, so it runs before taking the lock. One failure rolls back the call: nothing from it is queued.
         identifiers=params.get('ids')
         if not isinstance(identifiers,list) or not 1<=len(identifiers)<=100 or any(not isinstance(i,str) for i in identifiers): raise ValueError('승인 후보를 확인하세요.')
         profile=self.client.me()

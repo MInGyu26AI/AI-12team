@@ -36,8 +36,6 @@ class LLM(Protocol):
     def chat_json(self, system: str, user: str) -> dict: ...
 
 
-
-
 def parse_json_reply(text: str) -> dict:
     """모델 답에서 JSON 객체를 꺼낸다 (```json 코드 블록·앞뒤 설명이 붙어도)."""
     text = text.strip()

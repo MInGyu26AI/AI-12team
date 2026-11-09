@@ -58,7 +58,7 @@ def main():
                 return
             result = request(args.connection,payload)
         except Exception:
-            result = dict(ok=False,error='로컬 수집기 연결 실패 · 실행 상태와 연결 파일을 확인하세요.')
+            result = dict(ok=False,code='unreachable',error='로컬 수집기 연결 실패 · 실행 상태와 연결 파일을 확인하세요.')
         data = json.dumps(result,ensure_ascii=False).encode()
         if len(data) > 1000000:
             data = b'{"ok":false,"error":"Response too large"}'

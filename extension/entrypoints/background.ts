@@ -18,8 +18,8 @@ async function rpc(method: string, params: unknown = {}) {
     throw new CollectorUnreachable(errorText(error));
   }
   if (!response) throw new CollectorUnreachable('로컬 수집기 연결 실패');
-  // native_host.py 는 로컬 수집기에 연결하지 못하면 이 문구로 답한다
-  if (!response.ok && String(response.error ?? '').startsWith('로컬 수집기 연결 실패')) throw new CollectorUnreachable(response.error);
+  // native_host.py 는 로컬 수집기에 연결하지 못하면 code: 'unreachable' 로 답한다
+  if (!response.ok && response.code === 'unreachable') throw new CollectorUnreachable(response.error);
   if (!response.ok) throw new Error(response.error ?? '로컬 수집기 요청 실패');
   return response.result;
 }
@@ -30,7 +30,8 @@ async function refresh() {
   await pendingItem.setValue(result.cards);
   const state = await collectStateItem.getValue();
   if (state.lastError && (state.op === 'refresh' || state.unreachable !== false)) await collectStateItem.setValue({ lastError: null });
-  const shareable = result.cards.filter(isShareable).length; // 팝업과 같은 기준('해당 없음' 제외)
+  // 수집기는 공유 후보만 보낸다. 이 필터는 프로세스 경계의 방어용이고, 팝업 숫자와 같은 기준이다
+  const shareable = result.cards.filter(isShareable).length;
   await browser.action.setBadgeText({ text: shareable ? String(shareable) : '' });
   return result;
 }
@@ -72,9 +73,18 @@ export default defineBackground(() => {
           return { ok: false, error: errorText(error) };
         }
       }
-      if (message.type === 'flush') { await rpc('collection.flush'); await succeeded(); return { ok: true, newCards: 0 }; }
-      // 설정 저장 뒤 새로 고침이 실패하면 저장 화면이 알 수 있도록 실패로 돌려준다 (처음 설정 화면은 팝업 오류를 보여 주지 않는다)
-      if (message.type === 'updateSettings') { await rpc('collection.configure', message.patch); await collectStateItem.setValue({ lastError: null }); await refresh(); return { ok: true }; }
+      if (message.type === 'flush') {
+        await rpc('collection.flush');
+        await succeeded();
+        return { ok: true, newCards: 0 };
+      }
+      if (message.type === 'updateSettings') {
+        await rpc('collection.configure', message.patch);
+        await collectStateItem.setValue({ lastError: null });
+        // flush 와 달리 뒤따르는 새로 고침의 실패도 실패로 돌려준다: 처음 설정 화면은 팝업 오류를 보여 주지 않으므로 저장 화면이 알려야 한다
+        await refresh();
+        return { ok: true };
+      }
       if (message.type === 'refresh') return { ok: true, result: await refresh() };
       throw new Error('지원하지 않는 요청');
     } catch (error) { return fail(error, message?.type === 'refresh' ? 'refresh' : 'request'); }

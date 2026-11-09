@@ -6,7 +6,6 @@ import re
 from collections import Counter
 
 
-
 def _bigrams(text: str) -> Counter:
     s = re.sub(r"[^\w가-힣]", "", text.lower())
     return Counter(s[i : i + 2] for i in range(len(s) - 1)) if len(s) > 1 else Counter([s])

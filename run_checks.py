@@ -17,16 +17,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 PY = sys.executable
 
-# (group, command, what it covers). Groups: local = Python 3 and Node with `npm ci` in web/ (check_local_bridge
-# starts Next from web/node_modules; the TypeScript masking check also works with extension/); rust = needs the built scanner (bin/syncup-collector);
-# team = needs Docker and requirements-team.txt (PostgreSQL); model = opt-in, needs a local Ollama model.
+# (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`, which only runs on macOS),
+# Python 3 and Node with `npm ci` in web/ (check_local_bridge starts Next from web/node_modules; the TypeScript masking check
+# also works with extension/); rust = needs the built scanner (bin/syncup-collector); team = needs Docker and
+# requirements-team.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (local_privacy.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
     ('local', [PY, 'check_integration_store.py'], '로컬 DB 마이그레이션·승인 계약'),
     ('local', [PY, 'check_retention.py'], '원문·백업 7일 보존 정책'),
     ('local', [PY, 'check_local_privacy.py'], '로컬 개인정보 필터·외부 전송 차단'),
-    # no __main__ block in this file: running it directly would pass with zero tests, so load it through unittest
-    ('local', [PY, '-m', 'unittest', 'check_masking_integration'], '가림 → 근거 → 수정 → 승인 내용'),
+    ('local', [PY, 'check_masking_integration.py'], '가림 → 근거 → 수정 → 승인 내용'),
     ('local', [PY, 'check_form_retry.py'], 'HTTP 재시도 계약'),
     ('local', [PY, 'check_local_functional.py'], '로컬 대기열·입력 정정'),
     ('local', [PY, 'check_local_recovery.py'], '오프라인 입력·거절·진단'),
@@ -40,9 +40,9 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('rust', [PY, 'check_scanner.py'], 'Rust 스캐너: Codex 로그'),
     ('rust', [PY, 'check_claude.py'], 'Rust 스캐너: Claude Code 로그'),
     ('rust', [PY, 'check_portability.py'], 'Rust 스캐너: 경로·OS 이식성'),
-    ('team', [PY, 'check_teams.py'], '팀 격리(PostgreSQL RLS)'),
-    ('team', [PY, 'check_team_integration.py'], '로컬 ↔ 팀 서버 통합'),
-    ('team', [PY, 'check_server_recovery.py'], '팀 서버 복구 + 격리·통합 묶음'),
+    # ServerRecovery inherits TeamIntegration (check_team_integration.py), which inherits TeamIsolation (check_teams.py),
+    # so this one file runs all three suites once; listing the other two files as well would repeat the inherited tests.
+    ('team', [PY, 'check_server_recovery.py'], '팀 격리(RLS) + 로컬 ↔ 팀 서버 통합 + 서버 복구 (상속으로 함께 실행)'),
     ('team', [PY, 'check_resumable_conflicts.py'], '충돌 검사 재개·재시작'),
     ('team', [PY, 'check_db_connection_recovery.py'], 'DB 연결 시간 초과·복구'),
     ('team', [PY, 'check_db_operations.py'], 'DB 업그레이드·백업·복원'),
@@ -84,12 +84,15 @@ def main(argv: list[str]) -> int:
             done = subprocess.run(command, cwd=cwd_for(command), capture_output=True, text=True)
         except OSError as error:  # missing or unrunnable executable: count it as a failed check and keep going
             done = subprocess.CompletedProcess(command, 127, '', f'실행할 수 없어요: {error.filename or command[0]} ({type(error).__name__})')
-        results.append((done.returncode == 0, group, name, time.monotonic() - started))
-        print(f"{'PASS' if done.returncode == 0 else 'FAIL'}  [{group}] {name}  ({time.monotonic() - started:.1f}s)")
+        elapsed = time.monotonic() - started
+        results.append((done.returncode == 0, name))
+        print(f"{'PASS' if done.returncode == 0 else 'FAIL'}  [{group}] {name}  ({elapsed:.1f}s)")
+        if done.returncode == 0 and group == 'model' and done.stdout.strip():  # measurements: show the summary line
+            print('      ' + done.stdout.strip().splitlines()[-1])
         if done.returncode != 0:
             print('\n'.join('      ' + line for line in (done.stdout + done.stderr).strip().splitlines()[-15:]))
-    failed = [r for r in results if not r[0]]
-    print(f'\n{len(results) - len(failed)}/{len(results)} 통과' + (f", 실패: {', '.join(r[2] for r in failed)}" if failed else ''))
+    failed = [name for ok, name in results if not ok]
+    print(f'\n{len(results) - len(failed)}/{len(results)} 통과' + (f", 실패: {', '.join(failed)}" if failed else ''))
     return 1 if failed else 0
 
 
