@@ -1,15 +1,14 @@
 """Chrome Native Messaging transport; the running local service owns all state."""
 import argparse
 import json
-import os
 from pathlib import Path
 import re
-import stat
 import struct
 import sys
 import urllib.error
 import urllib.request
 
+from private_files import SECRET_TOKEN, read_private_file
 from secure_http import RPC_LIMIT, NoRedirect
 
 # Replies stay under Chrome's 1 MiB cap on host-to-extension messages.
@@ -18,23 +17,19 @@ EXTENSION_ID = re.compile('[a-p]{32}')
 # connection.json, as app.py writes it: {url, token} for the local RPC endpoint.
 CONNECTION_LIMIT = 4096
 RPC_URL = re.compile(r'http://127\.0\.0\.1:\d+/rpc')
-RPC_TOKEN = re.compile(r'[A-Za-z0-9_-]{43}')
 
 
 def read_connection(path):
     """(url, token) from connection.json, checked like the web bridge does (web/src/app/api/local/route.ts): a regular
     file, not a link, owned and readable by the current user only, at most 4096 bytes, a loopback /rpc URL and a
     43-character token."""
-    fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-    with os.fdopen(fd, 'rb') as f:
-        info = os.fstat(f.fileno())
-        private = os.name == 'nt' or (not info.st_mode & 0o077 and info.st_uid == os.getuid())
-        if not stat.S_ISREG(info.st_mode) or info.st_size > CONNECTION_LIMIT or not private:
-            raise ValueError('연결 파일은 현재 사용자만 읽을 수 있어야 합니다.')
-        config = json.loads(f.read(CONNECTION_LIMIT + 1))
+    data = read_private_file(path, CONNECTION_LIMIT + 1, '연결 파일은 현재 사용자만 읽을 수 있어야 합니다.')
+    if len(data) > CONNECTION_LIMIT:
+        raise ValueError('연결 파일이 너무 큽니다.')
+    config = json.loads(data)
     if not isinstance(config.get('url'), str) or not RPC_URL.fullmatch(config['url']):
         raise ValueError('로컬 연결 주소 오류')
-    if not isinstance(config.get('token'), str) or not RPC_TOKEN.fullmatch(config['token']):
+    if not isinstance(config.get('token'), str) or not SECRET_TOKEN.fullmatch(config['token']):
         raise ValueError('로컬 연결 인증 오류')
     return config['url'], config['token']
 

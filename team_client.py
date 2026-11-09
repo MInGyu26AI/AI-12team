@@ -1,16 +1,14 @@
 """Device credentials stay in the local review process, never in the browser."""
 import http.client
 import json
-import os
 from pathlib import Path
-import re
-import stat
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
 from card_contract import validate_packet
+from private_files import SECRET_TOKEN, read_private_file
 from secure_http import NoRedirect
 
 # The team server could not be reached or answered with an HTTP failure: offline, worth retrying.
@@ -34,14 +32,9 @@ class TeamClient:
                 or (parsed.scheme == 'http' and parsed.hostname != '127.0.0.1')):
             raise ValueError('팀 API는 HTTPS 주소 또는 로컬 127.0.0.1 주소여야 합니다.')
         self.api_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '/', '', ''))
-        fd = os.open(Path(token_file), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-        with os.fdopen(fd, 'r', encoding='utf-8') as f:
-            info = os.fstat(f.fileno())
-            if not stat.S_ISREG(info.st_mode) or (os.name == 'posix' and
-                    (info.st_mode & 0o077 or info.st_uid != os.getuid())):
-                raise ValueError('연결 키 파일은 현재 사용자만 읽을 수 있어야 합니다 (권한 600).')
-            self.token = f.read(256).strip()
-        if not re.fullmatch(r'[A-Za-z0-9_-]{43}', self.token):
+        key = read_private_file(Path(token_file), 256, '연결 키 파일은 현재 사용자만 읽을 수 있어야 합니다 (권한 600).')
+        self.token = key.decode('utf-8').strip()
+        if not SECRET_TOKEN.fullmatch(self.token):
             raise ValueError('연결 키 파일을 확인하세요.')
         # A previously bound identity enables local recovery, never remote authorization.
         self.user_id = None
@@ -88,7 +81,8 @@ class TeamClient:
             raise ValueError('승인 당시의 서버와 사용자로 연결해야 합니다.')
         team_id = _uuid(destination['team_id'])
         packet = json.loads(payload)
-        result = self.request('teams/' + team_id + '/items', dict(packet=packet, approved_by=self.user_id, approved_at=created))
+        result = self.request('teams/' + team_id + '/items',
+                              dict(packet=packet, approved_by=self.user_id, approved_at=created))
         if result != dict(id=packet['id'], team_id=team_id, approved_by=self.user_id):
             raise ValueError('팀 승인 응답 불일치')
 
