@@ -17,12 +17,13 @@ import threading
 import time
 
 from collection_loop import send_approved, watch
+from collection_session import bind_sharing
 from demo_board import Board
 from diagnostics import failure
 from review_page import Review
 from runtime import child_environment, require_platform, storage_paths
 from storage import connect, initialize, runtime_lock
-from team_client import NETWORK_ERRORS, TeamClient, bind_sharing
+from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, TeamClient
 from turn_pipeline import TurnPipeline
 
 MAX_MINUTES = 1440
@@ -123,7 +124,7 @@ def _connect_team(srv, args, parser):
             raise ValueError('오프라인 복구는 기존 연결에서만 가능합니다.')
         try:
             profile = srv.team_client.me()
-        except NETWORK_ERRORS as error:
+        except TEAM_UNREACHABLE_ERRORS as error:  # a changed user or a malformed answer is not offline: it stops the start
             if not recover or (args.team_id is not None and args.team_id != binding['team_id']):
                 raise
             failure('profile_recovery', error)
@@ -131,7 +132,7 @@ def _connect_team(srv, args, parser):
         with connect(srv.db) as c:
             bind_sharing(c, srv.team_client, args.team_id, profile)
         return profile
-    except (*NETWORK_ERRORS, KeyError, TypeError):
+    except (*TEAM_ERRORS, KeyError, TypeError):
         parser.error('팀 연결 키, 소속 팀과 기존 상태 폴더의 연결 사용자를 확인하세요.')
 
 

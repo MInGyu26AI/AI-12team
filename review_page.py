@@ -6,7 +6,7 @@ import sqlite3
 import urllib.parse
 
 from collection_settings import cache_profile
-from collection_session import active, set_paused
+from collection_session import active, bind_sharing, set_paused
 from collector import FAILED_PREFIX
 from delivery import CURRENT_DESTINATION, DEMO_BOARD_DESTINATION, approve, reset_blocked
 from diagnostics import failure
@@ -14,7 +14,7 @@ import local_rpc
 from review_render import render_review_page, render_team_board
 from secure_http import RPC_LIMIT, SecureHandler
 from storage import connect
-from team_client import bind_sharing
+from team_client import TEAM_UNREACHABLE_ERRORS
 
 BAD_INPUT = "입력값·인용 근거·대상 팀을 확인해 주세요. 팀을 바꿨다면 검토함을 새로고침한 뒤 승인하세요."
 STORAGE_FAILED = "로컬 저장을 확인하지 못했습니다. 같은 카드로 다시 시도해 주세요."
@@ -146,7 +146,7 @@ class Review(SecureHandler):
         if self.team_client and self.path in ('/switch-team', '/approve'):
             try:
                 profile = self.team_client.me()
-            except (OSError, http.client.HTTPException):
+            except TEAM_UNREACHABLE_ERRORS:
                 return 503, TEAM_UNREACHABLE
         with connect(self.server.db) as c:
             c.execute("BEGIN IMMEDIATE")

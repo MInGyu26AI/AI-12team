@@ -1,12 +1,21 @@
-"""HTTP handler base for the local review page, the demo board and the team API: strict response headers, an exact Host
-check and bounded request bodies."""
+"""Strict HTTP for SyncUp. Server side: the handler base of the local review page, the demo board and the team API
+(strict response headers, an exact Host check, bounded request bodies). Client side: an opener handler that refuses
+redirects."""
 import http.server
+import urllib.request
 
 FORM_LIMIT = 64 * 1024
 # Largest local RPC request; the Chrome native host (native_host.py) enforces the same limit on its side.
 RPC_LIMIT = 4 * 1024 * 1024
 CONTENT_SECURITY_POLICY = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
                            "form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect: the team API, the demo board and the local RPC endpoint never send one."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
 
 
 class SecureHandler(http.server.BaseHTTPRequestHandler):

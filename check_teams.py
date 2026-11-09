@@ -33,7 +33,8 @@ from prepare_native import prepare
 from review_page import Review
 from storage import connect, initialize, initialize_v1
 from team_access import authorized, verify_database
-from team_client import TeamClient, bind_sharing
+from collection_session import bind_sharing
+from team_client import TeamClient
 from team_server import TeamHandler, TeamServer
 
 ROOT = Path(__file__).resolve().parent

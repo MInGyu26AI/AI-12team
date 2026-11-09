@@ -1,4 +1,4 @@
-"""The collection session in the private database: whether collection runs now, pause and resume, the bound team."""
+"""The collection session in the private database: whether collection runs now, pause and resume, the team binding."""
 import time
 
 from storage import connect
@@ -30,6 +30,26 @@ def set_paused(c, paused):
             raise ValueError("수집 종료 시각을 먼저 갱신하세요.")
         c.execute("UPDATE pauses SET end=? WHERE end IS NULL", (now,))
     c.execute("UPDATE settings SET paused=?", (int(paused),))
+
+
+def bind_sharing(c, client, team_id=None, profile=None):
+    """Bind this state folder to the client's server and user (once, then immutable) and optionally to one of its teams.
+
+    profile is client.me(); pass it in when the caller already has it, so no network call runs in the transaction.
+    """
+    profile = client.me() if profile is None else profile
+    if profile['user_id'] != client.user_id:
+        raise ValueError('연결 사용자가 변경되었습니다.')
+    existing = c.execute('SELECT * FROM sharing WHERE id=1').fetchone()
+    if existing and (existing['api_url'] != client.api_url or existing['user_id'] != client.user_id):
+        raise ValueError('사용자나 팀 서버를 바꾸려면 별도 상태 폴더를 사용하세요.')
+    if team_id is not None and team_id not in {t['id'] for t in profile['teams']}:
+        raise ValueError('선택한 팀의 구성원이 아닙니다.')
+    if not existing:
+        c.execute('INSERT INTO sharing VALUES(1,?,?,?)', (client.api_url, client.user_id, team_id))
+    elif team_id is not None:
+        c.execute('UPDATE sharing SET team_id=? WHERE id=1', (team_id,))
+    return profile
 
 
 def bound_team(c):

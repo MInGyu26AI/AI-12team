@@ -7,6 +7,7 @@ import urllib.request
 
 from card_contract import PUBLIC_FIELDS, card_label, validate_packet
 from diagnostics import failure
+from secure_http import NoRedirect
 from storage import connect
 
 MAX_ATTEMPTS = 5
@@ -93,11 +94,6 @@ def reset_blocked(c, identifier, scope):
     updated = c.execute("UPDATE outbox SET state='pending',attempts=0,next_attempt=0,detail='' WHERE id=? AND state='blocked' AND "
                         + scope, (identifier,))
     return updated.rowcount == 1
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs):
-        return None
 
 
 def _blocked_detail(c, row, destination, team_client):
