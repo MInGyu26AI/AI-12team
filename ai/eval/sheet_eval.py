@@ -4,6 +4,7 @@
   python3 -m eval.sheet_eval classify         분류 정확도 (멤버·날짜별 세션을 시간순으로 분류)
   python3 -m eval.sheet_eval e2e              분류 결과로 충돌까지 끝까지 (시연 흐름과 같음)
   결과: eval/results/sheet-*.json
+  검사를 끝내지 못한 쌍·세션(낮은 확신도 등)은 incomplete 로 세고 비율 계산에서 뺀다.
 """
 from __future__ import annotations
 
@@ -12,16 +13,14 @@ import re
 import sys
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
 from syncup_ai import conflict
-from syncup_ai.classify import classify_indexed
 from syncup_ai.config import load_env
 from syncup_ai.llm import LLMNotConfigured, decider_from_env, from_env
 
+from .scoring import alert_rates, classify_positions, judge, save_result, should_alert
 from .sheets import DATA, read_table
 
-RESULTS = Path(__file__).resolve().parent / "results"
 EXCEL_EPOCH = date(1899, 12, 30)
 MEMBERS = ["박지민", "이서준", "정하린", "최유나"]
 CONTEXT = {
@@ -31,6 +30,10 @@ CONTEXT = {
 }
 TAG = {"결정": "decision", "할 일": "todo", "조사": "research", "해당 없음": "none"}
 SHAREABLE = ("decision", "todo", "research")
+# 표시별로 채점하는 필드 (조사의 owner_or_source 는 출처라 비교 안 함)
+FIELDS_BY_TAG = {"decision": ("subtopic", "owner", "is_change"), "todo": ("subtopic", "owner", "due"),
+                 "research": ("subtopic",)}
+PHONE = re.compile(r"010-?\d{4}")
 
 
 def _when(d: str, t: str) -> datetime:
@@ -80,8 +83,10 @@ def sessions(msgs):
 
 # ── 1) 분류 ──
 def run_classify(msgs, llm, decider):
-    """세션을 시간순으로 분류. 앞 세션의 결정은 '기존 팀 결정'으로 다음 요청에 들어간다 (모두 승인했다고 가정)."""
-    preds = []  # (message_id, card)
+    """세션을 시간순으로 분류. 앞 세션의 결정은 '기존 팀 결정'으로 다음 요청에 들어간다 (모두 승인했다고 가정).
+
+    (예측 [(message_id, 카드)], 분류에 실패한 세션 [{session, failure}])"""
+    preds, failed = [], []  # preds: (message_id, card)
     for sess in sessions(msgs):
         decisions = [c for _, c in preds if c["relevance"] == "related" and c["tag"] == "decision"]
         ctx = {**CONTEXT, "userName": sess[0]["member"],
@@ -89,61 +94,67 @@ def run_classify(msgs, llm, decider):
                "existingDecisions": [{"topic_key": c["topic_key"], "content": c["content"]} for c in decisions]}
         req = {"type": "classify", "version": 1, "context": ctx,
                "messages": [{k: v for k, v in m.items() if not k.startswith("_") and k != "member"} for m in sess]}
-        for pos, card in classify_indexed(req, llm, decider):
+        cards, failure = classify_positions(req, llm, decider)
+        if failure:
+            failed.append({"session": sess[0]["conversationId"], "failure": failure})
+        for pos, card in cards:
             card["id"] = f"{sess[pos]['id']}#{len(preds)}"
             card["status"] = "approved"
             preds.append((sess[pos]["id"], card))
-        print(f"  분류: {sess[0]['conversationId']} ({len(sess)}발화)", file=sys.stderr)
-    return preds
+        print(f"  분류: {sess[0]['conversationId']} ({len(sess)}발화){' 실패' if failure else ''}", file=sys.stderr)
+    return preds, failed
+
+
+def _same_field(field, card, gold) -> bool:
+    if field == "is_change":
+        return bool(card.get(field)) == gold[field]
+    return (card.get(field) or None) == (gold[field] or None)
+
+
+def _score_gold_unit(g, left, s, t) -> None:
+    """정답 공유 후보 하나: 남은 예측 중 같은 표시를 하나 짝짓고 필드를 채점한다."""
+    t["share_recall"] += 1
+    t[f"recall_{g['tag']}"] += 1
+    hit = next((c for c in left if c["tag"] == g["tag"]), None)
+    if not hit:
+        return
+    left.remove(hit)
+    s["share_recall"] += 1
+    s[f"recall_{g['tag']}"] += 1
+    for f in FIELDS_BY_TAG[g["tag"]]:
+        t[f] += 1
+        s[f] += _same_field(f, hit, g)
+
+
+def _score_message(mid, golds, cards, from_ai, s, t) -> dict:
+    G = [g for g in golds if g["relevance"] == "related" and g["tag"] in SHAREABLE]
+    P = [c for c in cards if c["relevance"] == "related" and c["tag"] in SHAREABLE]
+    left = list(P)
+    for g in G:
+        _score_gold_unit(g, left, s, t)
+    t["share_precision"] += len(P)
+    s["share_precision"] += len(P) - len(left)
+    if from_ai:
+        s["ai_false_cards"] += len(left)  # AI 답변에서 정답에 없는 공유 후보
+    if golds and all(g["relevance"] == "personal" for g in golds):
+        t["personal_msgs"] += 1
+        s["personal_leak"] += bool(P)
+    if any(g["masked"] for g in golds):
+        t["masked_msgs"] += 1
+        s["phone_leak"] += any(PHONE.search(c.get("sentence", "") + c.get("content", "")) for c in cards)
+    return {"message_id": mid, "gold": [(g["tag"], g["topic_key"], g["text"]) for g in G],
+            "pred": [(c["tag"], c.get("topic_key"), c.get("sentence")) for c in P],
+            "extra": [(c["tag"], c.get("sentence")) for c in left]}
 
 
 def score_classify(msgs, gold, preds):
-    is_ai = {m["id"]: m["role"] == "assistant" for m in msgs}
     gold_by, pred_by = defaultdict(list), defaultdict(list)
     for g in gold:
         gold_by[g["message_id"]].append(g)
     for mid, c in preds:
         pred_by[mid].append(c)
-
     s, t = Counter(), Counter()
-    rows = []
-    for mid in [m["id"] for m in msgs]:
-        G = [g for g in gold_by[mid] if g["relevance"] == "related" and g["tag"] in SHAREABLE]
-        P = [c for c in pred_by[mid] if c["relevance"] == "related" and c["tag"] in SHAREABLE]
-        left = list(P)
-        for g in G:
-            t["share_recall"] += 1
-            t[f"recall_{g['tag']}"] += 1
-            hit = next((c for c in left if c["tag"] == g["tag"]), None)
-            if hit:
-                left.remove(hit)
-                s["share_recall"] += 1
-                s[f"recall_{g['tag']}"] += 1
-                for f in ("subtopic", "owner", "due", "is_change"):
-                    if f == "owner" and g["tag"] == "research":
-                        continue  # 조사의 owner_or_source 는 출처라 비교 안 함
-                    if f in ("due",) and g["tag"] != "todo":
-                        continue
-                    if f == "is_change" and g["tag"] != "decision":
-                        continue
-                    t[f] += 1
-                    s[f] += (hit.get(f) or None) == (g[f] or None) if f != "is_change" else bool(hit.get(f)) == g[f]
-        t["share_precision"] += len(P)
-        s["share_precision"] += len(P) - len(left)
-        if is_ai[mid]:
-            t["ai_msgs"] += 1
-            s["ai_false_cards"] += len(left)  # AI 답변에서 정답에 없는 공유 후보
-        all_personal = gold_by[mid] and all(g["relevance"] == "personal" for g in gold_by[mid])
-        if all_personal:
-            t["personal_msgs"] += 1
-            s["personal_leak"] += bool(P)
-        if any(g["masked"] for g in gold_by[mid]):
-            t["masked_msgs"] += 1
-            s["phone_leak"] += any(re.search(r"010-?\d{4}", c.get("sentence", "") + c.get("content", "")) for c in pred_by[mid])
-        rows.append({"message_id": mid, "gold": [(g["tag"], g["topic_key"], g["text"]) for g in G],
-                     "pred": [(c["tag"], c.get("topic_key"), c.get("sentence")) for c in P],
-                     "extra": [(c["tag"], c.get("sentence")) for c in left]})
-
+    rows = [_score_message(m["id"], gold_by[m["id"]], pred_by[m["id"]], m["role"] == "assistant", s, t) for m in msgs]
     acc = {k: round(s[k] / t[k], 3) for k in ("share_recall", "share_precision", "recall_decision", "recall_todo",
                                               "recall_research", "subtopic", "owner", "due", "is_change") if t[k]}
     acc["personal_leak"] = f"{s['personal_leak']}/{t['personal_msgs']}"
@@ -165,43 +176,68 @@ def _units(field: str) -> list[str]:
 
 def eval_judge(gold, pairs, llm, decider):
     by_unit = {g["unit"]: g for g in gold}
-    rows, tp, fn, fp, tn, exact = [], 0, 0, 0, 0, 0
+    rows, outcomes, exact = [], [], 0
     for p in pairs:
         old = [_gold_card(by_unit[u]) for u in _units(p["old_unit"]) if u in by_unit]
-        new_u = _units(p["new_unit"])[0]
-        new = _gold_card(by_unit[new_u])
-        judged, conflicts = conflict.check_new_decision(new, old, llm, decider)
+        new = _gold_card(by_unit[_units(p["new_unit"])[0]])
         want = p["label"].replace("바뀜", "변경")
-        alert = bool(conflicts)
-        should = want in ("충돌", "변경")
-        tp += should and alert; fn += should and not alert; fp += (not should) and alert; tn += (not should) and not alert
-        got = [j["judgement"] for j in judged] or ["비교 안 함"]
-        exact += want in got or (want == "비교 안 함" and set(got) <= {"무관", "비교 안 함"})
-        rows.append({"pair": p["pair_id"], "want": want, "got": got, "old": p["old_text"], "new": p["new_text"],
+        judged, conflicts, failure = judge(new, old, llm, decider)
+        if failure:
+            got, ok = [f"미완료:{failure}"], False
+        else:
+            outcomes.append((should_alert(want), bool(conflicts)))
+            got = [j["judgement"] for j in judged] or ["비교 안 함"]
+            ok = want in got or (want == "비교 안 함" and set(got) <= {"무관", "비교 안 함"})
+            exact += ok
+        rows.append({"pair": p["pair_id"], "want": want, "got": got, "ok": ok, "old": p["old_text"], "new": p["new_text"],
                      "reason": [j["reason"] for j in judged]})
-    return {"detection_rate": round(tp / max(tp + fn, 1), 3), "false_alarm_rate": round(fp / max(fp + tn, 1), 3),
-            "label_accuracy": round(exact / len(pairs), 3), "rows": rows}
+    return {**alert_rates(outcomes), "label_accuracy": round(exact / max(len(outcomes), 1), 3),
+            "incomplete": len(pairs) - len(outcomes), "rows": rows}
 
 
 # ── 3) 끝까지: 예측 카드 → 충돌 ──
 def eval_e2e(preds, pairs, llm, decider):
-    existing, found = [], []  # found: (old message_id, new message_id, judgement)
+    """팀 worker 처럼 새 결정마다 앞선 결정과 한 쌍씩 판정한다 (쌍 하나가 실패해도 나머지는 계속)."""
+    existing, found, incomplete = [], [], 0  # found: (old message_id, new message_id, judgement)
     for mid, c in preds:
-        if c["relevance"] == "related" and c["tag"] == "decision":
-            _, conflicts = conflict.check_new_decision(c, existing, llm, decider)
+        if c["relevance"] != "related" or c["tag"] != "decision":
+            continue
+        for old in conflict.ordered_candidates(c, existing):
+            _, conflicts, failure = judge(c, [old], llm, decider)
+            if failure:
+                incomplete += 1
             found += [(x["cardA"]["id"].split("#")[0], mid, x["judgement"]) for x in conflicts]
-            existing.append(c)
-    rows, tp, fn, fp, tn = [], 0, 0, 0, 0
+        existing.append(c)
+    rows, outcomes = [], []
     for p in pairs:
         olds = {u.split("-")[0] for u in _units(p["old_unit"])}
         new = _units(p["new_unit"])[0].split("-")[0]
         hit = [j for o, n, j in found if o in olds and n == new]
         want = p["label"].replace("바뀜", "변경")
-        should = want in ("충돌", "변경")
-        tp += should and bool(hit); fn += should and not hit; fp += (not should) and bool(hit); tn += (not should) and not hit
+        outcomes.append((should_alert(want), bool(hit)))
         rows.append({"pair": p["pair_id"], "want": want, "alerts": hit})
-    return {"detection_rate": round(tp / max(tp + fn, 1), 3), "false_alarm_rate": round(fp / max(fp + tn, 1), 3),
-            "total_alerts": len(found), "rows": rows, "all_alerts": found}
+    return {**alert_rates(outcomes), "total_alerts": len(found), "incomplete_pairs": incomplete,
+            "rows": rows, "all_alerts": found}
+
+
+def _print_judge_rows(rows) -> None:
+    for r in rows:
+        print(f"{'✓' if r['ok'] else '✗'} {r['pair']} [{r['want']} → {', '.join(r['got'])}] {r['old']}  vs  {r['new']}")
+
+
+def _classify_and_e2e(what, msgs, gold, pairs, llm, decider) -> tuple[dict, dict]:
+    preds, failed = run_classify(msgs, llm, decider)
+    failed_ids = {f["session"] for f in failed}
+    scored = [m for m in msgs if m["conversationId"] not in failed_ids]  # 실패한 세션은 채점하지 않는다
+    acc, rows = score_classify(scored, gold, preds)
+    acc["incomplete_sessions"] = len(failed)
+    res = {"classify": acc, "rows": rows, "preds": preds, "failed_sessions": failed}
+    summary = {"classify": acc}
+    if what == "e2e":
+        e2e = eval_e2e(preds, pairs, llm, decider)
+        res["e2e"] = e2e
+        summary["e2e"] = {k: v for k, v in e2e.items() if k not in ("rows", "all_alerts")}
+    return res, summary
 
 
 def main() -> int:
@@ -221,30 +257,18 @@ def main() -> int:
 
     if what == "judge":
         res = eval_judge(gold, pairs, llm, decider)
-        for r in res["rows"]:
-            print(f"{'✓' if r['want'] in r['got'] or (r['want'] == '비교 안 함' and set(r['got']) <= {'무관', '비교 안 함'}) else '✗'} "
-                  f"{r['pair']} [{r['want']} → {', '.join(r['got'])}] {r['old']}  vs  {r['new']}")
+        _print_judge_rows(res["rows"])
         summary = {k: v for k, v in res.items() if k != "rows"}
-    elif what in ("classify", "e2e"):
-        if llm is None:
-            print("분류 평가는 외부 AI 가 필요합니다.", file=sys.stderr)
-            return 1
-        preds = run_classify(msgs, llm, decider)
-        acc, rows = score_classify(msgs, gold, preds)
-        res = {"classify": acc, "rows": rows, "preds": preds}
-        summary = {"classify": acc}
-        if what == "e2e":
-            e2e = eval_e2e(preds, pairs, llm, decider)
-            res["e2e"] = e2e
-            summary["e2e"] = {k: v for k, v in e2e.items() if k not in ("rows", "all_alerts")}
-    else:
+    elif what not in ("classify", "e2e"):
         print(__doc__, file=sys.stderr)
         return 2
+    elif llm is None:
+        print("분류 평가는 외부 AI 가 필요합니다.", file=sys.stderr)
+        return 1
+    else:
+        res, summary = _classify_and_e2e(what, msgs, gold, pairs, llm, decider)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
-    RESULTS.mkdir(exist_ok=True)
-    out = RESULTS / f"sheet-{what}{'-rule' if rule else ''}-{datetime.now():%m%d-%H%M}.json"
-    out.write_text(json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    print(f"저장: {out}")
+    print(f"저장: {save_result(f'sheet-{what}' + ('-rule' if rule else ''), res)}")
     return 0
 
 

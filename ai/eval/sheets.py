@@ -1,7 +1,6 @@
 """민규 님 샘플 대화·정답표 읽기 (.xlsx 또는 .csv, 표준 라이브러리만).
 
-TODO(정보 필요): 파일을 ai/data/ 에 넣으면 컬럼 이름을 보고 아래 COLUMNS 를 채운다.
-  python3 -m eval.sheets  → data/ 안 파일들의 시트·컬럼 이름 출력
+  python3 -m eval.sheets  → data/ 안 파일들의 시트·컬럼 이름 출력 (아래 컬럼 주석과 같아야 한다)
 """
 from __future__ import annotations
 
@@ -69,13 +68,6 @@ def read_table(path: Path) -> list[dict[str, str]]:
             rows = list(csv.reader(f))
     header, *body = rows
     return [dict(zip(header, r + [""] * (len(header) - len(r)))) for r in body if any(r)]
-
-
-def find(name: str) -> Path | None:
-    for p in sorted(DATA.glob(f"{name}*")):
-        if p.suffix in (".xlsx", ".csv"):
-            return p
-    return None
 
 
 if __name__ == "__main__":
