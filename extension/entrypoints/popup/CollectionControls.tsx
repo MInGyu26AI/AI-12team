@@ -1,9 +1,10 @@
 // 자동 수집 켜기 · 묶음 크기 · 종료 시각. 바꿀 때마다 로컬 수집기에 바로 저장한다
-import { sendToBackground, type CollectorSettingsPatch } from '@/lib/messages';
+import type { ExtSettingsPatch } from '@shared/bridge';
+import { sendToBackground } from '@/lib/messages';
 import { clampTurns, endsAtOf, isEnded, turnsOf, type Settings } from '@/lib/settings';
 import { fromLocalInput, toLocalInput } from './datetime-local';
 
-async function save(patch: CollectorSettingsPatch) {
+async function save(patch: ExtSettingsPatch) {
   const result = await sendToBackground({ type: 'updateSettings', patch });
   if (!result?.ok) alert(result?.error ?? '설정 저장 실패');
 }

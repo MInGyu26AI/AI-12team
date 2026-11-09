@@ -1,4 +1,4 @@
-// 확장이 로컬 수집기(native host)로 보내는 요청 봉투. native_host.py 는 {version, method, params} 를 받고 version 이 다르면 거절한다.
+// 확장이 로컬 수집기(native host)로 보내는 요청 봉투. native_host.py 가 넘긴 요청을 local_rpc.py 는 {version, method, params} 만 받고 version 이 다르면 거절한다.
 // 공용 상수 이름이 바뀌어 import 가 undefined 가 되면 tsc 말고는 잡지 못했으므로 값까지 확인한다
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
