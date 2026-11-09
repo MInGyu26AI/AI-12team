@@ -11,7 +11,7 @@ const MAX_EXCERPT_CHARS: usize = 600;
 const SECRETS: &str = r"(?i)sk-[\w-]{12,}|gh[pousr]_[\w]{16,}|AKIA[A-Z0-9]{16}|Bearer\s+[\w./+=-]+|(?:api[_ -]?key|password|secret|token)\s*[:=]\s*[^\s,;]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}";
 const MASK: &str = "[가림]";
 
-/// Text a coding tool puts into the conversation itself (environment, instructions, notices).
+/// Context that the coding tool, mostly Codex, sends as a user message (environment, AGENTS.md, notices).
 const INJECTED_PREFIXES: &[&str] = &[
     "<environment_context",
     "# AGENTS.md instructions",
@@ -23,16 +23,16 @@ const INJECTED_PREFIXES: &[&str] = &[
     "## Referenced chats",
 ];
 
+/// Turns message text into evidence excerpts: skips injected context, masks secrets, splits lines and
+/// sentences, and keeps within the per-turn limits.
 pub struct ExcerptSplitter {
     secrets: Regex,
-    line_breaks: Regex,
 }
 
 impl ExcerptSplitter {
     pub fn new() -> Result<Self> {
         Ok(Self {
             secrets: Regex::new(SECRETS)?,
-            line_breaks: Regex::new(r"\n+")?,
         })
     }
 
@@ -43,7 +43,7 @@ impl ExcerptSplitter {
             return;
         }
         let masked = self.secrets.replace_all(text, MASK);
-        for line in self.line_breaks.split(&masked) {
+        for line in masked.split('\n') {
             // Split after sentence-ending punctuation that a space follows, keeping the punctuation.
             let mut start = 0;
             let mut previous = ' ';

@@ -28,13 +28,10 @@ pub(super) fn store(
         if pos <= transcript.cursor {
             continue;
         }
-        let tx = review_db::begin(db)?;
-        if !review_db::active(&tx)? {
+        let store = |tx: &Connection| store_turn(tx, transcript, &chat, leaf, cfg, excerpts);
+        if !review_db::advance(db, &chat, pos, store)? {
             return Ok(());
         }
-        store_turn(&tx, transcript, &chat, leaf, cfg, excerpts)?;
-        review_db::save_cursor(&tx, &chat, pos)?;
-        tx.commit()?;
     }
     Ok(())
 }
@@ -50,48 +47,43 @@ fn store_turn(
     excerpts: &ExcerptSplitter,
 ) -> Result<()> {
     let model_id = &transcript.messages[leaf].model_id;
-    let base_id = review_db::job_id(&format!("{chat}/{model_id}"));
-    let stored = review_db::job_exists(tx, &base_id)?;
+    let mut id = review_db::job_id(&format!("{chat}/{model_id}"));
+    let stored = review_db::job_exists(tx, &id)?;
     let after = if stored { transcript.cursor } else { 0 };
-    let Some(mut turn) = turn(transcript, leaf, excerpts, after) else {
+    let Some(mut turn) = build_turn(transcript, leaf, excerpts, after) else {
         return Ok(());
     };
     if turn.ended < turn.started || !review_db::within_window(tx, cfg, turn.started, turn.ended)? {
         return Ok(());
     }
-    let id = if stored {
+    if stored {
         for excerpt in &mut turn.evidence {
-            excerpt["continuation_of"] = json!(base_id);
+            excerpt["continuation_of"] = json!(id);
         }
-        review_db::job_id(&format!("{chat}/{model_id}/continuation/{leaf}"))
-    } else {
-        base_id
-    };
+        id = review_db::job_id(&format!("{chat}/{model_id}/continuation/{leaf}"));
+    }
     review_db::insert_job(tx, &id, transcript.session, turn.ended, turn.evidence)
 }
 
 /// The turn ending at `leaf`, with excerpts from records after byte `after` only. None when the chain is
 /// broken or out of order, when nothing new remains, or when a turn read from the start has no prompt.
-fn turn(
+fn build_turn(
     transcript: &Transcript,
     leaf: &str,
     excerpts: &ExcerptSplitter,
     after: u64,
 ) -> Option<Turn> {
     let last = transcript.messages.get(leaf)?;
-    let chain = chain(transcript, leaf)?;
-    let started = chain.iter().find(|(_, m)| m.human)?.1.at?;
+    let chain = parent_chain(transcript, leaf)?;
+    let (_, prompt) = chain.iter().find(|(_, m)| m.human)?;
+    let started = prompt.at?;
     let ended = last.at?;
     let mut evidence = Vec::new();
     for (id, message) in chain {
         if message.pos <= after {
             continue;
         }
-        let role = if message.human {
-            "user"
-        } else if message.final_answer && message.model_id == last.model_id {
-            "assistant"
-        } else {
+        let Some(role) = evidence_role(message, &last.model_id) else {
             continue;
         };
         let at = message.at?;
@@ -117,9 +109,24 @@ fn turn(
     })
 }
 
+/// The evidence role of a record in a turn whose final answer is the response `model_id`: the person's
+/// prompts, and the blocks of that answer. Other records add no evidence.
+fn evidence_role(message: &Message, model_id: &str) -> Option<&'static str> {
+    if message.human {
+        Some("user")
+    } else if message.final_answer && message.model_id == model_id {
+        Some("assistant")
+    } else {
+        None
+    }
+}
+
 /// The records of the turn ending at `leaf`, oldest first: parents back past its prompt until another
 /// response's final answer. None for a parent loop, a missing parent, or a boundary before any prompt.
-fn chain<'a>(transcript: &'a Transcript, leaf: &'a str) -> Option<Vec<(&'a str, &'a Message)>> {
+fn parent_chain<'a>(
+    transcript: &'a Transcript,
+    leaf: &'a str,
+) -> Option<Vec<(&'a str, &'a Message)>> {
     let model_id = &transcript.messages.get(leaf)?.model_id;
     let mut chain: Vec<(&str, &Message)> = Vec::new();
     let mut seen = HashSet::new();

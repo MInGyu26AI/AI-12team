@@ -17,7 +17,7 @@ const MAX_FOLDER_NAME: usize = 64;
 /// Claude Code cuts longer project slugs to this length and adds a `-suffix`.
 const MAX_SLUG: usize = 200;
 
-pub fn scan(db_path: &Path, claude: &Path, project_name: Option<&str>) -> Result<()> {
+pub fn scan(db_path: &Path, claude_dir: &Path, project_name: Option<&str>) -> Result<()> {
     if project_name.is_some_and(|name| !valid_folder_name(name)) {
         return Err("Invalid Claude project directory name".into());
     }
@@ -26,7 +26,7 @@ pub fn scan(db_path: &Path, claude: &Path, project_name: Option<&str>) -> Result
     if !cfg.is_active() {
         return Ok(());
     }
-    let projects = claude.join("projects");
+    let projects = claude_dir.join("projects");
     if !projects.try_exists()? {
         return Ok(());
     }
@@ -34,7 +34,6 @@ pub fn scan(db_path: &Path, claude: &Path, project_name: Option<&str>) -> Result
     let uuid = Regex::new(r"(?i)^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$")?;
     let excerpts = ExcerptSplitter::new()?;
     let mut failed = false;
-    // shortcut: end_turn records and default slug naming; recheck after Claude updates.
     for folder in project_folders(&projects, &cfg.project, project_name)? {
         let Some(folder) = folder_inside(&folder, &projects)? else {
             continue;
@@ -69,6 +68,7 @@ fn valid_folder_name(name: &str) -> bool {
 }
 
 /// The configured folder, or the folders Claude Code names after the project path.
+// shortcut: default slug naming; recheck after Claude updates.
 fn project_folders(projects: &Path, project: &str, name: Option<&str>) -> Result<Vec<PathBuf>> {
     if let Some(name) = name {
         return Ok(vec![projects.join(name)]);
@@ -135,6 +135,7 @@ fn scan_transcript(
     }
 }
 
+/// A file system without birth times counts every file as new; the first record's time still applies.
 fn born_before(metadata: &fs::Metadata, start: f64) -> bool {
     metadata
         .created()

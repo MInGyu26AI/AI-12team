@@ -1,12 +1,12 @@
 //! Reading a Claude Code transcript into the records of its parent chain.
 use crate::Result;
-use crate::log_record::{same_project, timestamp};
+use crate::log_record::{read_complete_line, timestamp};
 use crate::review_db::{self, Settings};
 use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Seek};
+use std::io::{BufReader, Seek};
 use std::path::Path;
 
 /// Record types that link into the parent chain.
@@ -26,7 +26,7 @@ const INTERNAL_PREFIXES: &[&str] = &[
 /// A transcript record in the parent chain.
 pub(super) struct Message {
     pub(super) parent: Option<String>,
-    /// Only user and assistant records carry a time.
+    /// The time of a user or assistant record; other records are not read for one.
     pub(super) at: Option<f64>,
     /// Byte offset just past the record.
     pub(super) pos: u64,
@@ -68,28 +68,21 @@ pub(super) fn read<'a>(
     let mut line = String::new();
     let mut first_message = true;
     while review_db::active(db)? {
-        line.clear();
-        reader.read_line(&mut line)?;
-        if !line.ends_with('\n') {
+        if !read_complete_line(&mut reader, &mut line)? {
             if line.is_empty() {
                 break;
             }
             return Ok(None);
         }
         let record: Value = serde_json::from_str(&line)?;
-        let Some(id) = record["uuid"].as_str() else {
+        let Some(id) = chain_record_id(&record) else {
             continue;
         };
-        if !record["type"]
-            .as_str()
-            .is_some_and(|t| CHAIN_TYPES.contains(&t))
-        {
-            continue;
-        }
-        let in_scope = in_main_session(&record, session, &cfg.project);
+        let in_scope = in_main_session(&record, session, cfg);
         let message = Message::parse(&record, id, in_scope, reader.stream_position()?)?;
         if in_scope && let Some(at) = message.at {
-            if outside_window(db, cfg, at, first_message)? {
+            let began_outside = first_message && began_outside_window(db, cfg, at)?;
+            if began_outside || at < cfg.start {
                 return Ok(None);
             }
             first_message = false;
@@ -109,19 +102,23 @@ pub(super) fn read<'a>(
     }))
 }
 
-/// Whether a main-session record at `at` keeps the transcript out: the session began after the end or
-/// during a pause, or a record predates the start.
-fn outside_window(db: &Connection, cfg: &Settings, at: f64, first_message: bool) -> Result<bool> {
-    if first_message && (at >= cfg.end || review_db::overlaps_pause(db, at, at)?) {
-        return Ok(true);
-    }
-    Ok(at < cfg.start)
+/// The uuid of a record that links into the parent chain.
+fn chain_record_id(record: &Value) -> Option<&str> {
+    let linked = record["type"]
+        .as_str()
+        .is_some_and(|t| CHAIN_TYPES.contains(&t));
+    record["uuid"].as_str().filter(|_| linked)
+}
+
+/// Whether a session whose first record is at `at` began after the end or during a pause.
+fn began_outside_window(db: &Connection, cfg: &Settings, at: f64) -> Result<bool> {
+    Ok(at >= cfg.end || review_db::overlaps_pause(db, at, at)?)
 }
 
 /// A record of this session's main conversation in the selected project, not a sidechain, subagent or team.
-fn in_main_session(record: &Value, session: &str, project: &str) -> bool {
+fn in_main_session(record: &Value, session: &str, cfg: &Settings) -> bool {
     record["sessionId"] == session
-        && same_project(record["cwd"].as_str(), project)
+        && cfg.in_project(record["cwd"].as_str())
         && record["isSidechain"] != true
         && record["agentId"].is_null()
         && record["teamName"].is_null()
@@ -168,6 +165,7 @@ impl Message {
             _ => None,
         };
         let human = kind == Some("user") && !tool_result && !internal && !text.is_empty();
+        // shortcut: completion is the end_turn stop reason; recheck after Claude updates.
         let final_answer = kind == Some("assistant")
             && record["message"]["stop_reason"] == "end_turn"
             && !internal

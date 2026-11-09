@@ -1,14 +1,13 @@
 //! Codex: threads listed in the newest `state_N.sqlite` index, each read on from its rollout log's cursor.
-use crate::Result;
 use crate::excerpt::ExcerptSplitter;
-use crate::log_record::{same_project, timestamp};
+use crate::log_record::{read_complete_line, timestamp};
 use crate::review_db::{self, Settings};
+use crate::{Result, SQLITE_BUSY_TIMEOUT};
 use rusqlite::{Connection, OpenFlags, params};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 /// A row of the index's `threads` table.
 struct Thread {
@@ -21,8 +20,8 @@ struct Thread {
 
 impl Thread {
     /// Whether the index lists this thread in the selected project as a main session, not a subagent.
-    fn selected(&self, project: &str) -> bool {
-        if !same_project(Some(&self.cwd), project) {
+    fn selected(&self, cfg: &Settings) -> bool {
+        if !cfg.in_project(Some(&self.cwd)) {
             return false;
         }
         // The column holds a JSON value or a bare name such as cli.
@@ -62,26 +61,27 @@ impl Turn {
     }
 }
 
-pub fn scan(db_path: &Path, codex: &Path, index_root: &Path) -> Result<()> {
+pub fn scan(db_path: &Path, codex_dir: &Path, index_dir: &Path) -> Result<()> {
     let mut db = review_db::open(db_path)?;
     let cfg = review_db::settings(&db)?;
     if !cfg.is_active() {
         return Ok(());
     }
-    let Some(index) = newest_index(index_root)? else {
+    let Some(index) = newest_index(index_dir)? else {
         return Ok(());
     };
     let threads = threads_since(&index, cfg.start)?;
-    let sessions = codex.join("sessions").canonicalize()?;
+    let sessions = codex_dir.join("sessions").canonicalize()?;
     let excerpts = ExcerptSplitter::new()?;
     let mut failed = false;
     for thread in threads {
         if !review_db::active(&db)? {
             break;
         }
-        if thread.selected(&cfg.project)
-            && scan_thread(&mut db, &thread, &sessions, &cfg, &excerpts).is_err()
-        {
+        if !thread.selected(&cfg) {
+            continue;
+        }
+        if scan_thread(&mut db, &thread, &sessions, &cfg, &excerpts).is_err() {
             failed = true;
         }
     }
@@ -117,10 +117,13 @@ fn newest_index(root: &Path) -> Result<Option<PathBuf>> {
 /// Unarchived threads created since `start`.
 fn threads_since(index: &Path, start: f64) -> Result<Vec<Thread>> {
     // shortcut: newest index must expose these columns; fail rather than read a stale older DB.
-    let index = Connection::open_with_flags(index, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    index.busy_timeout(Duration::from_secs(10))?;
-    let mut rows = index.prepare("SELECT id,rollout_path,created_at_ms,source,cwd FROM threads WHERE created_at_ms>=?1 AND archived=0")?;
-    let threads = rows
+    let index_db = Connection::open_with_flags(index, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    index_db.busy_timeout(SQLITE_BUSY_TIMEOUT)?;
+    let mut query = index_db.prepare(
+        "SELECT id,rollout_path,created_at_ms,source,cwd FROM threads \
+         WHERE created_at_ms>=?1 AND archived=0",
+    )?;
+    let threads = query
         .query_map(params![(start * 1000.0) as i64], |r| {
             Ok(Thread {
                 id: r.get(0)?,
@@ -165,7 +168,7 @@ fn scan_thread(
         return Ok(());
     }
     let mut reader = BufReader::new(File::open(path)?);
-    if !session_matches(&mut reader, &thread.id, &cfg.project)? {
+    if !session_matches(&mut reader, &thread.id, cfg)? {
         return Ok(());
     }
     if let Some(pos) = cursor {
@@ -186,20 +189,19 @@ fn rollout_log(path: &str, sessions: &Path) -> Result<Option<PathBuf>> {
 
 /// Whether the log's first line, its session metadata, matches the indexed main-session thread in the project.
 /// A first line that is still being written does not match yet.
-fn session_matches(reader: &mut BufReader<File>, id: &str, project: &str) -> Result<bool> {
+fn session_matches(reader: &mut BufReader<File>, id: &str, cfg: &Settings) -> Result<bool> {
     let mut first = String::new();
-    reader.read_line(&mut first)?;
-    if !first.ends_with('\n') {
+    if !read_complete_line(reader, &mut first)? {
         return Ok(false);
     }
     let meta: Value = serde_json::from_str(&first)?;
     let session = &meta["payload"];
-    Ok(same_project(session["cwd"].as_str(), project)
+    Ok(cfg.in_project(session["cwd"].as_str())
         && session["id"] == id
         && !is_subagent(&session["source"]))
 }
 
-/// Reads complete lines; each turn that ends is stored, with the cursor moved past it, in one transaction.
+/// Reads complete lines; each turn that ends is stored as it ends, with the cursor moved past it.
 fn read_turns(
     db: &mut Connection,
     reader: &mut BufReader<File>,
@@ -210,9 +212,7 @@ fn read_turns(
     let mut turn: Option<Turn> = None;
     let mut line = String::new();
     while review_db::active(db)? {
-        line.clear();
-        reader.read_line(&mut line)?;
-        if !line.ends_with('\n') {
+        if !read_complete_line(reader, &mut line)? {
             break;
         }
         let record: Value = serde_json::from_str(&line)?;
@@ -221,7 +221,7 @@ fn read_turns(
             (Some("event_msg"), Some("task_started")) => turn = Some(Turn::start(&record)?),
             (Some("turn_context"), _) => {
                 if let Some(t) = turn.as_mut() {
-                    t.allowed = same_project(payload["cwd"].as_str(), &cfg.project);
+                    t.allowed = cfg.in_project(payload["cwd"].as_str());
                 }
             }
             (Some("response_item"), Some("message")) => {
@@ -268,18 +268,14 @@ fn finish_turn(
     cfg: &Settings,
 ) -> Result<bool> {
     let ended = timestamp(end)?;
-    let tx = review_db::begin(db)?;
-    if !review_db::active(&tx)? {
-        return Ok(false);
-    }
-    if let Some(turn) = turn
-        && turn.completed_by(&end["payload"])
-        && review_db::within_window(&tx, cfg, turn.started, ended)?
-    {
-        let id = review_db::job_id(&format!("{chat}/{}", turn.id));
-        review_db::insert_job(&tx, &id, chat, ended, turn.evidence)?;
-    }
-    review_db::save_cursor(&tx, chat, position)?;
-    tx.commit()?;
-    Ok(true)
+    let completed = turn.filter(|t| t.completed_by(&end["payload"]));
+    review_db::advance(db, chat, position, |tx| {
+        if let Some(turn) = completed
+            && review_db::within_window(tx, cfg, turn.started, ended)?
+        {
+            let id = review_db::job_id(&format!("{chat}/{}", turn.id));
+            review_db::insert_job(tx, &id, chat, ended, turn.evidence)?;
+        }
+        Ok(())
+    })
 }

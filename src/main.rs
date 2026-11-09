@@ -7,8 +7,12 @@ mod review_db;
 
 use std::error::Error;
 use std::path::PathBuf;
+use std::time::Duration;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+/// How long a SQLite call waits for another process's lock before it fails.
+const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
 const ENABLED_OS: &[&str] = &[
     "macos",
