@@ -33,7 +33,7 @@ export default function CollectPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
           <h2 className="font-semibold">연결된 AI</h2>
           {connected ? (
-            <span className="rounded-full bg-ok-soft px-3 py-1 text-xs font-semibold text-ok">브라우저 확장 v{st.version} 연결됨</span>
+            <span className="rounded-full bg-ok-soft px-3 py-1 text-xs font-semibold text-ok">로컬 수집기 연결됨</span>
           ) : collector.checked ? (
             <Link href="/install" className="rounded-full bg-warn-soft px-3 py-1 text-xs font-semibold text-warn">
               브라우저 확장 설치 필요 →

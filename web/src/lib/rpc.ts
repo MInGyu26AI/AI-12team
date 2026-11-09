@@ -43,7 +43,8 @@ function viaExtension<T>(payload: object): Promise<T> {
     };
     const timer = setTimeout(() => {
       stop();
-      reject(new Error("확장 프로그램과 로컬 수집기의 연결을 확인하세요."));
+      // 확장은 팝업의 개인 검토함 주소가 아닌 페이지의 요청을 답 없이 버린다 (다른 페이지에 확장이 있는지 드러내지 않으려고)
+      reject(new Error("확장 프로그램과 로컬 수집기의 연결을 확인하세요. 팝업의 개인 검토함 주소가 이 페이지 주소인지도 확인하세요."));
     }, EXTENSION_TIMEOUT_MS);
     function receive(event: MessageEvent) {
       if (!isReply(event, id)) return;
