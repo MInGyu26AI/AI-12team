@@ -33,7 +33,15 @@ export function ExtensionMissingDialog({ missing }: { missing: boolean }) {
         <Button variant="outline" onClick={() => dialog.current?.close()}>
           확인
         </Button>
-        <Button onClick={() => router.push("/install")}>설치</Button>
+        <Button
+          onClick={() => {
+            // Next 는 떠난 화면을 숨긴 채 남겨 두므로, 열린 채로 이동하면 설치 화면이 클릭되지 않는다
+            dialog.current?.close();
+            router.push("/install");
+          }}
+        >
+          설치
+        </Button>
       </div>
     </dialog>
   );
