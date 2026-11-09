@@ -34,7 +34,7 @@ board.lock
 *.pid
 
 # Rebuildable output and caches; keep Cargo.lock tracked
-/target/
+/scanner/target/
 /bin/
 /build/
 /dist/
