@@ -18,7 +18,9 @@ from .evidence import locate_evidence
 from .schema import SUBTOPICS, normalize_card
 
 KST = ZoneInfo("Asia/Seoul")
-SITE_LABEL = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "codex": "Codex", "claude-code": "Claude Code"}
+# 발화 site → 카드 출처 이름. manual·chatgpt-export 는 웹 백업 입력(대화 붙여넣기·내보내기 파일)이다.
+SITE_LABEL = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "codex": "Codex", "claude-code": "Claude Code",
+              "manual": "직접 입력", "chatgpt-export": "ChatGPT 내보내기"}
 
 
 def _system_prompt() -> str:

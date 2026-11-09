@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from syncup_ai import config
+from syncup_ai.classify import SITE_LABEL, source_of
 from syncup_ai.decide import SUBTOPIC_DESC, TAG_CHOICES
 from syncup_ai.mask import MASK_TOKENS
 from syncup_ai.schema import SUBTOPICS, TAGS
@@ -23,6 +24,14 @@ class SharedCopiesTest(unittest.TestCase):
     def test_numbers_match_typescript(self):
         self.assertEqual(ts_number("shared/batch.ts", "TURNS_PER_BATCH"), config.TURNS_PER_BATCH)
         self.assertEqual(ts_number("shared/labels.ts", "LOW_CONFIDENCE"), config.LOW_CONFIDENCE)
+
+    def test_every_collected_site_has_a_source_label(self):
+        # 이름이 없으면 카드 출처에 내부 값(예: 'manual, 2026-…')이 그대로 보인다
+        sites = re.search(r"^\s*site: ([^;]+);", read("shared/collector.ts"), re.M).group(1)
+        self.assertEqual(set(re.findall(r'"([^"]+)"', sites)) - set(SITE_LABEL), set())
+        at = "2026-11-06T12:10:00Z"
+        self.assertEqual([source_of({"site": site, "collectedAt": at}) for site in ("manual", "chatgpt-export")],
+                         ["직접 입력, 2026-11-06 21:10", "ChatGPT 내보내기, 2026-11-06 21:10"])
 
     def test_subtopic_and_tag_names_match_everywhere(self):
         self.assertEqual(tuple(SUBTOPIC_DESC), SUBTOPICS)
