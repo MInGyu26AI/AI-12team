@@ -21,7 +21,7 @@ from storage import connect, initialize
 SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
 PROMPT = "DB는 Supabase로 확정했어. 이메일 demo@example.com"
 COLLECTION_STOPPED = ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start")
-# src/excerpt.rs limits
+# scanner/src/excerpt.rs limits
 MAX_EXCERPTS = 24
 MAX_EXCERPT_CHARS = 600
 

@@ -191,13 +191,15 @@ class StandaloneForms(IntegrityFixture):
         self.card(manual=True)
         with connect(self.db) as c:
             c.execute('UPDATE settings SET end=?,paused=1',(time.time()+300,))
-        srv=self.enterContext(server(Review,self.db))
-        fields=dict(csrf=srv.csrf,id='c')
+        srv=self.review()
+        fields=dict(csrf=srv.csrf,id='c',teamId=FAKE_TEAM)
         self.assertEqual(post(srv,'/retry',fields)[0],400)
         self.assertEqual(self.row('cards')['status'],'manual')
         with connect(self.db) as c:
             c.execute('UPDATE settings SET paused=0')
         self.assertEqual(post(srv,'/retry',dict(fields,id='missing'))[0],400)
+        self.assertEqual(post(srv,'/retry',dict(csrf=srv.csrf,id='c'))[0],400)  # a team-connected page needs teamId
+        self.assertEqual(self.row('cards')['status'],'manual')
         self.assertEqual(post(srv,'/retry',fields)[0],303)
         self.assertEqual(self.row('jobs')['state'],'draft')
         self.assertEqual(self.row('cards')['status'],'drafting')

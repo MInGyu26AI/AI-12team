@@ -96,7 +96,7 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 3. `com.syncup.collector.json`을 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`에 복사한다. `syncup-native`는 출력 폴더에 그대로 둔다. 매니페스트의 `path`가 이 파일을 가리킨다.
 4. 확장 팝업에서 프로젝트 주제와 개인 검토함 주소를 저장한다. 이 주소는 승인함 웹의 주소(배포 주소나 `npm run dev`의 `http://localhost:3000`)이고, 수집기가 출력하는 8876 주소가 아니다. 그 주소의 페이지는 개인 후보를 읽고 승인을 보낼 수 있으니 믿는 주소만 넣는다.
 
-`syncup-native`에는 Python 실행 파일, `collector/native_host.py`, `connection.json`의 절대 경로가 들어 있다. 이 가운데 하나나 확장 ID가 바뀌면 새 빈 폴더로 2~3단계를 다시 하고 `chrome://extensions`에서 확장을 새로고침한다.
+`syncup-native`에는 Python 실행 파일, `collector/native_host.py`, `connection.json`의 절대 경로가 들어 있다. 이 가운데 하나나 확장 ID가 바뀌면 새 빈 폴더로 2~3단계를 다시 하고 `chrome://extensions`에서 확장을 새로고침한다. 수집기 파일이 `collector/`로 옮겨지기 전에 등록했다면 이 경우다(예전 실행기는 저장소 루트의 `native_host.py`를 찾는다).
 
 ## 상태 폴더와 포트
 
@@ -126,6 +126,7 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 - 기존 데이터가 새 제약조건에 맞지 않으면 변환 전체를 취소하고 멈춘다. 데이터를 버리거나 고치지 않는다.
 - 보존 정리가 켜자마자 돌며 기간이 지난 백업을 지운다 ([privacy.md](privacy.md#6-보존-7일)). 복구에 쓸 백업은 다시 켜기 전에 상태 폴더 밖으로 옮긴다.
 - 예전 로컬 시연 모드에서 팀 서버 없이 승인한 카드는 목적지가 없어 보내지 않고, 재시도도 되지 않는다. Python 검토함에 `이전 로컬 시연 승인`으로 나온다.
+- 그 모드가 남긴 `board.sqlite`, `board.sqlite.*.bak.sqlite`, `board.lock`은 이제 아무것도 읽지 않는다. 승인한 문장이 들어 있고 자동으로 지우지 않으니, 필요 없으면 직접 지우거나 옮긴다.
 
 ## 실패와 중단
 

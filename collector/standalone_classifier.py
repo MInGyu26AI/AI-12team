@@ -1,6 +1,8 @@
 """Classify and draft scanned jobs with OpenAI for the team-connected mode without --integrated.
 
-The integrated mode classifies through ai/ instead (batch_classification); the Rust scan itself is scanner_runner."""
+New jobs in the integrated mode go through ai/ instead (batch_classification), but its loop still calls
+process(drafts_only=True) to finish 'draft' jobs left from before (collection_loop.run_integrated), and the review page
+uses FAILED_PREFIX in both modes. The Rust scan itself is scanner_runner."""
 import http.client
 import json
 import os

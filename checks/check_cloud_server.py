@@ -15,16 +15,17 @@ from team_access import DatabaseSetupError
 from team_server import TeamServer
 
 ROOT = repo_paths.REPO
-MODULE_FOLDERS = ('server', 'contract')
+IMAGE_FOLDERS = ('server', 'contract')  # what the cloud image copies
+SOURCE_FOLDERS = IMAGE_FOLDERS + ('collector',)  # where an import can resolve to repository code
 
 
 def module_path(name):
-    """The server/ or contract/ file of a repository module; None for the standard library and packages."""
-    return next((p for p in (ROOT / folder / f'{name}.py' for folder in MODULE_FOLDERS) if p.exists()), None)
+    """The repository file of a module (server/, contract/ or collector/); None for the standard library and packages."""
+    return next((p for p in (ROOT / folder / f'{name}.py' for folder in SOURCE_FOLDERS) if p.exists()), None)
 
 
 def startup_modules(name, seen=None):
-    """Repository modules (server/ and contract/ files) that importing `name` loads, following module-level imports.
+    """Repository modules (server/, contract/ and collector/ files) that importing `name` loads, following module-level imports.
 
     Imports inside functions are left out: they belong to code paths the cloud service does not start with."""
     seen = set() if seen is None else seen
@@ -47,7 +48,7 @@ def listed_modules(path, prefix):
     words = [w for line in path.read_text(encoding='utf-8').splitlines() if line.startswith(prefix)
              for w in line[len(prefix):].split()]
     paths = [Path(w.removeprefix('!')) for w in words if w.endswith('.py')]
-    return {p.stem for p in paths if p.parent.name in MODULE_FOLDERS}
+    return {p.stem for p in paths if p.parent.name in IMAGE_FOLDERS}
 
 
 class CloudBoundary(unittest.TestCase):

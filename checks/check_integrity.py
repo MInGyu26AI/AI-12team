@@ -15,11 +15,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from collection_session import bind_sharing
-import standalone_classifier
 import delivery
 from local_fixtures import FAKE_TEAM, fake_team_api, first_line, get_page, post, server, wait_until, work_gate
 from review_page import Review
 from runtime import child_environment
+import scanner_runner
+import standalone_classifier
 from storage import connect, initialize, runtime_lock
 from team_client import TeamClient
 
@@ -124,8 +125,7 @@ class Integrity(IntegrityFixture):
                 self.assertEqual(self.row("jobs", failed)["evidence"], EVIDENCE)
                 self.assertEqual(self.row("cards", failed)["status"], "manual")
                 self.assertEqual(self.row("cards", later)["status"], "ready")
-                with server(Review, self.db) as srv:
-                    self.assertEqual(post(srv, "/retry", dict(id=failed))[0], 303)
+                self.assertEqual(post(self.review(), "/retry", dict(id=failed, teamId=FAKE_TEAM))[0], 303)
                 with patch.object(standalone_classifier, "call_api", return_value=result):
                     standalone_classifier.process(self.db, gate=work_gate())
                 self.assertEqual(self.row("cards", failed)["status"], "ready")
@@ -225,6 +225,11 @@ class Integrity(IntegrityFixture):
         self.assertEqual(self.row("outbox")["state"], "blocked")
         self.assertFalse(self.deliver())
         self.assertEqual(self.api.records, {})
+
+    def test_ended_session_does_not_start_the_scanner(self):
+        """scanner_runner.scan checks the collection window before it starts the Rust scanner."""
+        with patch.object(scanner_runner.subprocess, "run", side_effect=AssertionError("scanner started after the session ended")):
+            self.assertIsNone(scanner_runner.scan(self.db, self.root / "missing-codex"))
 
     def test_ended_session_refuses_the_legacy_api_call(self):
         """standalone_classifier.call_api checks the collection window before the key or any network access."""
