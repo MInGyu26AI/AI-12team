@@ -7,11 +7,12 @@ import json
 from contextlib import closing
 import sqlite3
 
+from ai.syncup_ai.config import TURNS_PER_BATCH
 import local_privacy
 from storage import PRIVATE_SCHEMA, backup_before_migration, initialize
 
 CARDS_UNIQUE = 'UNIQUE(job,kind),'
-DEFAULT_OPTIONS = dict(turnsPerBatch=10, projectTopic='', enabledSubtopics=[])
+DEFAULT_OPTIONS = dict(turnsPerBatch=TURNS_PER_BATCH, projectTopic='', enabledSubtopics=[])
 
 
 def _create_intake_issue_tables(c):
