@@ -33,6 +33,13 @@ class SharedCopiesTest(unittest.TestCase):
         self.assertEqual([source_of({"site": site, "collectedAt": at}) for site in ("manual", "chatgpt-export")],
                          ["직접 입력, 2026-11-06 21:10", "ChatGPT 내보내기, 2026-11-06 21:10"])
 
+    def test_site_labels_match_typescript(self):
+        # 웹 수집 화면(shared/labels.ts)과 카드 출처가 같은 발화를 다른 이름으로 부르지 않게
+        block = re.search(r"export const SITE_LABEL[^{]*\{([^}]*)\}", read("shared/labels.ts")).group(1)
+        ts_labels = dict(re.findall(r'"?([\w-]+)"?: "([^"]+)"', block))
+        self.assertTrue(ts_labels)
+        self.assertEqual({site: SITE_LABEL[site] for site in ts_labels}, ts_labels)
+
     def test_subtopic_and_tag_names_match_everywhere(self):
         self.assertEqual(tuple(SUBTOPIC_DESC), SUBTOPICS)
         self.assertEqual(tuple(TAG_CHOICES), TAGS)

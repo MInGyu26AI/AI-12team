@@ -28,10 +28,10 @@ export const TAG_BORDER: Record<Tag, string> = {
   none: "border-border",
 };
 
-// 발화 출처 (최근 수집 묶음·분석에서 제외된 발화)
+// 발화 출처 (최근 수집 묶음·분석에서 제외된 발화). 카드 출처 이름(ai/syncup_ai/classify.py SITE_LABEL)과 같다
 export const SITE_LABEL: Record<MessageSite, string> = {
   chatgpt: "ChatGPT",
-  manual: "붙여넣기",
+  manual: "직접 입력",
   "chatgpt-export": "ChatGPT 내보내기",
   codex: "Codex",
   "claude-code": "Claude Code",
@@ -60,7 +60,7 @@ export const DECISION_STATE_LABEL: Partial<Record<NonNullable<RelatedCard["decis
   rejected: "기존 결정 유지로 미채택",
 };
 
-// 후보를 만든 방법 (ai/syncup_ai: chat = 대화 분류, decisions = Decisions API 판별, manual = 팀 보드에 직접 입력)
+// 후보를 만든 방법 (ai/syncup_ai: chat = 대화 분류, decisions = Decisions API 판별, manual = 옛 로컬 승인 카드, card_contract.board_card)
 export const CLASSIFICATION_METHOD_LABEL: Record<NonNullable<RelatedCard["classificationMethod"]>, string> = {
   chat: "AI 대화 분류",
   decisions: "AI 결정 판별",

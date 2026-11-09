@@ -8,7 +8,7 @@ export const LOCAL_RPC_VERSION = 1;
 // 수집한 발화 한 건 (turns.append). site 는 turn_intake.clean_message 가 받는 값 (INTAKE_SITES)
 export interface CollectedMessage {
   id: string; // 사이트의 메시지 id (없으면 내용 해시)
-  site: "chatgpt" | "manual" | "chatgpt-export"; // manual = 붙여넣기, chatgpt-export = 내보내기 파일
+  site: "chatgpt" | "manual" | "chatgpt-export"; // manual = 붙여넣기·고친 입력(intake.retry), chatgpt-export = 내보내기 파일
   role: "user" | "assistant";
   roleGuessed?: boolean; // 화면에서 화자를 못 읽어 순서로 추정했거나, 드래그 선택이라 사용자로 간주한 경우
   text: string;
