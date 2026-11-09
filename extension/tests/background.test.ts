@@ -56,15 +56,14 @@ const messages = (count: number): CollectedMessage[] =>
     collectedAt: '2026-11-09T12:00:00Z',
   }));
 
-// Chrome 처럼 sendResponse 로 받은 답을 돌려준다. Chrome 148 미만은 리스너가 돌려준 Promise 를 답으로 쓰지 않으므로,
-// 리스너가 true(답할 때까지 채널을 열어 둠)를 돌려주는지도 확인한다
-async function send(message: unknown, sender: object) {
-  let respond: (response: unknown) => void = () => {};
-  const response = new Promise((resolve) => (respond = resolve));
-  const [keepsChannelOpen] = await fakeBrowser.runtime.onMessage.trigger(message, sender, respond);
-  expect(keepsChannelOpen).toBe(true);
-  return response;
-}
+type MessageListener = (message: unknown, sender: object, sendResponse: (response: unknown) => void) => unknown;
+// background 가 등록한 runtime.onMessage 리스너. fakeBrowser 의 trigger 는 돌려준 값을 await 로 풀어 버려서 직접 부른다
+let onMessage: MessageListener = () => undefined;
+
+// Chrome 처럼 sendResponse 로 받은 답을 돌려준다. Chrome 148 미만은 리스너가 동기로 돌려준 true 를 보고 채널을 열어 두므로
+// (Promise 를 돌려주는 async 리스너는 안 된다) 돌려준 값이 정확히 true 인지도 확인한다
+const send = (message: unknown, sender: object) =>
+  new Promise((resolve) => expect(onMessage(message, sender, resolve)).toBe(true));
 const fromPage = (url: string) => ({ url, tab: { id: 1 }, id: fakeBrowser.runtime.id });
 const fromPopup = () => ({ id: fakeBrowser.runtime.id, url: `chrome-extension://${fakeBrowser.runtime.id}/popup.html` });
 const lastError = async () => (await collectStateItem.getValue()).lastError;
@@ -83,6 +82,7 @@ beforeEach(async () => {
   overrides = {};
   vi.spyOn(fakeBrowser.runtime, 'sendNativeMessage').mockImplementation(fakeCollector as never);
   vi.spyOn(fakeBrowser.action, 'setBadgeText').mockResolvedValue(undefined);
+  vi.spyOn(fakeBrowser.runtime.onMessage, 'addListener').mockImplementation((listener) => void (onMessage = listener as never));
   vi.spyOn(fakeBrowser.contextMenus.onClicked, 'addListener').mockImplementation((listener) => void (menuClicked = listener as never));
   background.main();
   await settle(); // 시작할 때 하는 상태 새로 고침이 끝나게 둔다
