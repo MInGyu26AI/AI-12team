@@ -37,12 +37,12 @@ async function main() {
       stdio:['ignore','pipe','pipe'],
     });
     let output=''; child.stdout.on('data',chunk=>output+=chunk);
-    child.stderr.on('data',()=>{});
+    let errors=''; child.stderr.on('data',chunk=>errors+=chunk);
     const deadline=Date.now()+60000;
     while(!output.includes('/local-session#') && child.exitCode===null && Date.now()<deadline)
       await new Promise(resolve=>setTimeout(resolve,100));
     const nonce=output.match(/\/local-session#([a-f0-9]{64})/)?.[1];
-    assert.ok(nonce,'launcher ready with one-use nonce');
+    assert.ok(nonce,`launcher not ready with a one-use nonce: ${errors.slice(-2000)}`);
     if(process.platform==='darwin') {
       const sockets=execFileSync('lsof',['-nP','-a','-p',String(child.pid),'-iTCP','-sTCP:LISTEN'],{encoding:'utf8'});
       assert.ok(sockets.includes(`127.0.0.1:${port}`));

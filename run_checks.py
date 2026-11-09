@@ -20,12 +20,14 @@ PY = sys.executable
 # (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`, which only runs on macOS),
 # Python 3 and Node with `npm ci` in web/ (check_local_bridge starts Next from web/node_modules; the TypeScript masking check
 # also works with extension/); rust = needs the built scanner (bin/syncup-collector); team = needs Docker and
-# requirements-team.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (local_privacy.DEFAULT_MODEL).
+# requirements-team.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
-    ('local', [PY, 'check_integration_store.py'], '로컬 DB 마이그레이션·승인 계약'),
+    ('local', [PY, 'check_pipeline_schema.py'], '로컬 DB 마이그레이션·승인 계약'),
     ('local', [PY, 'check_retention.py'], '원문·백업 7일 보존 정책'),
     ('local', [PY, 'check_local_privacy.py'], '로컬 개인정보 필터·외부 전송 차단'),
+    ('local', [PY, 'check_privacy_holds.py'], '개인정보 보류·사용자 제외·재검사(실패 시 전송 없음)'),
+    ('local', [PY, 'check_privacy_model_client.py'], '로컬 개인정보 모델 연결(루프백·엄격한 JSON·캐시)'),
     ('local', [PY, 'check_masking_integration.py'], '가림 → 근거 → 수정 → 승인 내용'),
     ('local', [PY, 'check_form_retry.py'], 'HTTP 재시도 계약'),
     ('local', [PY, 'check_local_functional.py'], '로컬 대기열·입력 정정'),

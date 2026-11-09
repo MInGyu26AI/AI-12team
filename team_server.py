@@ -16,7 +16,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from app import LocalHandler
+from secure_http import SecureHandler
 from delivery import validate_packet
 from diagnostics import failure
 
@@ -81,7 +81,7 @@ def authorized(dsn, token, team_id=None):
         yield c, str(user_id)
 
 
-class TeamHandler(LocalHandler):
+class TeamHandler(SecureHandler):
     timeout = 10
 
     def do_GET(self):

@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import collector
-from check_local_privacy import work_gate
+from local_fixtures import work_gate
+from storage import initialize
 
 
 def run_checks(root):
@@ -19,7 +20,7 @@ def run_checks(root):
     sessions = codex / "sessions"
     sessions.mkdir(parents=True)
     db = root / "private.sqlite"
-    collector.initialize(db)
+    initialize(db)
     with collector.connect(db) as c:
         c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (project, start, start + 600))
     with sqlite3.connect(codex / "state_5.sqlite") as c:

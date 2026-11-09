@@ -23,7 +23,7 @@ import uuid
 import psycopg
 from psycopg.types.json import Jsonb
 
-import app
+from review_page import Review
 import delivery
 from storage import connect, initialize, initialize_v1
 from team_client import TeamClient, bind_sharing
@@ -221,7 +221,7 @@ class TeamIsolation(unittest.TestCase):
             return dict(c.execute(f'SELECT * FROM {table} WHERE id=?', (identifier,)).fetchone())
 
     def review(self):
-        srv = self.enterContext(running_server(app.Review))
+        srv = self.enterContext(running_server(Review))
         srv.db, srv.csrf, srv.secret, srv.team_client = self.db, 'synthetic-csrf', '', self.client
         srv.board_url = '/team-board'
         return srv

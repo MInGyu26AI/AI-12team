@@ -19,7 +19,8 @@ import time
 from unittest.mock import patch
 
 import local_privacy
-from local_privacy import ALLOW, EXCLUDE, HOLD, Gate, OllamaClassifier
+from local_privacy import ALLOW, EXCLUDE, HOLD, Gate
+from privacy_model import DEFAULT_MODEL, DEFAULT_URL, OllamaClassifier
 
 # (kind, text, personal phrase that must never leave, work phrase that should survive)
 CASES = [
@@ -117,8 +118,8 @@ def resident(classifier, model):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--model', default=local_privacy.DEFAULT_MODEL)
-    parser.add_argument('--url', default=local_privacy.DEFAULT_URL)
+    parser.add_argument('--model', default=DEFAULT_MODEL)
+    parser.add_argument('--url', default=DEFAULT_URL)
     parser.add_argument('--timeout', type=float, default=180)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
@@ -142,10 +143,14 @@ def main():
             classifier._call('POST', '/api/generate', {'model': args.model, 'keep_alive': 0}, 60)
         except Exception:
             pass
-        started = time.time(); identity = gate._identity(); load = time.time() - started
+        started = time.time()
+        identity = gate._identity()
+        load = time.time() - started
         if identity is None:
             raise SystemExit(f'model unavailable: {gate.last_state["reason"]}')
-        warm = time.time(); gate.check(db, '모델 준비 확인', 'user', identity); warmup = time.time() - warm
+        warm = time.time()
+        gate.check(db, '모델 준비 확인', 'user', identity)
+        warmup = time.time() - warm
         for kind, text, personal, work in CASES:
             for topic in ([''] + ([TOPICS[text]] if text in TOPICS else [])):
                 t = time.time()

@@ -9,11 +9,13 @@ import time
 import uuid
 from unittest.mock import patch
 
-import app
+import collection_loop
 import collector
-from check_local_privacy import work_gate
+from demo_board import Board
 import delivery
-from check_integrity import post, server
+from local_fixtures import post, server, work_gate
+from review_page import Review
+from storage import initialize
 
 
 def run_checks(root):
@@ -23,7 +25,7 @@ def run_checks(root):
     claude = root / "claude"
     folder = claude / "projects" / re.sub("[^a-zA-Z0-9]", "-", project)
     folder.mkdir(parents=True)
-    collector.initialize(db)
+    initialize(db)
     with collector.connect(db) as c:
         c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (project, start, start + 600))
     missing_codex = root / "codex"
@@ -170,10 +172,10 @@ def run_checks(root):
     except ValueError:
         pass
     assert len(rows()) == 7
-    with (patch.object(app,"scan",side_effect=ValueError("source unavailable")), patch.object(app,"process") as process,
-          patch.object(app.time,"sleep",side_effect=RuntimeError("stop test loop"))):
+    with (patch.object(collection_loop,"scan",side_effect=ValueError("source unavailable")), patch.object(collection_loop,"process") as process,
+          patch.object(collection_loop.time,"sleep",side_effect=RuntimeError("stop test loop"))):
         try:
-            app.watch(db,missing_codex,claude)
+            collection_loop.watch(db,missing_codex,claude)
         except RuntimeError:
             pass
         process.assert_called_once_with(db)
@@ -188,8 +190,8 @@ def run_checks(root):
         collector.classify(db,job,work_gate())
         collector.draft(db,job,work_gate())
     board = root / "board.sqlite"
-    collector.initialize(board,board=True)
-    with server(app.Review,db) as review, server(app.Board,board) as board_server:
+    initialize(board,board=True)
+    with server(Review,db) as review, server(Board,board) as board_server:
         assert post(review,"/approve",dict(id=job["id"]+"-decision",text="Supabase를 사용한다.",quote="DB는 Supabase로 확정했어."))[0] == 303
         delivery.deliver(db,board_server.board_url,board_server.secret)
     with collector.connect(board) as c:
@@ -230,7 +232,7 @@ def check_late_blocks(root):
         claude = root / (state+"-claude")
         folder = claude / "projects" / re.sub("[^a-zA-Z0-9]", "-", project)
         folder.mkdir(parents=True)
-        collector.initialize(db)
+        initialize(db)
         with collector.connect(db) as c:
             c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (project,start,start+600))
         session = str(uuid.uuid4())

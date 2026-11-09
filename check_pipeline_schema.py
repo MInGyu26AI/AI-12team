@@ -1,23 +1,19 @@
-"""Migration and approval contract checks against real temporary SQLite files."""
+"""Pipeline schema migration and approval contract checks against real temporary SQLite files."""
 import json
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from card_contract import PUBLIC_FIELDS
 from delivery import approve, validate_packet
-from integration_store import initialize_integration
-from storage import connect, initialize
+from local_fixtures import public_card
+from pipeline_schema import ensure_pipeline_schema
+from storage import PRIVATE_SCHEMA, connect, initialize
 
 
-def public_card(text='SQLite로 결정했다.'):
-    return dict(sentence=text, relevance='related', subtopic='작업·결과물', tag='decision', topic_key='DB',
-                is_new_topic=True, content='DB = SQLite', reason=None, owner='테스트', due=None,
-                is_change=False, source='가상 대화', masked=False, confidence=.9, classificationMethod='chat')
-
-
-class IntegrationStore(unittest.TestCase):
+class PipelineSchema(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -29,7 +25,7 @@ class IntegrationStore(unittest.TestCase):
             c.execute("INSERT INTO sharing VALUES(1,'https://example.test/','user','team-a')")
 
     def details(self, guessed=False):
-        initialize_integration(self.db)
+        ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             c.execute('INSERT INTO candidate_details VALUES(?,?,?,0)', ('c','team-a',json.dumps(dict(public_card(), evidence=dict(roleGuessed=guessed)))))
 
@@ -38,8 +34,8 @@ class IntegrationStore(unittest.TestCase):
             binding = dict(c.execute('SELECT * FROM sharing').fetchone())
             approve(c, dict(id='c',text='DB = SQLite',quote='SQLite로 결정했다.').__getitem__, binding)
             before = tuple(c.execute('SELECT * FROM outbox').fetchone())
-        initialize_integration(self.db)
-        initialize_integration(self.db)
+        ensure_pipeline_schema(self.db)
+        ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             self.assertEqual(tuple(c.execute('SELECT * FROM outbox').fetchone()), before)
             self.assertFalse(c.execute('PRAGMA foreign_key_check').fetchall())
@@ -74,14 +70,23 @@ class IntegrationStore(unittest.TestCase):
                 approve(c, dict(id='c',text='승인',quote='SQLite로 결정했다.').__getitem__, binding)
             self.assertFalse(c.execute('SELECT * FROM outbox').fetchall())
 
+    def test_unexpected_cards_schema_stops_the_migration(self):
+        changed = dict(PRIVATE_SCHEMA, cards=PRIVATE_SCHEMA['cards'].replace('UNIQUE(job,kind),', 'UNIQUE(job, kind),'))
+        with patch.dict('pipeline_schema.PRIVATE_SCHEMA', changed), self.assertRaisesRegex(ValueError, 'cards'):
+            ensure_pipeline_schema(self.db)
+        with connect(self.db) as c:
+            self.assertFalse(c.execute("SELECT 1 FROM sqlite_master WHERE name='integration_settings'").fetchone())
+
     def test_v2_rejects_hidden_fields_and_unshareable_cards(self):
         p=dict(id='c',label='결정',text='DB = SQLite',quote='SQLite로 결정했다.',speaker='사용자',version=2,card=public_card())
         validate_packet(p)
         p['card']['privateRaw']='must not be transmitted'
-        with self.assertRaises(ValueError): validate_packet(p)
+        with self.assertRaises(ValueError):
+            validate_packet(p)
         del p['card']['privateRaw']
         p['speaker']='AI'
-        with self.assertRaises(ValueError): validate_packet(p)
+        with self.assertRaises(ValueError):
+            validate_packet(p)
 
 
 if __name__ == '__main__':

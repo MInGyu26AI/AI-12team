@@ -1,14 +1,16 @@
 """Synthetic SQLite input -> masked evidence -> edit -> approved payload checks."""
 import json
 import unittest
-import check_pipeline  # module import: PipelineTest is not collected (and run again) here
+
+from batch_classification import classify_queued
+from candidate_review import list_candidates, update_candidate
+from local_fixtures import PipelineFixture
+from local_rpc import dispatch
 from storage import connect
+import turn_intake
 
 
-class MaskingIntegration(unittest.TestCase):
-    setUp = check_pipeline.PipelineTest.setUp
-    message = check_pipeline.PipelineTest.message
-
+class MaskingIntegration(PipelineFixture):
     def test_semantic_mask_survives_review_and_approval_without_raw_quote(self):
         original = '서울시 가상로 123에서 회의하자.'
         def reply(system, user):
@@ -17,13 +19,13 @@ class MaskingIntegration(unittest.TestCase):
                 sentence='[주소]에서 회의하자.', source_sentence=original,
                 redactions=[dict(text='서울시 가상로 123', token='[주소]')])])
         self.ai.chat_json = reply
-        self.pipeline.append([dict(self.message(), text=original)], True)
-        self.pipeline.process()
-        card = self.pipeline.candidates()[0]
-        self.pipeline.update(card['id'], dict(content='회의 준비'))
+        turn_intake.append(self.pipeline, [dict(self.message(), text=original)], True)
+        classify_queued(self.pipeline)
+        card = list_candidates(self.pipeline)[0]
+        update_candidate(self.pipeline, card['id'], dict(content='회의 준비'))
         with self.assertRaises(ValueError):
-            self.pipeline.update(card['id'], dict(sentence='[주소]에서 배포하자.'))
-        self.pipeline.rpc('candidates.approve', dict(ids=[card['id']], teamId='a'))
+            update_candidate(self.pipeline, card['id'], dict(sentence='[주소]에서 배포하자.'))
+        dispatch(self.pipeline, 'candidates.approve', dict(ids=[card['id']], teamId='a'))
         with connect(self.db) as c:
             payload = c.execute('SELECT payload FROM outbox').fetchone()[0]
             self.assertNotIn('서울시', payload)
@@ -34,18 +36,18 @@ class MaskingIntegration(unittest.TestCase):
     def test_all_supported_sources_mask_before_queue_and_model(self):
         secret = 'sk-proj-SyntheticOnly0123456789'
         for index, site in enumerate(('manual', 'chatgpt', 'chatgpt-export')):
-            self.pipeline.append([dict(self.message(str(index)), site=site,
+            turn_intake.append(self.pipeline, [dict(self.message(str(index)), site=site,
                 text='SQLite로 결정했다. 키 '+secret)], True)
-        self.pipeline.process()
+        classify_queued(self.pipeline)
         self.assertEqual(len(self.ai.calls), 3)
         self.assertNotIn(secret, ''.join(self.ai.calls))
         with connect(self.db) as c:
             for table, column in (('intake','message'), ('job_context','messages'), ('jobs','evidence')):
                 for row in c.execute(f'SELECT {column} FROM {table}'):
                     self.assertNotIn(secret, row[0])
-        card = self.pipeline.candidates()[0]
-        self.pipeline.update(card['id'], dict(content='키 '+secret))
-        self.pipeline.rpc('candidates.approve', dict(ids=[card['id']], teamId='a'))
+        card = list_candidates(self.pipeline)[0]
+        update_candidate(self.pipeline, card['id'], dict(content='키 '+secret))
+        dispatch(self.pipeline, 'candidates.approve', dict(ids=[card['id']], teamId='a'))
         with connect(self.db) as c:
             payload = c.execute('SELECT payload FROM outbox').fetchone()[0]
             self.assertNotIn(secret, payload)

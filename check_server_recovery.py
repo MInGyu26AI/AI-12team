@@ -12,7 +12,7 @@ from check_teams import request, running_server
 from team_records import process_checks
 from team_server import authorized
 from storage import connect
-import app
+from review_page import Review
 
 
 class ServerRecovery(check_team_integration.TeamIntegration):
@@ -73,7 +73,7 @@ class ServerRecovery(check_team_integration.TeamIntegration):
         self.assertEqual(self.team_request('GET','board')[1]['items'][0]['conflictCheckStatus'],'running')
 
     def test_legacy_approval_and_switch_network_outside_local_lock(self):
-        srv = self.enterContext(running_server(app.Review))
+        srv = self.enterContext(running_server(Review))
         srv.db, srv.csrf, srv.team_client = self.db, 'csrf', self.client
         original = self.client.me
         def probe():
@@ -85,9 +85,9 @@ class ServerRecovery(check_team_integration.TeamIntegration):
 
     def test_actual_app_restarts_during_team_outage(self):
         from check_teams import ObservedTeamHandler, ROOT
-        from integration import Pipeline
+        from turn_pipeline import TurnPipeline
         from native_host import request as native_request
-        Pipeline(self.db,self.client,self.client.me())
+        TurnPipeline(self.db,self.client,self.client.me())
         empty = self.state/'empty'; empty.mkdir()
         connection = self.state/'connection.json'
         command = [sys.executable, str(ROOT/'app.py'), 'run', '--integrated', '--port','0',
