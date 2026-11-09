@@ -34,7 +34,7 @@ class CoverageTest(unittest.TestCase):
     def test_low_similarity_and_rank_after_three_reach_decisions(self):
         new = dec('new', 'DB', 'DB = PG')
         matching = dec('postgres', '데이터 저장소', '데이터 저장소 = PostgreSQL')
-        self.assertLess(similarities(new, [matching])[0], config.SIMILARITY_MIN)
+        self.assertLess(similarities(new, [matching])[0], 0.35)  # 예전 SIMILARITY_MIN: 이 값 아래도 이제 비교한다
         old = [dec(str(i), 'DB', f'로컬 캐시 {i} = SQLite') for i in range(3)] + [matching]
         decider = RecordingDecider({'PostgreSQL': '같음'})
         result = conflict.handle_request({'newCards': [new], 'existing': old}, None,

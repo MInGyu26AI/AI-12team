@@ -71,8 +71,9 @@ def relabel(cards: list[dict], conversation: str, decider: Decider, enabled: lis
             out.append(c)
             continue
         if rel.get("choice") == "personal":
+            confidence = _conf(rel)  # 0.0 은 유효한 값이므로 None 일 때만 기본값을 쓴다
             out.append({"_msg": c["_msg"], "relevance": "personal", "masked": c.get("masked", False),
-                        "confidence": _conf(rel) or 0.5})
+                        "confidence": 0.5 if confidence is None else confidence})
             continue
         if not tag:
             out.append(c)

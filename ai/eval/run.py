@@ -16,7 +16,7 @@ from pathlib import Path
 from syncup_ai import conflict
 from syncup_ai.classify import classify_indexed
 from syncup_ai.config import LOW_CONFIDENCE, load_env
-from syncup_ai.llm import LLMNotConfigured, decider_from_env, embedder_from_env, from_env
+from syncup_ai.llm import LLMNotConfigured, decider_from_env, from_env
 
 from .gold import CLASS, CONFLICT_PAIRS, EXAMPLES, HACKATHON
 
@@ -80,11 +80,11 @@ def eval_classify(llm, decider=None) -> dict:
     return {"accuracy": acc, "rows": rows}
 
 
-def eval_conflict(llm, embedder, decider=None) -> dict:
+def eval_conflict(llm, decider=None) -> dict:
     tp = fn = fp = tn = exact = 0
     rows = []
     for old, new, want in CONFLICT_PAIRS:
-        judged, conflicts = conflict.check_new_decision(new, [old], llm, embedder, decider)
+        judged, conflicts = conflict.check_new_decision(new, [old], llm, decider)
         got = judged[0]["judgement"] if judged else "무관(후보 아님)"
         should_alert = want in ("충돌", "변경")
         alerted = bool(conflicts)
@@ -121,7 +121,7 @@ def main() -> int:
         res = eval_classify(llm, decider_from_env())
         summary = res["accuracy"]
     else:
-        res = eval_conflict(llm, None if rule else embedder_from_env(), None if rule else decider_from_env())
+        res = eval_conflict(llm, None if rule else decider_from_env())
         summary = {k: v for k, v in res.items() if k != "rows"}
         for r in res["rows"]:
             mark = "✓" if r["got"].startswith(r["want"]) else "✗"

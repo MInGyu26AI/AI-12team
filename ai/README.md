@@ -13,7 +13,7 @@
 | 2. 라벨 | Decisions (`AI_DECISIONS_MODEL`) | 문장마다 관련성·표시·소주제(choice)·변경(predicate). API의 confidence를 우선 사용해 "확인 필요" 표시 |
 | 3. 충돌 | Decisions → chat 모델 | 유효 승인 결정을 한 쌍씩 전부 비교하여 최종 값 기준으로 같음/변경/충돌/무관 판정. 규칙 대체를 허용한 오프라인 호출만 규칙 사용 |
 
-Decisions 설정이 없거나 호출이 실패하면 chat 모델 라벨·판정으로 내려간다. 팀 서버는 두 AI 경로가 모두 실패하면 검사 실패로 보존한다. CLI·오프라인에서 규칙 대체를 허용한 호출은 `checkStatus: degraded`이며 AI 검사 완료가 아니다.
+Decisions 설정이 없거나 호출이 실패하면 chat 모델 라벨·판정으로 내려간다. 단, Decisions가 답을 거절하거나 응답 형식이 잘못되면(`DecisionsResponseError`) chat 라벨로 대신하지 않고 실패로 처리한다([응답 검증](RESPONSE_VALIDATION.md)). 팀 서버는 두 AI 경로가 모두 실패하면 검사 실패로 보존한다. CLI·오프라인에서 규칙 대체를 허용한 호출은 `checkStatus: degraded`이며 AI 검사 완료가 아니다.
 2026-11-08 최종 값 기준과 한 쌍씩 비교를 적용해 합성 사례 96회를 실제 Decisions API로 검사했다. 73회 전체 완료·완료 결과 오판 0회, 23회 낮은 확신도로 미완료였다. 이후 동일 입력 재검증을 제거하고 저장 응답 96회를 재생해 같은 결과와 23회 호출 감소를 확인했다. [최종 값 검증](../../SyncUp_Decisions_최종값_수정과검증_20261108.md) · [재시도 정책 검증](../../SyncUp_통신실패만_재시도_수정검증_20261108.md). 부분 겹침과 실제 사용자 대화의 정확도는 보장하지 않는다.
 
 ```
@@ -22,15 +22,15 @@ ai/
   prompts/conflict_system.md   충돌 판정 프롬프트 (chat 모델용)
   prompts/decisions_criteria.md  Decisions 에 함께 보내는 분류 기준 요약
   syncup_ai/
-    config.py      조정값: 10턴 묶음, AI 답변 발췌 길이, 충돌 호출당 3개·전체 비교 한도, '변경'도 경고할지
+    config.py      조정값: 10턴 묶음, AI 답변 발췌 길이, 충돌 호출당 1쌍·전체 비교 한도, '변경'도 경고할지
     batch.py       대화 횟수(턴) 기준 묶기
     mask.py        민감정보 가림 (외부 AI로 보내기 전에)
     classify.py    분류 → 출력 형식 정리
     schema.py      출력 형식(JSON) 정리·검사 (shared/types.ts 와 같은 모양)
     conflict.py    비슷한 결정 찾기 → AI 판정(같음/변경/충돌/무관) → Conflict 객체
-    similarity.py  임베딩 또는 글자 2-gram 유사도
+    similarity.py  글자 2-gram 유사도 (충돌 후보를 비교할 순서)
     decide.py      Decisions API 로 라벨·확신도 다시 매기기, 충돌 판정
-    llm.py         외부 AI 연결부 (chat 모델 · Decisions · 임베딩)
+    llm.py         외부 AI 연결부 (chat 모델 · Decisions)
   eval/            정확도·충돌 감지율 평가
   tests/           API 키 없이 도는 테스트
 ```

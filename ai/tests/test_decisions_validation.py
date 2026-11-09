@@ -91,17 +91,12 @@ class DecisionsValidationTest(unittest.TestCase):
         self.call({'answers': [answer]}, [question])
         self.rejected({'answers': [{**answer, 'choice': 1}]}, [question])
 
-    def test_score_matches_level_distribution(self):
+    def test_score_questions_are_rejected_before_request(self):
         question = dict(name='s', type='score', instructions='Rate', levels=[{'label': 'low'}, {'label': 'high'}])
-        answer = dict(name='s', type='score', score=.7, confidence=.4,
-                      probabilities=[dict(value=0, label='low', probability=.3),
-                                     dict(value=1, label='high', probability=.7)])
-        self.call({'answers': [answer]}, [question])
-        for value in (True, None, float('nan'), -1, 2, .4):
-            self.rejected({'answers': [{**answer, 'score': value}]}, [question])
-        for field, value in (('label', 'wrong'), ('value', True), ('value', 1.0)):
-            bad = copy.deepcopy(answer); bad['probabilities'][0][field] = value
-            self.rejected({'answers': [bad]}, [question])
+        with patch('syncup_ai.llm._post') as post:
+            with self.assertRaises(LLMError):
+                self.client.decide('synthetic', [question])
+            post.assert_not_called()
 
     def test_chunk_names_and_atomic_failure(self):
         self.client.MAX_QUESTIONS = 1

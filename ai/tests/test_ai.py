@@ -194,6 +194,13 @@ class DecisionsTest(unittest.TestCase):
         self.assertEqual(b["confidence"], 0.8)
         self.assertEqual(len(d.calls[0][1]), 8)  # 문장 2개 × 질문 4개
 
+    def test_personal_relabel_keeps_zero_confidence(self):
+        llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": "오늘 피곤하다", "tag": "research",
+                                  "subtopic": "기타", "topic_key": "컨디션", "content": "피곤"}]})
+        d = FakeDecider(lambda q: {"type": "choice", "name": q["name"], "choice": "personal", "confidence": 0.0} if q["name"] == "u1_rel" else None)
+        [card] = classify({"context": CTX, "messages": [msg(1, "오늘 피곤하다")]}, llm, d)
+        self.assertEqual((card["relevance"], card["confidence"]), ("personal", 0.0))  # 0 이 0.5 로 바뀌면 안 된다
+
     def test_decider_failure_keeps_chat_labels(self):
         class Boom:
             def decide(self, *a): raise RuntimeError("403")
@@ -258,17 +265,6 @@ class MaskTest(unittest.TestCase):
         d = FakeDecider(lambda q: {"type": "choice", "name": q["name"], "choice": "충돌", "confidence": 0.9})
         conflict.check_new_decision(new, [old], decider=d)
         self.assertNoLeak(d.calls[0][0])
-
-    def test_embedding_request(self):
-        from syncup_ai.similarity import similarities
-        sent = []
-
-        class E:
-            def embed(self, texts):
-                sent.extend(texts)
-                return [[1.0, 0.0] for _ in texts]
-        similarities(dec("b", "x", f"키 {SECRETS[0]}"), [dec("a", "x", f"토큰 {SECRETS[1]}")], E())
-        self.assertNoLeak("\n".join(sent))
 
 
 class CliTest(unittest.TestCase):

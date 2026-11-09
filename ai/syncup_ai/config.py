@@ -18,7 +18,6 @@ LOW_CONFIDENCE = 0.6
 
 # ── 충돌 판정 ──
 CONFLICT_TOP_K = 1  # 다른 기존 결정의 값이 섞이지 않게 한 쌍씩 전부 비교한다.
-SIMILARITY_MIN = 0.35  # 이전 검색 기준값. 현재 충돌 후보를 제외하는 데 쓰지 않는다.
 # shortcut: 합성 사례로 측정한 MVP 한도, 실제 팀 데이터 부하가 커지면 다시 평가한다.
 CONFLICT_MAX_CANDIDATES = 30
 CONFLICT_MAX_INPUT_CHARS = 30000

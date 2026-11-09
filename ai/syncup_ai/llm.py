@@ -1,7 +1,7 @@
 """외부 AI 연결부. 분류·충돌 판정 코드는 이 인터페이스만 쓴다.
 
 TODO(미정): 어떤 AI 서비스를 쓸지 확정되면 여기만 맞춘다.
-지금은 OpenAI 호환 /chat/completions · /embeddings 형식만 구현 (OpenAI, 그리고 같은 형식을 지원하는 서비스).
+지금은 OpenAI 호환 /chat/completions 형식만 구현 (OpenAI, 그리고 같은 형식을 지원하는 서비스).
 """
 from __future__ import annotations
 
@@ -36,8 +36,6 @@ class LLM(Protocol):
     def chat_json(self, system: str, user: str) -> dict: ...
 
 
-class Embedder(Protocol):
-    def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
 def parse_json_reply(text: str) -> dict:
@@ -83,12 +81,11 @@ def _post(url: str, key: str, body: dict, timeout: float = 60) -> dict:
 
 
 class OpenAICompatible:
-    def __init__(self, base_url: str, api_key: str, model: str, json_mode: bool = True, embed_model: str = ""):
+    def __init__(self, base_url: str, api_key: str, model: str, json_mode: bool = True):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.json_mode = json_mode
-        self.embed_model = embed_model
         self.before_request = None
 
     def chat_json(self, system: str, user: str) -> dict:
@@ -107,12 +104,6 @@ class OpenAICompatible:
         except (KeyError, IndexError, TypeError) as e:
             raise LLMError(f"예상과 다른 응답 형식: {str(res)[:200]}") from e
         return parse_json_reply(content)
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        if self.before_request:
-            self.before_request()
-        res = _post(f"{self.base_url}/embeddings", self.api_key, {"model": self.embed_model, "input": texts})
-        return [d["embedding"] for d in sorted(res["data"], key=lambda d: d["index"])]
 
 
 class OpenAIResponses:
@@ -140,21 +131,11 @@ def from_env() -> LLM:
         key,
         model,
         json_mode=os.environ.get("AI_JSON_MODE", "true").lower() != "false",
-        embed_model=os.environ.get("AI_EMBED_MODEL", "").strip(),
     )
 
 
-def embedder_from_env() -> Embedder | None:
-    """임베딩 모델이 설정돼 있을 때만. 없으면 None → 글자 n-gram 유사도 사용."""
-    try:
-        llm = from_env()
-    except LLMNotConfigured:
-        return None
-    return llm if getattr(llm,'embed_model',None) else None
-
-
 # ── OpenAI Decisions API (POST /v1/decisions) ──
-# 자유 텍스트·JSON 스키마는 못 만들고, 질문마다 정형 답(choice / predicate / score)과 확률만 돌려준다.
+# 자유 텍스트·JSON 스키마는 못 만들고, 질문마다 정형 답과 확률만 돌려준다. 이 프로젝트는 choice / predicate 만 묻는다.
 # 그래서 문장 나누기·content·topic_key·담당자·기한은 chat 모델이, 라벨·충돌 판정·확신도는 Decisions 가 맡는다.
 # 문서: https://developers.openai.com/api/docs/guides/decisions
 
@@ -198,15 +179,10 @@ def _validate_decision_answers(response: dict, questions: list[dict]) -> dict[st
             if not _decision_number(answer.get('probability')):
                 raise DecisionsResponseError('Decisions probability는 0~1의 유한수여야 합니다.')
         else:
-            if kind == 'choice':
-                values = [option['value'] for option in question['choices']]
-                selected = answer.get('choice')
-                if not any(type(selected) is type(v) and selected == v for v in values):
-                    raise DecisionsResponseError('Decisions choice가 허용 선택지에 없습니다.')
-            else:
-                values = list(range(len(question['levels'])))
-                if not _decision_number(answer.get('score'), len(values) - 1):
-                    raise DecisionsResponseError('Decisions score가 수준 범위를 벗어났습니다.')
+            values = [option['value'] for option in question['choices']]
+            selected = answer.get('choice')
+            if not any(type(selected) is type(v) and selected == v for v in values):
+                raise DecisionsResponseError('Decisions choice가 허용 선택지에 없습니다.')
             # shortcut: 기존 confidence-only 응답도 허용, 제공자 계약을 엄격히 전환할 때 필수화한다.
             if 'confidence' not in answer and 'probabilities' not in answer:
                 raise DecisionsResponseError('Decisions 답에 확신도 근거가 없습니다.')
@@ -222,19 +198,13 @@ def _validate_decision_answers(response: dict, questions: list[dict]) -> dict[st
                     index = next((i for i, v in enumerate(values) if type(value) is type(v) and value == v), None)
                     if index is None or index in distribution:
                         raise DecisionsResponseError('Decisions probabilities 선택지가 예상 밖이거나 중복되었습니다.')
-                    if kind == 'score' and item.get('label') != question['levels'][index]['label']:
-                        raise DecisionsResponseError('Decisions score 수준 이름이 질문과 다릅니다.')
                     distribution[index] = item['probability']
                 # 부동소수점 직렬화 오차만 허용한다. confidence는 이 분포와 별도 값이다.
                 if not math.isclose(sum(distribution.values()), 1, rel_tol=0, abs_tol=1e-6):
                     raise DecisionsResponseError('Decisions probabilities 합이 1이 아닙니다.')
-                if kind == 'choice':
-                    index = next(i for i, v in enumerate(values) if type(selected) is type(v) and selected == v)
-                    if distribution[index] + 1e-6 < max(distribution.values()):
-                        raise DecisionsResponseError('Decisions choice와 확률 분포가 일치하지 않습니다.')
-                elif not math.isclose(answer['score'], sum(i * p for i, p in distribution.items()),
-                                      rel_tol=0, abs_tol=1e-6):
-                    raise DecisionsResponseError('Decisions score와 확률 분포가 일치하지 않습니다.')
+                index = next(i for i, v in enumerate(values) if type(selected) is type(v) and selected == v)
+                if distribution[index] + 1e-6 < max(distribution.values()):
+                    raise DecisionsResponseError('Decisions choice와 확률 분포가 일치하지 않습니다.')
         out[name] = answer
     if out.keys() != expected.keys():
         raise DecisionsResponseError('Decisions 답이 누락되었습니다.')
@@ -254,7 +224,7 @@ class DecisionsClient:
         for question in questions:
             if (not isinstance(question, dict) or not isinstance(question.get('name'), str)
                     or not question['name'] or question['name'] in names
-                    or question.get('type') not in ('choice', 'predicate', 'score')):
+                    or question.get('type') not in ('choice', 'predicate')):
                 raise DecisionsResponseError('Decisions 질문의 name/type이 잘못되었거나 중복되었습니다.')
             names.add(question['name'])
         out: dict[str, dict] = {}

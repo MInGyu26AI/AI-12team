@@ -10,7 +10,7 @@ import sys
 
 from . import batch, classify, conflict
 from .config import load_env
-from .llm import LLMNotConfigured, decider_from_env, embedder_from_env, from_env
+from .llm import LLMNotConfigured, decider_from_env, from_env
 
 
 def main() -> int:
@@ -28,7 +28,7 @@ def main() -> int:
             llm = from_env()
         except LLMNotConfigured:
             llm = None  # 규칙 판정으로
-        res = conflict.handle_request(req, llm, embedder_from_env(), decider_from_env())
+        res = conflict.handle_request(req, llm, decider_from_env())
     elif cmd == "batch":
         batches, leftover = batch.take_ready_batches(req.get("messages") or [], flush=bool(req.get("flush")))
         res = {"batches": batches, "leftover": leftover}

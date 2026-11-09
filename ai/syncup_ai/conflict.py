@@ -15,7 +15,7 @@ import time
 
 from . import config
 from .decide import judge_pairs
-from .llm import LLM, Decider, Embedder, LLMError, RetryableLLMError
+from .llm import LLM, Decider, LLMError, RetryableLLMError
 from .similarity import similarities
 from .mask import mask_text
 
@@ -32,7 +32,7 @@ def _is_decision(c: dict) -> bool:
             and c.get("decisionState", "active") in ("active", "review"))
 
 
-def find_candidates(new: dict, existing: list[dict], embedder: Embedder | None = None) -> list[dict]:
+def find_candidates(new: dict, existing: list[dict]) -> list[dict]:
     pool = ordered_candidates(new, existing)
     if not pool:
         return []
@@ -124,7 +124,7 @@ def _confident(result: dict) -> bool:
 
 
 def check_new_decision(
-    new: dict, existing: list[dict], llm: LLM | None = None, embedder: Embedder | None = None,
+    new: dict, existing: list[dict], llm: LLM | None = None,
     decider: Decider | None = None,
     allow_rules: bool = True,
 ) -> tuple[list[dict], list[dict]]:
@@ -132,7 +132,7 @@ def check_new_decision(
     if not _is_decision(new):
         return [], []
     deadline = time.monotonic() + config.CONFLICT_CHECK_SECONDS
-    candidates = find_candidates(new, existing, embedder)
+    candidates = find_candidates(new, existing)
     if not candidates:
         return [], []
     judged = []
@@ -206,7 +206,7 @@ def check_new_decision(
     return judged, conflicts
 
 
-def handle_request(request: dict, llm: LLM | None, embedder: Embedder | None = None, decider: Decider | None = None, *, allow_rules: bool = True) -> dict:
+def handle_request(request: dict, llm: LLM | None, decider: Decider | None = None, *, allow_rules: bool = True) -> dict:
     """{"newCards": [...], "existing": [...]} → {"ok", "results": [{cardId, judgements}], "conflicts": [...]}
 
     새 카드끼리도 비교한다 (한 번에 여러 장 승인할 때 앞 카드가 '기존'이 됨)."""
@@ -214,7 +214,7 @@ def handle_request(request: dict, llm: LLM | None, embedder: Embedder | None = N
         existing = list(request.get("existing") or [])
         results, conflicts = [], []
         for card in request.get("newCards") or []:
-            judged, found = check_new_decision(card, existing, llm, embedder, decider, allow_rules)
+            judged, found = check_new_decision(card, existing, llm, decider, allow_rules)
             results.append({"cardId": card.get("id"), "judgements": judged})
             conflicts += found
             existing.append(card)

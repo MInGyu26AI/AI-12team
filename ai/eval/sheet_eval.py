@@ -17,7 +17,7 @@ from pathlib import Path
 from syncup_ai import conflict
 from syncup_ai.classify import classify_indexed
 from syncup_ai.config import load_env
-from syncup_ai.llm import LLMNotConfigured, decider_from_env, embedder_from_env, from_env
+from syncup_ai.llm import LLMNotConfigured, decider_from_env, from_env
 
 from .sheets import DATA, read_table
 
@@ -163,14 +163,14 @@ def _units(field: str) -> list[str]:
     return [u.strip() for u in field.split("/") if u.strip()]
 
 
-def eval_judge(gold, pairs, llm, embedder, decider):
+def eval_judge(gold, pairs, llm, decider):
     by_unit = {g["unit"]: g for g in gold}
     rows, tp, fn, fp, tn, exact = [], 0, 0, 0, 0, 0
     for p in pairs:
         old = [_gold_card(by_unit[u]) for u in _units(p["old_unit"]) if u in by_unit]
         new_u = _units(p["new_unit"])[0]
         new = _gold_card(by_unit[new_u])
-        judged, conflicts = conflict.check_new_decision(new, old, llm, embedder, decider)
+        judged, conflicts = conflict.check_new_decision(new, old, llm, decider)
         want = p["label"].replace("바뀜", "변경")
         alert = bool(conflicts)
         should = want in ("충돌", "변경")
@@ -184,11 +184,11 @@ def eval_judge(gold, pairs, llm, embedder, decider):
 
 
 # ── 3) 끝까지: 예측 카드 → 충돌 ──
-def eval_e2e(preds, pairs, llm, embedder, decider):
+def eval_e2e(preds, pairs, llm, decider):
     existing, found = [], []  # found: (old message_id, new message_id, judgement)
     for mid, c in preds:
         if c["relevance"] == "related" and c["tag"] == "decision":
-            _, conflicts = conflict.check_new_decision(c, existing, llm, embedder, decider)
+            _, conflicts = conflict.check_new_decision(c, existing, llm, decider)
             found += [(x["cardA"]["id"].split("#")[0], mid, x["judgement"]) for x in conflicts]
             existing.append(c)
     rows, tp, fn, fp, tn = [], 0, 0, 0, 0
@@ -209,18 +209,18 @@ def main() -> int:
     what = sys.argv[1] if len(sys.argv) > 1 else "judge"
     rule = "--rule" in sys.argv
     msgs, gold, pairs = load()
-    llm = decider = embedder = None
+    llm = decider = None
     if not rule:
         try:
             llm = from_env()
         except LLMNotConfigured as e:
             print(e, file=sys.stderr)
             return 1
-        decider, embedder = decider_from_env(), embedder_from_env()
+        decider = decider_from_env()
     print(f"판정: {'Decisions' if decider else ('chat 모델' if llm else '규칙')}", file=sys.stderr)
 
     if what == "judge":
-        res = eval_judge(gold, pairs, llm, embedder, decider)
+        res = eval_judge(gold, pairs, llm, decider)
         for r in res["rows"]:
             print(f"{'✓' if r['want'] in r['got'] or (r['want'] == '비교 안 함' and set(r['got']) <= {'무관', '비교 안 함'}) else '✗'} "
                   f"{r['pair']} [{r['want']} → {', '.join(r['got'])}] {r['old']}  vs  {r['new']}")
@@ -234,7 +234,7 @@ def main() -> int:
         res = {"classify": acc, "rows": rows, "preds": preds}
         summary = {"classify": acc}
         if what == "e2e":
-            e2e = eval_e2e(preds, pairs, llm, embedder, decider)
+            e2e = eval_e2e(preds, pairs, llm, decider)
             res["e2e"] = e2e
             summary["e2e"] = {k: v for k, v in e2e.items() if k not in ("rows", "all_alerts")}
     else:
