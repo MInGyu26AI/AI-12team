@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, FolderOpen, Puzzle, RefreshCw, Settings, ShieldCheck, ToggleRight } from "lucide-react";
+import { Download, FolderOpen, Puzzle, RefreshCw, Server, Settings, ShieldCheck, ToggleRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import release from "@/lib/extension-release.json";
 import { cn } from "@/lib/utils";
@@ -45,12 +45,22 @@ const STEPS = [
     body: <>주소창 오른쪽 퍼즐 아이콘 → ‘싱크업 SyncUp’ 옆 핀(📌)을 눌러 고정해요.</>,
   },
   {
+    icon: Server,
+    title: "로컬 수집기 연결",
+    body: (
+      <>
+        확장은 이 컴퓨터의 로컬 수집기를 거쳐서만 동작해요. 저장소의 <code>통합_사용법.md</code> 2·4절에 따라 수집기를 먼저 실행하고,
+        확장 ID로 Native Messaging 설정(<code>prepare_native.py</code>)을 만들어 크롬에 등록해요.
+      </>
+    ),
+  },
+  {
     icon: Settings,
     title: "처음 설정",
     body: (
       <>
-        싱크업 아이콘 → 팀 이름 · 프로젝트 주제 · 내 이름 입력 후 저장. 승인함 주소는 이 사이트로 미리 채워져 있어요. 이미
-        열어 둔 ChatGPT 탭은 새로고침해 주세요.
+        싱크업 아이콘 → 로컬 수집기가 알려 준 등록된 팀과 사용자를 확인하고 프로젝트 주제를 입력해 저장해요. 승인함 주소는 이
+        사이트로 미리 채워져 있어요. 이미 열어 둔 ChatGPT 탭은 새로고침해 주세요.
       </>
     ),
   },
@@ -123,7 +133,7 @@ export default function InstallPage() {
           </p>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground break-keep">
             <li>자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화만 읽어요.</li>
-            <li>개인 내용은 버리고, 전화번호 같은 민감정보는 가려요.</li>
+            <li>이 기기의 개인정보 검사가 개인 내용으로 본 발화는 외부 AI와 팀에 보내지 않고, 전화번호 같은 민감정보는 가려요.</li>
             <li>
               팀에는 <Link href="/review" className="underline">승인함</Link>에서 내가 체크해서 공유한 카드만 올라가요.
             </li>

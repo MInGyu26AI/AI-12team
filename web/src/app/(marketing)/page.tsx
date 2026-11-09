@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 
 // 피그마 1번: 서비스 첫 화면
@@ -11,7 +12,7 @@ const FEATURES = [
   { title: "결정 기록", body: "언제, 누가, 왜 정했는지 쌓이고\n복사해서 바로 이어 써요." },
 ];
 
-const STEPS = ["팀 만들기·초대", "브라우저 확장 연결", "대화 자동 수집", "승인함에서 체크", "충돌 확인", "팀 결정 기록"];
+const STEPS = [START.step, "브라우저 확장 연결", "대화 자동 수집", "승인함에서 체크", "충돌 확인", "팀 결정 기록"];
 
 export default function LandingPage() {
   return (
@@ -30,8 +31,8 @@ export default function LandingPage() {
             <br className="hidden sm:block" /> 내가 승인한 것만 팀과 나누며, 결정이 어긋나면 먼저 알려드려요.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/team/new" className={cn(buttonVariants({ size: "lg" }), "h-12 bg-brand px-7 text-base hover:bg-brand-hover")}>
-              팀 만들고 시작하기
+            <Link href={START.href} className={cn(buttonVariants({ size: "lg" }), "h-12 bg-brand px-7 text-base hover:bg-brand-hover")}>
+              {START.label}
             </Link>
             <Link href="/install" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "h-12 bg-background px-7 text-base")}>
               브라우저 확장 설치
