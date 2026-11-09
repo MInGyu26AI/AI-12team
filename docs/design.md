@@ -23,7 +23,7 @@
 
 정책 v3는 완전한 JSON 객체 하나만 받습니다. 객체만 감싼 코드 블록은 허용하지만 설명문, 중복 키, 여러 객체는 거절합니다. 이전 정책의 판정 캐시는 재사용하지 않습니다. 프로젝트 맥락이 없는 민감 업무 문장은 보수적으로 보류될 수 있습니다.
 
-구현: [local_privacy.py](../local_privacy.py) · [현재 모델·정책 검증](appendix/privacy-model-v3.md)
+구현: [local_privacy.py](../local_privacy.py)(판정 순서·보류), [privacy_rules.py](../privacy_rules.py)(규칙 가림), [privacy_model.py](../privacy_model.py)(로컬 모델 연결), [outbound_guard.py](../outbound_guard.py)(외부 요청 직전 검사) · [현재 모델·정책 검증](appendix/privacy-model-v3.md)
 
 ## 승인과 팀 격리
 
@@ -31,7 +31,7 @@
 
 서버는 요청자의 인증과 팀 소속을 확인합니다. PostgreSQL의 제한된 API 역할과 행 수준 접근 제어(RLS)도 팀 간 조회·쓰기를 제한합니다. UI에서 팀을 선택했다는 사실만으로 접근 권한을 인정하지 않습니다.
 
-구현: [delivery.py](../delivery.py), [team_server.py](../team_server.py), [team_schema.sql](../team_schema.sql)
+구현: [delivery.py](../delivery.py), [team_server.py](../team_server.py), [team_access.py](../team_access.py), [team_schema.sql](../team_schema.sql)
 
 ## 결정 비교와 복구
 
@@ -41,4 +41,4 @@
 
 서버 전체 재시작 뒤에는 인증된 팀 요청이 한 번 있어야 작업이 다시 시작됩니다. 임대가 만료된 뒤 이어가며, 종료 전에 커밋되지 않은 요청은 다시 실행될 수 있습니다.
 
-구현: [충돌 판정](../ai/syncup_ai/conflict.py), [팀 기록·진행 저장](../team_records.py)
+구현: [충돌 판정](../ai/syncup_ai/conflict.py), [검사 대기열·진행 저장](../conflict_checks.py), [팀별 검사 실행](../conflict_scheduler.py), [보드의 검사 상태](../team_board.py)

@@ -1,10 +1,8 @@
 # SyncUp local collector
 
-## 통합 작업본
+Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 Mac 프로그램이다. 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버는 클라우드 이미지(`Dockerfile.cloud`)로도 실행할 수 있다.
 
-기존 로컬 모드에 더해 최신 팀 프론트·AI 분류·Chrome 연결을 통합한 별도 작업본입니다. 실행 절차와 검증 한계는 [통합 사용법](통합_사용법.md), 결과는 [통합 검증](통합_검증.md)을 확인하세요. 기본 CLI 실행은 기존 모드를 유지하며 `--integrated`로 통합 모드를 선택합니다.
-
-Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 Mac 프로그램이다. 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버 구현은 포함하지만 운영 배포는 하지 않았다.
+`--integrated`를 붙이면 ChatGPT Chrome 확장, 팀 웹(`web/`), AI 분류 모듈(`ai/`)을 함께 쓰는 통합 모드로 실행한다. 통합 모드에는 팀 서버 연결(`--team-api`)이 필요하다. 실행 절차는 [통합 사용법](통합_사용법.md), 당시 검증 결과는 [통합 검증](통합_검증.md)에 있다. 설계와 최근 검증 근거는 [docs/README.md](docs/README.md)에서 시작한다.
 
 ## 빌드
 
@@ -22,6 +20,8 @@ cp target/release/syncup-collector bin/syncup-collector
 
 실행 환경에 `OPENAI_API_KEY`를 준비한 뒤, 수집할 프로젝트와 새 상태 폴더를 지정한다. 키를 소스나 명령 인수에 직접 넣지 않는다.
 
+외부 AI로 보내기 전에 기기 안 Ollama 모델이 발췌를 먼저 검사한다. 기본 모델은 `127.0.0.1:11434`의 `gemma4:e4b-it-qat`이고 `SYNCUP_LOCAL_PRIVACY_MODEL`로 바꿀 수 있다. 모델이 없거나 응답이 잘못되면 그 발췌는 보내지 않고 보류한다. 필터 설명은 [데이터 흐름과 처리 경계](docs/design.md)에 있다.
+
 ```sh
 python3 app.py run --project /절대/경로/프로젝트 --state /절대/경로/새-상태-폴더
 ```
@@ -37,7 +37,7 @@ python3 app.py run --project /프로젝트 --state /개인-상태 \
 
 [팀 서버 설치·사용법](팀_서버_사용법.md)과 [팀 격리 검증 범위](팀_격리_검증.md)를 참고한다. 기존 로컬 승인은 원격 팀에 자동 전송하지 않는다. 상태 폴더를 다른 사용자나 다른 서버에 재연결할 수 없으며, 그 경우 새 폴더가 필요하다.
 
-수집 대상은 해당 프로젝트에서 수집 시작 이후 생성된 새 Codex·Claude Code 세션이다. 발췌는 공유 승인 전에 외부 OpenAI API로 보내 분류·초안을 만든다. 팀 공유 승인은 외부 AI 분석 동의와 별개다. 통합 모드에서는 ChatGPT Chrome 확장과 선택한 내보내기·붙여넣기 입력도 지원한다. 일반 Claude 웹 자동 수집은 포함하지 않는다.
+수집 대상은 해당 프로젝트에서 수집 시작 이후 생성된 새 Codex·Claude Code 세션이다. 기기 안 필터를 통과한 발췌는 공유 승인 전에 외부 OpenAI API로 보내 분류·초안을 만든다. 팀 공유 승인은 외부 AI 분석 동의와 별개다. 통합 모드에서는 ChatGPT Chrome 확장과 선택한 내보내기·붙여넣기 입력도 지원한다. 일반 Claude 웹 자동 수집은 포함하지 않는다.
 
 Node의 환경 파일 옵션을 사용하는 실행 방법과 포트·기간·Claude 설정 폴더 변경은 [사용법](사용법.md)에 설명했다.
 
@@ -62,26 +62,30 @@ python3 app.py run --project /프로젝트 --state /새-상태 \
   --claude-dir /대화/Claude --claude-project-name work
 ```
 
-Windows용 실행 파일명은 `syncup-collector.exe`, macOS·Linux는 `syncup-collector`다. OS별 네이티브 빌드가 필요하다. Windows 잠금은 `msvcrt`, macOS·Linux 잠금은 `fcntl`을 사용한다. 현재 제공된 로컬 실행 파일은 Apple Silicon Mac용이다.
+Windows용 실행 파일명은 `syncup-collector.exe`, macOS·Linux는 `syncup-collector`다. OS별 네이티브 빌드가 필요하다. Windows 잠금은 `msvcrt`, macOS·Linux 잠금은 `fcntl`을 사용한다. 검증한 실행 파일은 Apple Silicon Mac에서 빌드했다.
 
 ## 검사
 
-먼저 Rust 실행 파일을 빌드한다. 아래 검사는 임시 데이터와 가짜 AI 응답을 사용하며, 일부는 실제 루프백 HTTP 서버와 자식 프로세스를 실행한다. 외부 API를 호출하는 `selfcheck.py --live`는 별도 선택이며 아래 명령에는 포함하지 않는다.
+`model` 묶음을 뺀 모든 검사는 임시 데이터와 가짜 AI 응답만 쓴다. 진입점은 `run_checks.py` 하나이며, 필요한 환경별로 묶여 있다. 고른 묶음의 검사는 하나가 실패해도 끝까지 돌고, 하나라도 실패하면 종료 코드가 0이 아니다.
 
 ```sh
-python3 check_scanner.py
-python3 selfcheck.py
-python3 check_integrity.py
-python3 check_claude.py
-python3 check_portability.py
+python3 run_checks.py            # local: Docker·Rust·로컬 모델 없이 (기본값)
+python3 run_checks.py rust       # 먼저 Rust 실행 파일(bin/syncup-collector)을 빌드해야 한다
+python3 run_checks.py team       # Docker와 requirements-team.txt 가 필요하다
+python3 run_checks.py all        # local + rust + team
+python3 run_checks.py --list     # 어떤 검사가 무엇을 다루는지 목록만 출력
 ```
 
-팀 격리 검사는 PostgreSQL 드라이버와 실행 중인 Docker가 필요하다. 실제 PostgreSQL 컨테이너를 별도로 만들고 가상 사용자·팀 데이터만 사용한 뒤 종료한다. 기존 DB나 팀 서버를 검사 대상으로 사용하지 않는다.
+| 묶음 | 필요 환경 | 다루는 범위 |
+|---|---|---|
+| `local` | macOS (로컬 앱 회귀 검사가 `app.py run` 을 실제로 띄움), Python 3, Node, `web/`·`extension/` 에서 각각 `npm ci` (웹 연결 검사가 Next를 띄우고, 두 단위 시험이 각 프로젝트의 러너로 돈다) | 로컬 수집·배치·후보, 개인정보 필터, 보존 정책, 재시도·복구, 웹 연결, 웹·확장 단위 시험, AI 모듈, 가림 공용 사례(Python·TS) |
+| `rust` | Rust 빌드 결과 | Codex·Claude Code 로그 스캐너, 이식성 |
+| `team` | Docker, `python3 -m pip install -r requirements-team.txt` | 팀 격리(RLS), 로컬 ↔ 팀 서버 통합, 충돌 검사 재개, DB 운영·복구, 클라우드 HTTP 경계, 진단 기록 (격리·통합 검사는 `check_server_recovery.py` 가 상속으로 함께 실행) |
+| `model` | 로컬 Ollama 와 기본 개인정보 모델(`privacy_model.DEFAULT_MODEL`) (선택 측정, `all` 에 포함하지 않음) | 실제 로컬 개인정보 모델 측정과 모델 → 필터 → 승인 흐름 (다른 모델은 `check_local_privacy_model.py --model …` 로 직접 실행) |
 
-```sh
-python3 -m pip install -r requirements-team.txt
-python3 check_teams.py
-```
+팀 서버 검사는 실제 PostgreSQL 컨테이너를 따로 만들고 가상 사용자·팀 데이터만 쓴 뒤 종료한다. 기존 DB나 팀 서버를 검사 대상으로 쓰지 않는다. 외부 API를 부르는 `selfcheck.py --live` 는 러너에 넣지 않았다. `check_ui_fixture.py` 는 화면 확인용 합성 서비스를 띄우는 도구라 검사 목록에 없다.
+
+가림 규칙은 Python(`ai/syncup_ai/mask.py`)과 웹 목업용 TypeScript 사본(`shared/classify.ts`) 두 곳에 있다. 둘 다 `shared/mask-cases.json` 의 같은 기대 결과로 검사하므로, 한쪽 규칙을 고치면 사례를 먼저 더하고 두 구현을 함께 맞춘다.
 
 ## 저장소 범위
 

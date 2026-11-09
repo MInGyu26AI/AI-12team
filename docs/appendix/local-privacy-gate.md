@@ -11,14 +11,14 @@
 ## 1. 보장하는 것과 보장하지 않는 것
 
 보장하는 것:
-- 동균 담당 코드의 모든 외부 AI 호출은 이 필터를 거친다(3절). 대상 호출은 `integration.Pipeline.process`, `collector.classify`, `collector.draft`이다.
+- 동균 담당 코드의 모든 외부 AI 호출은 이 필터를 거친다(3절). 대상 호출은 `batch_classification.classify_queued`, `collector.classify`, `collector.draft`이다.
 - 외부 요청에는 필터가 허용한 정리본만 실린다. 원문은 로컬 SQLite에 그대로 남는다.
 - 모델이 없거나, 시간을 넘기거나, 오류가 나거나, 출력이 잘못되면 보류한다. 모델이 판단하지 못한 경우와 규칙과 모델이 엇갈린 경우도 보류한다. 재시작해도 보류 상태는 유지된다.
 - 요청 직전에 한 번 더 검사한다. 필터를 통과한 요청에도 비밀값이나 제외된 문장 조각이 남아 있으면 전송을 멈추고 보류한다(`OutboundGuard`).
 
 보장하지 않는 것:
 - 모델 판단은 확률적이다. 아래 측정치는 합성 문장 40개에 대한 결과이며 재현율을 보장하지 않는다.
-- 팀 서버의 충돌 검사(`team_records.py` → `ai/syncup_ai/conflict.py`)는 승인된 카드를 외부 AI로 보낸다. 이 경로는 이 필터 밖이다(6절 WARN).
+- 팀 서버의 충돌 검사(`conflict_checks.py` → `ai/syncup_ai/conflict.py`)는 승인된 카드를 외부 AI로 보낸다. 이 경로는 이 필터 밖이다(6절 WARN).
 - 하은 담당 CLI와 평가 도구(`ai/syncup_ai/__main__.py`, `ai/eval/*`)는 이 필터를 거치지 않는다.
 - `masked=true`는 예전 정규식이 무언가를 가렸다는 뜻일 뿐이며, 이 필터를 통과했다는 뜻이 아니다. 이 필터를 통과한 결과는 `privacy_jobs.decision='allow'`로만 표시된다.
 
@@ -40,20 +40,20 @@ flowchart LR
 |---|---|---|
 | allow `work` | 모델이 업무로 판단했고, 개인 단어 목록에 걸리지 않았다. 프로젝트 주제에 있는 단어는 개인 단어로 세지 않는다. | 규칙으로 가린 본문을 보낸다. |
 | allow `mixed_redacted` | 모델이 표시한 개인 구간이 원문에 정확히 있다. 가린 뒤 남은 부분에 개인 단어가 없고, 업무 내용이 충분히 남는다. | 개인 구간을 `[개인사정]`으로 바꿔 보낸다. |
-| exclude `personal` / `user_excluded` | 모델이 개인 내용으로 판단했거나, 사용자가 제외했다. | 보내지 않는다. 묶음의 모든 발화가 제외되면 작업이 `done`이 되고 사유는 '개인 내용 · 로컬에서 제외'다. |
+| exclude `personal` / `user_excluded` | 모델이 개인 내용으로 판단했거나, 사용자가 제외했다. | 보내지 않는다. 묶음의 모든 발화가 제외되면 작업이 `done`이 되고 사유는 '개인 내용 · 로컬에서 제외, 외부 전송 없음'이다. |
 | hold `model_unavailable`·`model_timeout`·`model_error` | 런타임 문제다. | 60초 뒤 자동으로 다시 검사한다. |
 | hold `model_output`·`model_unsure`·`rule_model_conflict`·`residual_personal` | 내용 판단이 어렵다. | 사용자가 처리할 때까지 보류한다. |
 | hold `secret_in_payload`·`blocked_fragment` | 요청 직전 재검사에 걸렸다. | 사용자가 처리할 때까지 보류한다. |
 
-예: `병원 때문에 발표자료는 금요일에 공유할게`는 `[개인사정] 발표자료는 금요일에 공유할게`로 바뀌어 전송된다. 카드 근거의 `messageId`는 로컬 원문 발화를 그대로 가리킨다. 후보를 수정할 때는 원문과 정리본 중 어느 쪽에 있는 문장도 근거로 고를 수 있다. 개인 구간을 안전하게 떼어낼 수 없으면 묶음 전체를 보류한다. 그러면 같은 묶음의 업무 발화도 사용자가 처리할 때까지 늦어진다.
+예: `병원 때문에 발표자료는 금요일에 공유할게`는 `[개인사정] 발표자료는 금요일에 공유할게`로 바뀌어 전송된다. 카드 근거의 `messageId`는 로컬 원문 발화를 그대로 가리킨다. 후보를 수정할 때 근거 문장은 외부 AI가 받은 정리본에 있어야 한다. 개인 구간을 안전하게 떼어낼 수 없으면 묶음 전체를 보류한다. 그러면 같은 묶음의 업무 발화도 사용자가 처리할 때까지 늦어진다.
 
 ## 3. 우회 경로 점검
 
 | 입력 경로 | 필터 위치 | 확인한 검사 |
 |---|---|---|
-| 자동 수집(사용자/AI 발화), 붙여넣기, 내보내기 JSON/ZIP, 선택 전송 | `Pipeline.process` | `check_local_privacy.RulesOnEveryRoute`, Codex 12경로 하네스 |
+| 자동 수집(사용자/AI 발화), 붙여넣기, 내보내기 JSON/ZIP, 선택 전송 | `batch_classification.classify_queued` | `check_local_privacy.RulesOnEveryRoute`. 2026-11-08에 함께 돌린 Codex 12경로 하네스는 지금 돌지 않는다([부록 안내](README.md#원본-평가-자료)). |
 | 격리 입력 복구(`intake.retry`) | 같은 위치 | 같은 검사 |
-| Codex·Claude Code 로컬 작업(`capture_local_jobs`) | 같은 위치 | 같은 검사 |
+| Codex·Claude Code 로컬 작업(`turn_intake.capture_scanned_jobs`) | 같은 위치 | 같은 검사 |
 | 분류 실패 재시도(`jobs.retry`) | 같은 위치. 재시도할 때마다 다시 검사한다. | `retry` 경로 |
 | 이전 묶음 문맥(`contextMessages`) | 발화마다 검사한다. 허용되지 않은 문맥은 빼고 보낸다. | `context`, `test_earlier_personal_context_is_not_attached` |
 | 마스킹 이전에 저장된 `job_context` | 실행할 때 원문부터 다시 가린다. 저장 당시의 `masked` 표시는 믿지 않는다. | `stored_job` |
@@ -63,23 +63,23 @@ flowchart LR
 
 ## 4. 저장과 버전
 
-로컬 SQLite에 테이블 3개를 추가했다(`integration_store.initialize_integration`에서 생성).
+로컬 SQLite에 테이블 3개를 추가했다(`local_privacy.initialize`에서 생성).
 
 - `privacy_results(key, policy, model, label, decided)`: 로컬 모델의 원 답변 캐시. `label`에는 판정과 개인 구간의 **문자 위치만** 저장한다. 텍스트는 복사하지 않는다. 키는 `(정책, 모델 식별자, 역할, 가린 본문)`의 해시다. 정책이나 모델이 바뀌면 모두 다시 판단한다.
 - `privacy_jobs(job, policy, model, decision, reason, detail, decided)`: 작업 단위 판정 결과. `detail`에는 발화별 판정, 사유, 범주, 적용된 규칙 이름을 담는다. 허용된 발화만 정리본을 함께 담는다.
 - `privacy_overrides(job, message_id, action='exclude', decided)`: 사용자가 직접 제외한 발화.
 
-모델 식별자는 `ollama:<이름>@<digest 앞 12자>` 형식이다(예: `ollama:gemma3:12b@f4031aab637d`). 외부 요청, 로그, 오류, 상태 응답에는 원문을 넣지 않는다. `diagnostics.py`는 수정하지 않았다.
+모델 식별자는 `ollama:<이름>@<digest 앞 12자>` 형식이다(예: `ollama:gemma3:12b@f4031aab637d`). 외부 요청, 로그, 오류, 상태 응답에는 원문을 넣지 않는다.
 
 ## 5. 로컬 모델
 
-이미 설치된 Ollama 0.17.7을 다시 사용했다. Ollama는 `127.0.0.1:11434`에서만 요청을 받는다. 새 모델은 다운로드하지 않았다. 모델 연결에는 다음 제한이 있다.
+2026-11-08 40건 측정에는 이미 설치된 Ollama 0.17.7과 모델을 썼고 새 모델은 받지 않았다(4B 비교에서는 승인 후 qwen3:4b를 받았다). 현재 검증 환경은 [모델·파서 통합 기록](privacy-model-v3.md)에 있다. 모델 연결에는 다음 제한이 있다.
 
 - 주소는 `http://127.0.0.1` 또는 `http://[::1]`만 받는다. `localhost`라는 이름, 다른 호스트, https, 경로, 계정 정보가 들어간 주소는 거절한다.
 - 이름에 `cloud`가 들어간 모델은 거절한다. `/api/show`의 `remote_host`/`remote_model`로 원격에서 실행되는 모델인지 확인하고, 그렇다면 거절한다.
 - 설정이 잘못되면 모델이 없는 것으로 보고 전부 보류한다.
 
-설정(환경 변수 또는 `ai/.env`):
+설정(환경 변수. 통합 모드는 `ai/.env`도 읽는다):
 
 | 변수 | 기본값 | 의미 |
 |---|---|---|
@@ -87,15 +87,15 @@ flowchart LR
 | `SYNCUP_LOCAL_PRIVACY_URL` | `http://127.0.0.1:11434` | 루프백 주소만 허용한다. |
 | `SYNCUP_LOCAL_PRIVACY_TIMEOUT` | `90` | 초 단위. 1~600 범위 밖이면 전부 보류한다. |
 
-측정 조건: 합성 한국어 40건(`check_local_privacy_model.py`). 구성은 업무 12, 업무이지만 도메인 단어가 들어간 문장 3(+프로젝트 주제를 넣은 3), 개인 10, 혼합 8(+프로젝트 주제 1), 프롬프트 주입 3이다. Apple Silicon, RAM 36 GB, 루프백 외 소켓은 막았다. 결과 원본은 `docs/appendix/local-privacy-eval-20261108/`에 있다.
+측정 조건(2026-11-08 당시): 합성 한국어 40건(`check_local_privacy_model.py`, 지금은 사례가 57건으로 늘어 아래 표와 그대로 비교되지 않는다). 구성은 업무 12, 업무이지만 도메인 단어가 들어간 문장 3(+프로젝트 주제를 넣은 3), 개인 10, 혼합 8(+프로젝트 주제 1), 프롬프트 주입 3이다. Apple Silicon, RAM 36 GB, 루프백 외 소켓은 막았다. 결과 원본은 `docs/appendix/local-privacy-eval-20261108/`에 있다.
 
 | 모델(설치 크기, 라이선스) | 유출 | 개인·주입 차단 | 혼합 분리 | 업무 통과 | 도메인 단어 (주제 없음 / 있음) | 첫 호출 | 중앙값 / 최대 |
 |---|---|---|---|---|---|---|---|
-| gemma3:12b (8.1 GB, Gemma Terms) — **기본값** | 0 | 13/13 | 7/8 | 12/12 | 0/3 / 3/3 | 39 s | 1.3 s / 2.5 s |
+| gemma3:12b (8.1 GB, Gemma Terms) — 당시 기본값 | 0 | 13/13 | 7/8 | 12/12 | 0/3 / 3/3 | 39 s | 1.3 s / 2.5 s |
 | qwen3:14b (9.3 GB, Apache-2.0) | 0 | 13/13 | 8/8 | 12/12 | 0/3 / 3/3 | 42 s | 3.1 s / 15 s |
 | llama3.2 3B (2.0 GB, Llama 3.2 Community) | 0 | 13/13 | 1/8 | 12/12 | 0/3 / 3/3 | 4 s | 0.5 s / 1.4 s |
 
-- 기본값은 gemma3:12b로 정했다. 혼합 문장 분리와 지연 시간 사이의 균형 때문이다.
+- 당시 기본값은 gemma3:12b로 정했다. 혼합 문장 분리와 지연 시간 사이의 균형 때문이다. 현재 기본값은 위 설정 표의 gemma4:e4b-it-qat이다([모델·파서 통합 기록](privacy-model-v3.md)).
   - qwen3:14b가 가장 정확하지만 더 느리다.
   - 가벼운 llama3.2 3B도 유출은 없었다. 다만 혼합 문장 대부분을 통째로 제외해 업무 내용을 잃는다.
 
@@ -136,17 +136,16 @@ flowchart LR
 3. **도메인 단어 오보류**: 주제에 없는 도메인 단어(병원·가족·대출 등)가 들어간 업무 문장은 보류된다. 사용자가 처리할 방법은 제외, 또는 주제를 바꾼 뒤 재검사뿐이다. '업무로 확인하고 보내기'(사용자 허용)는 넣지 않았다. 브리지 신뢰 범위와 관련된 팀 결정이 필요하다.
 4. **제외는 되돌릴 수 없다**: 제외된 발화는 승인함 '제외됨'에서 발화 단위로 사유와 함께 확인할 수 있다(2026-11-08 반영). 다만 복원하거나 강제로 보내는 기능은 없다. 가벼운 모델일수록 업무 내용을 잃는 경우가 많다.
 5. **묶음 단위 보류**: 발화 하나가 보류되면 묶음 전체를 보내지 않는다.
-6. **시작과 자원**: 첫 호출은 39~96초가 걸렸고, 기본 시간 제한은 90초다. 모델을 올리는 데 그보다 오래 걸리면 런타임 보류가 된다. 그 경우 60초 뒤 자동으로 재검사한다. 실행 중에는 8~9 GB 메모리를 상주로 쓴다(`keep_alive` 30분).
+6. **시작과 자원**: 2026-11-08 gemma3:12b 측정에서 첫 호출은 40건 측정에서 39초, 61건 측정에서 10.4초였고 상주 메모리는 10.6 GB였다(5절 표). 기본 시간 제한은 90초다. 모델을 올리는 데 그보다 오래 걸리면 런타임 보류가 되고, 60초 뒤 자동으로 재검사한다. 모델은 마지막 요청 뒤 60초 동안 메모리에 남는다(`keep_alive`). 현재 기본 모델의 메모리 측정은 [모델·파서 통합 기록](privacy-model-v3.md)에 있다.
 7. **승인 이후 경로**: 팀 서버 충돌 검사는 승인된 카드를 외부 AI로 보낸다. 사용자가 승인 전에 수정한 문장은 이 필터로 다시 검사하지 않는다. 담당은 Decisions·팀 서버 쪽이며, 팀 합의가 필요하다.
 8. **이 필터 밖의 도구**: `ai/syncup_ai/__main__.py`와 `ai/eval/*`은 외부 AI를 직접 호출한다(하은 담당). 실제 대화로 실행하면 안 된다.
-9. **TS 마스킹**: `shared/classify.ts mask()`에는 아직 키 규칙이 없다. 이전 하네스 결과는 9 FAIL이었다. 외부 전송 경로는 아니지만 화면 표시와 목업에 쓰인다(단비·하은 담당).
-10. **규칙의 한계**: 쪼개거나 인코딩한 토큰, 모든 제공자의 형식은 잡지 못한다. 대·소문자와 숫자가 섞인 32자 이상 문자열은 키로 보고 가린다. 소문자 hex인 git SHA와 UUID는 남긴다. 단독 토큰을 가리는 이 정책은 팀 합의 전 결정이다.
-11. **로컬 원문 보존**: 정리가 끝난 묶음의 원문은 7일 뒤 비운다(`retention.py`, `docs/appendix/db-operations.md` 보존 정책). 미승인·보류·실패·전송 대기 항목의 원문은 처리될 때까지 남는다. FileVault 외에 SQLite 자체 암호화는 없다.
-12. **같은 기기의 다른 프로세스**: 같은 기기의 다른 프로세스가 11434 포트에서 Ollama를 사칭하는 경우는 다루지 않는다.
+9. **규칙의 한계**: 쪼개거나 인코딩한 토큰, 모든 제공자의 형식은 잡지 못한다. 대·소문자와 숫자가 섞인 32자 이상 문자열은 키로 보고 가린다. 소문자 hex인 git SHA와 UUID는 남긴다. 단독 토큰을 가리는 이 정책은 팀 합의 전 결정이다.
+10. **로컬 원문 보존**: 정리가 끝난 묶음의 원문은 7일 뒤 비운다(`retention.py`, `docs/appendix/db-operations.md` 보존 정책). 미승인·보류·실패·전송 대기 항목의 원문은 처리될 때까지 남는다. FileVault 외에 SQLite 자체 암호화는 없다.
+11. **같은 기기의 다른 프로세스**: 같은 기기의 다른 프로세스가 11434 포트에서 Ollama를 사칭하는 경우는 다루지 않는다.
 
 ## 7. 화면·확장 연동 계약
 
-2026-11-08 브랜치 `claude/review-privacy-retention-20261108`에서 웹 승인함(`/review`)에 반영했다. 사용자 승인을 받아 단비 님 담당 파일을 이 브랜치에서만 고쳤고, 원본에는 반영하지 않았다. 단비 님의 검토가 필요하다.
+2026-11-08 웹 승인함(`/review`)에 반영했다. 사용자 승인을 받아 단비 님 담당 파일을 고쳤으므로 단비 님의 검토가 필요하다.
 
 - 세그먼트는 세 개다.
   - 승인 대기: 기존 카드 편집·근거·선택·승인을 그대로 쓴다. 하단 승인 바는 이 탭에서만 보인다.
@@ -174,29 +173,31 @@ flowchart LR
 - `privacy.recheck {id, teamId}`: 로컬 모델에 다시 묻는다. 모델을 설치한 뒤나 프로젝트 주제를 바꾼 뒤에 쓴다.
 - 두 RPC 모두 `{queued:true}`를 반환한다. 이 응답은 검사가 끝났다는 뜻이 아니다.
   - 묶음은 다음 실행에서 새 판정이 날 때까지 보류 상태로 남는다. `reason`은 `recheck_requested` 또는 `exclude_requested`이고, 이 상태는 새로고침해도 유지된다.
+  - 검사가 도는 중에 그 묶음의 제외가 바뀌면, 그 검사 결과는 기록하지도 보내지도 않는다. 묶음은 `exclude_requested` 보류로 남고 다음 실행에서 바뀐 제외를 반영해 다시 검사한다.
+  - 문맥으로 쓰는 앞 묶음의 제외만 바뀐 경우에도 아무것도 기록하거나 보내지 않는다. 이 묶음의 기존 판정 기록은 그대로이며, 다음 실행에서 다시 검사한다.
   - 다른 팀의 작업이거나 보류 상태가 아닌 작업이면 오류다.
   - 이 RPC로 외부에 보내는 것은 없다.
 
 하은 님과 맞출 내용:
-- (a) Python 키 규칙을 `ai/syncup_ai/mask.py`와 `shared/classify.ts`로 옮길지 정한다. 하나의 규칙 파일로 합치는 방안도 있다.
-- (b) 카드 `sentence`에 `[개인사정]`이 들어가는 경우의 계약을 정한다. 현재는 정리본 기준으로 근거를 검증한다.
-- (c) 혼합 문장을 분리하는 품질 기준과 평가 데이터를 정한다.
-- (d) 충돌 검사 경로에서 승인 후 수정한 문장을 다시 검사할지 정한다.
+- (a) 카드 `sentence`에 `[개인사정]`이 들어가는 경우의 계약을 정한다. 현재는 정리본 기준으로 근거를 검증한다.
+- (b) 혼합 문장을 분리하는 품질 기준과 평가 데이터를 정한다.
+- (c) 충돌 검사 경로에서 승인 후 수정한 문장을 다시 검사할지 정한다.
 
 ## 8. 검증 방법
 
 ```sh
-PY=/Users/Kimdonggyun/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3
-$PY -B -m unittest check_local_privacy       # 16개, 경로 10 × 형식 13 subTest 포함, 네트워크 차단
-$PY -B check_local_privacy_model.py --model gemma3:12b --output /tmp/eval.json   # 실제 로컬 모델, 루프백만 허용
+python3 -B -m unittest check_local_privacy check_privacy_holds check_privacy_model_client   # 합성 입력, 네트워크 차단
+python3 -B check_local_privacy_model.py --output /tmp/eval.json   # 실제 로컬 모델, 루프백만 허용
 ```
+
+두 명령은 `python3 run_checks.py`(local 묶음)와 `python3 run_checks.py model`에도 들어 있다.
 
 2026-11-08 이 브랜치에서 실행한 결과:
 - 새 검사: `check_local_privacy` 16 OK.
 - Codex 12경로×13 하네스: 156/156 PASS. 모델 자리는 '모두 업무' 스텁으로 두었으므로 규칙 단계만 확인한 것이다. 이전 원본은 108 FAIL / 36 PASS / 12 WARN이었다. 돌연변이 검사 2개도 통과했다.
 - 기존 SQLite 기반 회귀 검사(모두 OK):
-  - `check_pipeline` 10, `check_local_functional` 19, `check_local_recovery` 5, `check_form_retry` 30, `check_integration_store` 4
+  - `check_pipeline` 10, `check_local_functional` 19, `check_local_recovery` 5, `check_form_retry` 30, `check_integration_store`(현재 `check_pipeline_schema`) 4
   - `check_integrity` 11, `check_portability` 8, `ai` unittest 44
   - `check_scanner`·`check_claude` 스크립트 PASS, `selfcheck` PASS
 - 임시 PostgreSQL(Docker `postgres:17-alpine`) 검사(모두 OK): `check_teams` 12, `check_team_integration` 33, `check_local_functional_http` 25, `check_server_recovery` 26.
-- 기존 검사는 이제 `check_local_privacy.work_gate()`(모두 업무로 판단하는 시험용 분류기)를 명시적으로 주입한다. 실제 모델이 필요한 검사는 `check_local_privacy_model.py`로 분리했다.
+- 기존 검사는 이제 `local_fixtures.work_gate()`(모두 업무로 판단하는 시험용 분류기)를 명시적으로 주입한다. 실제 모델이 필요한 검사는 `check_local_privacy_model.py`로 분리했다.

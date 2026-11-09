@@ -29,7 +29,7 @@ DB 진행 저장/복구/마이그레이션/권한과 클라우드 HTTP 경계 �
 
 ## 증거 위치와 배포 범위
 
-작업 폴더 `work/decision-review-{target,regression,fresh,additional}-20261108/`의 fixtures/requests/runs/summary 파일과 `work/resumable-live-evidence-20261108-reviewed/`에 합성 입력·실제 응답·비용·진행 결과가 있다. 원래 실패·폐기한 실험도 별도 폴더에 보존했다. 실제 credential 값은 어떤 증거에도 포함하지 않는다.
+저장소 밖 로컬 작업 폴더(이 저장소에 포함하지 않음) `work/decision-review-{target,regression,fresh,additional}-20261108/`의 fixtures/requests/runs/summary 파일과 `work/resumable-live-evidence-20261108-reviewed/`에 합성 입력·실제 응답·비용·진행 결과가 있다. 원래 실패·폐기한 실험도 별도 폴더에 보존했다. 실제 credential 값은 어떤 증거에도 포함하지 않는다.
 
 마지막 owner-placeholder 공백 처리 보완은 동일 판정 사례의 의미를 바꾸지 않으며 별도 단위 검증했다. 제품 threshold, 원래 질문/선택지, 후보 누락 방지, 승인·마스킹·팀 격리 정책은 유지한다. 새 정책 해시가 진행 중 작업의 이전 체크포인트를 무효화하는 기존 동작도 유지한다.
 

@@ -21,4 +21,4 @@ QAT 문장당 중앙값 0.945초, 기존 E4B 0.243초로 QAT가 느렸다. 보�
 
 이번 반영본에서 개인정보·Pipeline 회귀 32개, 원본 작업본에서 29개가 통과했다. v1/v2 캐시 무효화 확대 검사는 양쪽에서 별도 재실행해 통과했다. 양쪽 모두 실제 QAT + 임시 DB로 업무·혼합·개인·합성 키·미설치 모델을 확인했다. 개인/미설치 입력의 외부 요청은 0, 혼합 입력은 개인 사유 제거 후 팀 A 승인 큐 한 건, 합성 키는 전송 직전 입력에서 제거됐다. 외부 AI는 실제로 호출하지 않았다. 원본의 관련 없는 기존 파일 해시는 모두 유지됐으며 모델 클라이언트·파서·마스킹 코드와 정책 설정을 맞췄다.
 
-`python -B -m unittest check_local_privacy check_pipeline`로 모의 응답 회귀를 실행한다. 설치된 실제 QAT는 `python -B check_privacy_memory_pipeline.py`로 검사한다. 후자는 임시 SQLite와 합성 입력만 사용하고 외부 AI 요청은 가로채며, 마지막에 테스트 모델을 해제한다.
+`python3 -B -m unittest check_local_privacy check_privacy_holds check_privacy_model_client check_pipeline`로 모의 응답 회귀를 실행한다. 설치된 실제 QAT는 `python3 -B check_privacy_memory_pipeline.py`로 검사한다. 후자는 임시 SQLite와 합성 입력만 사용하고 외부 AI 요청은 가로채며, 마지막에 테스트 모델을 해제한다.

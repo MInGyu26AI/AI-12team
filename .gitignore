@@ -1,11 +1,11 @@
 # Secrets and machine-local configuration
 .env
 .env.*
+!.env.example
 .claude/
 .codex/
 .aws/
 .ssh/
-credentials*.json
 *credentials*.json
 secrets*.json
 tokens*.json

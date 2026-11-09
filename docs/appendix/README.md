@@ -24,4 +24,4 @@
 - [61건 비교 결과](local-privacy-eval-20261108/compare-61/)
 - [진행 복구 브라우저 결과·이미지](resumable-conflict-qa/)
 
-평가 JSON과 이미지는 내용을 바꾸지 않고 이동했습니다. 마스킹 스크립트는 별도 harness와 저장소·출력 경로를 명령 인수로 받는 재현 보조 자료입니다. 독립 실행 프로그램이나 제품 실행 경로는 아닙니다.
+평가 JSON과 이미지는 내용을 바꾸지 않고 이동했습니다. 마스킹 스크립트는 별도 harness와 저장소·출력 경로를 명령 인수로 받는 재현 보조 자료입니다. 지금은 없는 `integration.py`를 가져오므로 그대로 돌지 않습니다. 또 지금은 `outbound_guard`가 `secret_values`를 `privacy_rules`에서 직접 가져오므로, `local_privacy`만 패치하는 변형 검사는 마스킹 단계를 모두 끄지 못합니다.
