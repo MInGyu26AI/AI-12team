@@ -6,10 +6,7 @@ import sys
 import tomllib
 
 
-# 검증 범위(2026-11-07): macOS ARM64·Linux ARM64 컨테이너에서 가상 대화로 실행 검사.
-# 미검증: Windows 네이티브 빌드/실행/ACL, Linux x64·WSL·Intel Mac.
-# 실제 계정의 새 대화→외부 AI→승인 전체 흐름, 설치 패키지·서명·공증은 미검증.
-# 모든 제품 버전의 내부 로그 호환을 보장하지 않는다. 상세: 호환성_검증.md.
+# 검증 범위: 호환성_검증.md
 ENABLED_PLATFORMS = {
     "darwin",
     # User-requested rollout: keep these connections disabled after compatibility checks.

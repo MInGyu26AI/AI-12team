@@ -36,7 +36,9 @@ def conflict_policy_fingerprint():
         limits['responses_default'] = bool(os.environ.get('OPENAI_API_KEY'))
         digest.update(json.dumps(limits, sort_keys=True).encode())
         return digest.hexdigest()
-    except OSError:
+    except OSError as error:
+        # Without a fingerprint, checkpoints are never invalidated by a policy change; say so once.
+        failure('conflict_policy', error)
         return None
 
 
@@ -47,21 +49,40 @@ def check_started(attempt, candidate_count):
                 requested_models=dict(decisions=None, chat=None), methods=[])
 
 
+def _judgements(result, card_id, candidate_ids):
+    """The judgements of a complete result for `card_id`, if each names a distinct expected candidate; else None."""
+    if result.get('ok') is not True or result.get('checkStatus') != 'complete':
+        return None
+    rows = result.get('results')
+    if not (isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict)):
+        return None
+    if rows[0].get('cardId') != card_id:
+        return None
+    judgements = rows[0].get('judgements')
+    if not isinstance(judgements, list):
+        return None
+    ids = [j.get('id') for j in judgements if isinstance(j, dict)]
+    if (len(ids) == len(judgements) and all(isinstance(i, str) for i in ids)
+            and len(set(ids)) == len(ids) and set(ids) <= candidate_ids):
+        return judgements
+    return None
+
+
+def checked_count(result, card_id, candidate_ids):
+    """How many candidates the engine verifiably judged; None when that is unknown."""
+    judgements = _judgements(result, card_id, candidate_ids)
+    return None if judgements is None else len(judgements)
+
+
 def check_finished(start, result, card_id, candidate_ids, elapsed_ms, outcome):
     """Latest-attempt metadata only; unknown coverage is never reported as zero."""
-    checked, methods = None, set()
-    if result.get('ok') is True and result.get('checkStatus') == 'complete':
-        rows = result.get('results')
-        if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict) and rows[0].get('cardId') == card_id:
-            judgements = rows[0].get('judgements')
-            if isinstance(judgements, list):
-                ids = [j.get('id') for j in judgements if isinstance(j, dict)]
-                if (len(ids) == len(judgements) and all(isinstance(i, str) for i in ids)
-                        and len(set(ids)) == len(ids) and set(ids) <= candidate_ids):
-                    checked = len(ids)
-                    methods = {j.get('method') for j in judgements
-                               if isinstance(j.get('method'), str) and j['method'] in ('decisions', 'chat', 'rule')}
-                    if any(j.get('reviewedBy') == 'chat' for j in judgements):
-                        methods.add('chat')
+    judgements = _judgements(result, card_id, candidate_ids)
+    methods = set()
+    for j in judgements or []:
+        if isinstance(j.get('method'), str) and j['method'] in ('decisions', 'chat', 'rule'):
+            methods.add(j['method'])
+        if j.get('reviewedBy') == 'chat':
+            methods.add('chat')
     return dict(start, finished_at=time.time(), elapsed_ms=max(0, int(elapsed_ms)),
-                checked_count=checked, methods=sorted(methods), outcome=outcome)
+                checked_count=None if judgements is None else len(judgements), methods=sorted(methods),
+                outcome=outcome)

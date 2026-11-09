@@ -3,7 +3,7 @@ import subprocess
 import time
 import unittest
 
-from check_teams import TeamIsolation, request
+from check_teams import TeamIsolation, own_tests, request
 
 
 class DBConnectionRecovery(TeamIsolation):
@@ -24,5 +24,9 @@ class DBConnectionRecovery(TeamIsolation):
         self.assertEqual(len(self.client.items(self.teams['A'])), 1)
 
 
+def load_tests(loader, tests, pattern):
+    return own_tests(DBConnectionRecovery)
+
+
 if __name__ == '__main__':
-    unittest.main(defaultTest='DBConnectionRecovery.test_paused_database_returns_503_then_recovers_without_duplicate', verbosity=2)
+    unittest.main(verbosity=2)

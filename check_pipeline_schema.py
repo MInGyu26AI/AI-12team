@@ -1,23 +1,23 @@
-"""Migration and approval contract checks against real temporary SQLite files."""
+"""Pipeline schema migration and approval contract checks against real temporary SQLite files, plus the shared
+TypeScript constants the collector must agree with."""
 import json
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from card_contract import PUBLIC_FIELDS
-from delivery import approve, validate_packet
-from integration_store import initialize_integration
-from storage import connect, initialize
-
-
-def public_card(text='SQLite로 결정했다.'):
-    return dict(sentence=text, relevance='related', subtopic='작업·결과물', tag='decision', topic_key='DB',
-                is_new_topic=True, content='DB = SQLite', reason=None, owner='테스트', due=None,
-                is_change=False, source='가상 대화', masked=False, confidence=.9, classificationMethod='chat')
+from card_contract import PUBLIC_FIELDS, validate_packet
+import collection_settings
+from delivery import approve
+from local_fixtures import public_card
+import local_rpc
+from pipeline_schema import ensure_pipeline_schema
+from storage import PRIVATE_SCHEMA, connect, initialize
 
 
-class IntegrationStore(unittest.TestCase):
+class PipelineSchema(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -29,7 +29,7 @@ class IntegrationStore(unittest.TestCase):
             c.execute("INSERT INTO sharing VALUES(1,'https://example.test/','user','team-a')")
 
     def details(self, guessed=False):
-        initialize_integration(self.db)
+        ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             c.execute('INSERT INTO candidate_details VALUES(?,?,?,0)', ('c','team-a',json.dumps(dict(public_card(), evidence=dict(roleGuessed=guessed)))))
 
@@ -38,8 +38,8 @@ class IntegrationStore(unittest.TestCase):
             binding = dict(c.execute('SELECT * FROM sharing').fetchone())
             approve(c, dict(id='c',text='DB = SQLite',quote='SQLite로 결정했다.').__getitem__, binding)
             before = tuple(c.execute('SELECT * FROM outbox').fetchone())
-        initialize_integration(self.db)
-        initialize_integration(self.db)
+        ensure_pipeline_schema(self.db)
+        ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             self.assertEqual(tuple(c.execute('SELECT * FROM outbox').fetchone()), before)
             self.assertFalse(c.execute('PRAGMA foreign_key_check').fetchall())
@@ -74,14 +74,51 @@ class IntegrationStore(unittest.TestCase):
                 approve(c, dict(id='c',text='승인',quote='SQLite로 결정했다.').__getitem__, binding)
             self.assertFalse(c.execute('SELECT * FROM outbox').fetchall())
 
+    def test_new_database_writes_no_migration_backups(self):
+        fresh = Path(self.temp.name) / 'fresh' / 'private.sqlite'
+        fresh.parent.mkdir()
+        initialize(fresh)
+        ensure_pipeline_schema(fresh)
+        self.assertEqual(list(fresh.parent.glob('*.bak.sqlite')), [])
+        ensure_pipeline_schema(self.db)
+        self.assertEqual(len(list(self.db.parent.glob('private.sqlite.integration-*.bak.sqlite'))), 1, 'existing cards are backed up')
+
+    def test_unexpected_cards_schema_stops_the_migration(self):
+        changed = dict(PRIVATE_SCHEMA, cards=PRIVATE_SCHEMA['cards'].replace('UNIQUE(job,kind),', 'UNIQUE(job, kind),'))
+        with patch.dict('pipeline_schema.PRIVATE_SCHEMA', changed), self.assertRaisesRegex(ValueError, 'cards'):
+            ensure_pipeline_schema(self.db)
+        with connect(self.db) as c:
+            self.assertFalse(c.execute("SELECT 1 FROM sqlite_master WHERE name='integration_settings'").fetchone())
+
     def test_v2_rejects_hidden_fields_and_unshareable_cards(self):
         p=dict(id='c',label='결정',text='DB = SQLite',quote='SQLite로 결정했다.',speaker='사용자',version=2,card=public_card())
         validate_packet(p)
         p['card']['privateRaw']='must not be transmitted'
-        with self.assertRaises(ValueError): validate_packet(p)
+        with self.assertRaises(ValueError):
+            validate_packet(p)
         del p['card']['privateRaw']
+        for method in ('manual','demo'):  # no classifier produces these; the team trust boundary refuses them
+            with self.assertRaises(ValueError):
+                validate_packet(dict(p,card=dict(p['card'],classificationMethod=method)))
         p['speaker']='AI'
-        with self.assertRaises(ValueError): validate_packet(p)
+        with self.assertRaises(ValueError):
+            validate_packet(p)
+
+
+def ts_constant(relative, name):
+    """The number an `export const NAME = <number>;` line in a shared TypeScript file gives."""
+    text = (Path(__file__).resolve().parent / relative).read_text(encoding='utf-8')
+    return int(re.search(rf'export const {name} = (\d+);', text).group(1))
+
+
+class SharedConstants(unittest.TestCase):
+    """Values the web and the extension copy from shared/*.ts must equal what the collector accepts."""
+
+    def test_batch_size_cap_matches_configure(self):
+        self.assertEqual(ts_constant('shared/batch.ts', 'MAX_TURNS_PER_BATCH'), collection_settings.MAX_BATCH_TURNS)
+
+    def test_rpc_version_matches_the_envelope_check(self):
+        self.assertEqual(ts_constant('shared/collector.ts', 'LOCAL_RPC_VERSION'), local_rpc.RPC_VERSION)
 
 
 if __name__ == '__main__':

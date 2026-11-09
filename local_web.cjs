@@ -3,6 +3,11 @@ const http = require('node:http');
 const { randomBytes, timingSafeEqual } = require('node:crypto');
 const path = require('node:path');
 
+// randomBytes(32) as hex; the session cookie lives as long as the server-side session.
+const TOKEN_HEX = 64;
+const SESSION_SECONDS = 8 * 3600;
+const BOOTSTRAP_MS = 5 * 60 * 1000;
+
 async function main() {
   if (!process.env.SYNCUP_CONNECTION_FILE) throw new Error('SYNCUP_CONNECTION_FILE is required');
   const port = Number(process.env.PORT || 3000);
@@ -10,10 +15,10 @@ async function main() {
   const origin = `http://127.0.0.1:${port}`;
   const session = randomBytes(32).toString('hex');
   let bootstrap = randomBytes(32).toString('hex');
-  const expires = Date.now() + 5 * 60 * 1000;
+  const expires = Date.now() + BOOTSTRAP_MS;
   Object.assign(process.env, {
     NEXT_PUBLIC_LOCAL_BRIDGE: 'true', NEXT_PUBLIC_USE_MOCK: 'false', SYNCUP_LOCAL_ORIGIN: origin,
-    SYNCUP_LOCAL_SESSION: session, SYNCUP_LOCAL_EXPIRES: String(Date.now() + 8 * 3600 * 1000),
+    SYNCUP_LOCAL_SESSION: session, SYNCUP_LOCAL_EXPIRES: String(Date.now() + SESSION_SECONDS * 1000),
   });
   const app = require('./web/node_modules/next')({ dev: true, dir: path.join(__dirname, 'web'), hostname: '127.0.0.1', port });
   await app.prepare();
@@ -35,17 +40,17 @@ async function main() {
       </script></html>`); return;
     }
     if (req.url === '/local-session' && req.method === 'POST') {
-      if (req.headers.origin !== origin || req.headers['transfer-encoding'] || Number(req.headers['content-length']) !== 64) {
+      if (req.headers.origin !== origin || req.headers['transfer-encoding'] || Number(req.headers['content-length']) !== TOKEN_HEX) {
         res.writeHead(403).end(); return;
       }
       let body = '';
       try {
-        for await (const chunk of req) { body += chunk; if (body.length > 64) break; }
-        if (!bootstrap || Date.now() > expires || body.length !== 64 || !timingSafeEqual(Buffer.from(body), Buffer.from(bootstrap))) {
+        for await (const chunk of req) { body += chunk; if (body.length > TOKEN_HEX) break; }
+        if (!bootstrap || Date.now() > expires || body.length !== TOKEN_HEX || !timingSafeEqual(Buffer.from(body), Buffer.from(bootstrap))) {
           res.writeHead(403).end(); return;
         }
         bootstrap = '';
-        res.setHeader('Set-Cookie', `syncup_local=${session}; HttpOnly; SameSite=Strict; Path=/api/local; Max-Age=28800`);
+        res.setHeader('Set-Cookie', `syncup_local=${session}; HttpOnly; SameSite=Strict; Path=/api/local; Max-Age=${SESSION_SECONDS}`);
         res.writeHead(204).end(); return;
       } catch { res.writeHead(400).end(); return; }
     }

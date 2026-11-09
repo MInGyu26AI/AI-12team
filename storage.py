@@ -25,7 +25,6 @@ def runtime_lock(path):
     # Keep the file: unlinking a held lock would allow a second owner.
     with open(path, "a+b") as lock:
         if sys.platform == "win32":
-            # 미검증: 실제 Windows 잠금·ACL; 현재는 msvcrt 대역 검사만 통과했고 연결은 비활성.
             import msvcrt
             lock.seek(0)
             acquire = lambda: msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
@@ -46,6 +45,7 @@ def runtime_lock(path):
             release()
 
 
+# Text limits (1200) and board labels repeat card_contract.MAX_TEXT, KIND_LABELS and UNADOPTED_LABEL.
 PRIVATE_SCHEMA = {
     "settings": """id INTEGER PRIMARY KEY CHECK(id=1), project TEXT NOT NULL,
         start REAL NOT NULL CHECK(start>=0), end REAL NOT NULL CHECK(end>=start),
@@ -83,18 +83,27 @@ BOARD_SCHEMA = {
 }
 
 
+def backup_before_migration(db, tag):
+    """Copy db to <name>.<tag>-XXXX.bak.sqlite next to it before a schema change; retention drops it after 7 days.
+
+    A separate reader can back up while the caller's connection reserves the write lock.
+    """
+    fd, backup = tempfile.mkstemp(prefix=f"{Path(db).name}.{tag}-", suffix=".bak.sqlite", dir=Path(db).parent)
+    os.close(fd)
+    with connect(db) as source, connect(backup) as dest:
+        source.backup(dest)
+
+
 def initialize(db, board=False):
-    initialize_v1(db, board)
+    created = initialize_v1(db, board)
     if board:
         return
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("PRAGMA user_version").fetchone()[0] == 2:
             return
-        fd, backup = tempfile.mkstemp(prefix=Path(db).name + ".v1-", suffix=".bak.sqlite", dir=Path(db).parent)
-        os.close(fd)
-        with connect(db) as source, connect(backup) as dest:
-            source.backup(dest)
+        if not created:  # a database created just now has nothing to keep
+            backup_before_migration(db, "v1")
         c.execute("""CREATE TABLE sharing(id INTEGER PRIMARY KEY CHECK(id=1),
             api_url TEXT NOT NULL, user_id TEXT NOT NULL, team_id TEXT)""")
         c.execute("""CREATE TRIGGER frozen_identity BEFORE UPDATE OF api_url,user_id ON sharing
@@ -110,12 +119,13 @@ def initialize(db, board=False):
 
 
 def initialize_v1(db, board=False):
+    """Create the version 1 schema, or convert unversioned tables to it. True when it created an empty database."""
     schema = BOARD_SCHEMA if board else PRIVATE_SCHEMA
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         version = c.execute("PRAGMA user_version").fetchone()[0]
         if version == 1 or (version == 2 and not board):
-            return
+            return False
         if version != 0:
             raise ValueError("지원하지 않는 DB 버전입니다.")
         tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
@@ -123,11 +133,7 @@ def initialize_v1(db, board=False):
         if tables and tables != legacy:
             raise ValueError("기존 DB 구성을 확인해 주세요. 자동 변경하지 않았습니다.")
         if tables:
-            # A separate reader can back up while this connection reserves the write lock.
-            fd, backup = tempfile.mkstemp(prefix=Path(db).name + ".v0-", suffix=".bak.sqlite", dir=Path(db).parent)
-            os.close(fd)
-            with connect(db) as source, connect(backup) as dest:
-                source.backup(dest)
+            backup_before_migration(db, "v0")
             for name in schema:
                 if name in tables:
                     c.execute(f"ALTER TABLE {name} RENAME TO {name}_legacy")
@@ -152,3 +158,4 @@ def initialize_v1(db, board=False):
         if c.execute("PRAGMA foreign_key_check").fetchall():
             raise ValueError("기존 DB 참조 오류입니다. 변환을 취소했습니다.")
         c.execute("PRAGMA user_version=1")
+    return not tables

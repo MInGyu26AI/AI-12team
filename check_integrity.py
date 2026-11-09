@@ -1,28 +1,28 @@
 """Offline regression tests: isolated SQLite, loopback HTTP and child processes."""
-from contextlib import contextmanager
 import concurrent.futures
 import http.client
-import http.server
 import json
 import os
 from pathlib import Path
-import queue
 import socket
 import ssl
 import sqlite3
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-import app
 import collector
-from check_local_privacy import work_gate
 import delivery
+from demo_board import Board
+from local_fixtures import first_line, free_ports, get_page, post, public_card, server, wait_until, work_gate
+from review_page import Review
+from runtime import child_environment
 from storage import connect, initialize, runtime_lock
+
+APP = Path(__file__).with_name("app.py")
 
 QUOTE = "DB는 Supabase로 확정했어."
 EVIDENCE = json.dumps([dict(n=1, role="user", text=QUOTE)], ensure_ascii=False)
@@ -35,34 +35,7 @@ CREATE TABLE cards(id TEXT PRIMARY KEY,job TEXT,kind TEXT,adopted INTEGER,draft 
 """
 
 
-@contextmanager
-def server(handler, db):
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    srv.db, srv.secret, srv.csrf = db, "fixture-only", "fixture-csrf"
-    srv.board_url = f"http://127.0.0.1:{srv.server_port}/"
-    thread = threading.Thread(target=srv.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield srv
-    finally:
-        srv.shutdown()
-        srv.server_close()
-        thread.join()
-
-
-def post(srv, path, fields, board=False):
-    body = json.dumps(fields).encode() if board else app.urllib.parse.urlencode(dict(csrf=srv.csrf, **fields)).encode()
-    headers = {"Authorization": "Bearer " + srv.secret} if board else {"Origin": f"http://127.0.0.1:{srv.server_port}"}
-    connection = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
-    try:
-        connection.request("POST", path, body, headers)
-        response = connection.getresponse()
-        return response.status, response.read()
-    finally:
-        connection.close()
-
-
-class FaultBoard(app.Board):
+class FaultBoard(Board):
     def do_POST(self):
         if getattr(self.server, "failure", 0):
             return self.reply(self.server.failure, "synthetic error")
@@ -82,7 +55,9 @@ class FaultBoard(app.Board):
         super().reply(status, value, mime)
 
 
-class Integrity(unittest.TestCase):
+class IntegrityFixture(unittest.TestCase):
+    """Private and board databases with an ended session; cards are added per test."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -114,6 +89,8 @@ class Integrity(unittest.TestCase):
         with connect(self.db) as c:
             c.execute("UPDATE outbox SET next_attempt=0")
 
+
+class Integrity(IntegrityFixture):
     def test_approval_atomic_and_immutable(self):
         fields = self.card()
         with connect(self.db) as c:
@@ -142,7 +119,8 @@ class Integrity(unittest.TestCase):
                         c.execute("INSERT INTO cards VALUES(?,?,'decision',1,NULL,NULL,NULL,'drafting')", (name, name))
                 result = {"output": [{"content": [{"type": "output_text", "text": json.dumps({"cards": [dict(kind="decision", text="검증된 결정", n=1, quote=QUOTE)]})}]}]}
                 broken, success = MagicMock(), MagicMock()
-                for response in (broken, success): response.__enter__.return_value = response
+                for response in (broken, success):
+                    response.__enter__.return_value = response
                 broken.read.side_effect = error
                 success.read.return_value = json.dumps(result).encode()
                 with patch.dict(os.environ, OPENAI_API_KEY="fixture-only"), patch("urllib.request.urlopen", side_effect=[broken, success]) as api:
@@ -153,7 +131,7 @@ class Integrity(unittest.TestCase):
                 self.assertEqual(self.row("jobs", failed)["evidence"], EVIDENCE)
                 self.assertEqual(self.row("cards", failed)["status"], "manual")
                 self.assertEqual(self.row("cards", later)["status"], "ready")
-                with server(app.Review, self.db) as srv:
+                with server(Review, self.db) as srv:
                     self.assertEqual(post(srv, "/retry", dict(id=failed))[0], 303)
                 with patch.object(collector, "call_api", return_value=result):
                     collector.process(self.db, gate=work_gate())
@@ -186,7 +164,7 @@ class Integrity(unittest.TestCase):
 
     def test_retry_budget_http_errors_and_manual_retry(self):
         self.approve(self.card())
-        with server(FaultBoard, self.board) as srv, server(app.Review, self.db) as review:
+        with server(FaultBoard, self.board) as srv, server(Review, self.db) as review:
             for failure, expected in ((401,"blocked"), (403,"blocked"), (400,"blocked"), (409,"blocked"), (302,"blocked"), (429,"pending")):
                 srv.failure = failure
                 delivery.deliver(self.db, srv.board_url, srv.secret)
@@ -222,27 +200,42 @@ class Integrity(unittest.TestCase):
 
     def test_http_concurrent_approval_manual_recovery_and_boundaries(self):
         fields = self.card(manual=True)
-        with server(app.Review, self.db) as srv:
+        with server(Review, self.db) as srv:
             with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
                 results = list(pool.map(lambda _: post(srv, "/approve", fields)[0], range(6)))
             self.assertEqual(results, [303]*6)
             self.assertEqual(self.row("jobs")["state"], "done")
             self.assertEqual(post(srv, "/retry", dict(id="c"))[0], 400)
             self.assertEqual(self.row("cards")["status"], "queued")
-            connection = http.client.HTTPConnection("127.0.0.1", srv.server_port)
-            connection.request("GET", "/")
-            response = connection.getresponse()
-            markup = response.read().decode()
-            connection.close()
+            markup = get_page(srv)[1]
             self.assertIn("승인 저장됨", markup)
             self.assertNotIn('action="/approve"', markup)
         with connect(self.db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM outbox").fetchone()[0], 1)
         with patch.object(collector, "call_api", side_effect=AssertionError("empty draft must not call AI")):
             collector.draft(self.db, self.row("jobs"), work_gate())
-        with server(app.Board, self.board) as srv:
+        with server(Board, self.board) as srv:
             for payload in (None, [], {}, dict(id="x",label="unknown",text="x",quote="x",speaker="AI")):
                 self.assertEqual(post(srv, "/items/approve", payload, True)[0], 400)
+
+    def test_demo_board_refuses_team_packets(self):
+        packet = dict(id="x", label="결정", text="DB = SQLite", quote="SQLite로 결정했다.", speaker="사용자", version=2, card=public_card())
+        with server(Board, self.board) as srv:
+            self.assertEqual(post(srv, "/items/approve", packet, True)[0], 400)
+        with connect(self.board) as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 0)
+
+    def test_demo_board_checks_host_and_path_before_the_secret(self):
+        with server(Board, self.board) as srv:
+            connection = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+            try:
+                connection.putrequest("POST", "/elsewhere")
+                connection.putheader("Authorization", b"Bearer \xe9")
+                connection.putheader("Content-Length", "0")
+                connection.endheaders()
+                self.assertEqual(connection.getresponse().status, 403)
+            finally:
+                connection.close()
 
     def test_batch_draft_rollback(self):
         self.card()
@@ -307,25 +300,25 @@ class Integrity(unittest.TestCase):
         self.approve(fields)
         with connect(self.db) as c:
             c.execute("UPDATE outbox SET next_attempt=?", (time.time() + 60,))
-        env = app.child_environment()
         def launch():
-            with socket.socket() as a, socket.socket() as b:
-                a.bind(("127.0.0.1", 0)); b.bind(("127.0.0.1", 0))
-                ports = [a.getsockname()[1], b.getsockname()[1]]
-            return subprocess.Popen([sys.executable, str(Path(app.__file__)), "run", "--project", str(self.root),
-                "--state", str(self.root), "--port", str(ports[0]), "--board-port", str(ports[1]),
+            review_port, board_port = free_ports(2)
+            return subprocess.Popen([sys.executable, str(APP), "run", "--project", str(self.root),
+                "--state", str(self.root), "--port", str(review_port), "--board-port", str(board_port),
                 "--codex-dir", str(self.root / "absent-codex"), "--claude-dir", str(self.root / "absent-claude")],
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+                env=child_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
         def ready(child):
-            lines = queue.Queue()
-            threading.Thread(target=lambda: lines.put(child.stdout.readline()), daemon=True).start()
-            try:
-                line = lines.get(timeout=8)
-            except queue.Empty:
+            line = first_line(child)
+            if line is None:
                 self.fail("CLI startup timed out")
             if not line:
                 self.fail("CLI exited: " + child.communicate(timeout=3)[1])
             self.assertIn("검토함 http://", line)
+        def board_released():
+            try:
+                with runtime_lock(self.root / "board.lock"):
+                    return True
+            except SystemExit:
+                return False
         child = launch()
         try:
             ready(child)
@@ -336,21 +329,11 @@ class Integrity(unittest.TestCase):
             self.assertEqual(self.row("cards")["status"], "queued")
             child.kill()
             child.communicate(timeout=5)
-            deadline = time.monotonic() + 5
-            while True:
-                try:
-                    with runtime_lock(self.root / "board.lock"):
-                        break
-                except SystemExit:
-                    if time.monotonic() > deadline:
-                        self.fail("orphan board did not release state")
-                    time.sleep(.05)
+            self.assertTrue(wait_until(board_released), "orphan board did not release state")
             self.due()
             child = launch()
             ready(child)
-            deadline = time.monotonic() + 5
-            while self.row("cards")["status"] != "shared" and time.monotonic() < deadline:
-                time.sleep(.05)
+            wait_until(lambda: self.row("cards")["status"] == "shared")
             self.assertEqual(self.row("cards")["status"], "shared")
             child.terminate()
             child.communicate(timeout=5)

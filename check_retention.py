@@ -1,17 +1,23 @@
 """Local retention policy on synthetic data: settled raw text clears after 7 days, everything still open stays."""
+import contextlib
 from datetime import datetime, timezone
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest import mock
 
+from batch_classification import classify_queued
+from candidate_review import list_candidates
+from local_fixtures import Scripted, make_pipeline, private_db
+from local_privacy import Gate
+from local_rpc import dispatch
 import retention
-from check_local_privacy import Gate, Scripted
-from check_pipeline import Client
-from integration import Pipeline
-from storage import connect, initialize
+from storage import connect
+import turn_intake
 
 DAY = 86400
 TEXTS = dict(shared='공유한 결정 원문 SHARED_CANARY', dismissed='버린 후보 원문 DISMISSED_CANARY', unreviewed='검토 전 원문 UNREVIEWED_CANARY',
@@ -21,6 +27,7 @@ TEXTS = dict(shared='공유한 결정 원문 SHARED_CANARY', dismissed='버린 �
 
 class AI:
     before_request = None
+
     def chat_json(self, system, user):
         self.before_request()
         if 'FAILED_CANARY' in user:
@@ -33,38 +40,34 @@ class AI:
 
 class Retention(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
-        self.db = Path(self.temp.name) / 'private.sqlite'; initialize(self.db)
-        with connect(self.db) as c:
-            c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.temp.name, time.time() - 10, time.time() + 600))
-            c.execute("INSERT INTO sharing VALUES(1,?,'user','a')", (Client.api_url,))
-        self.p = Pipeline(self.db, Client())
-        self.p.llm_factory, self.p.decider_factory = AI, (lambda: None)
-        self.p.privacy = Gate(Scripted({TEXTS['held']: dict(label='unsure', personal=[]),
-                                        TEXTS['personal']: dict(label='personal', personal=[TEXTS['personal']])}))
-        self.p.configure(dict(projectTopic='SyncUp', turnsPerBatch=1))
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.db = private_db(self.temp.name)
+        gate = Gate(Scripted({TEXTS['held']: dict(label='unsure', personal=[]),
+                              TEXTS['personal']: dict(label='personal', personal=[TEXTS['personal']])}))
+        self.p = make_pipeline(self.db, AI, gate)
 
     def message(self, name, text=None):
         return dict(id=name, site='manual', conversationId='conv-' + name, role='user', roleGuessed=False,
                     text=text or TEXTS[name], collectedAt=datetime.now(timezone.utc).isoformat())
 
     def card(self, name):
-        return next(c['id'] for c in self.p.candidates() if TEXTS[name] in c['sentence'])
+        return next(c['id'] for c in list_candidates(self.p) if TEXTS[name] in c['sentence'])
 
     def build(self):
         for name in TEXTS:
-            self.p.append([self.message(name)], True)
-        self.p.process()
+            turn_intake.append(self.p, [self.message(name)], True)
+        classify_queued(self.p)
         for name in ('shared', 'pending', 'blocked'):
-            self.p.rpc('candidates.approve', dict(ids=[self.card(name)], teamId='a'))
-        self.p.rpc('candidates.dismiss', dict(id=self.card('dismissed')))
+            dispatch(self.p, 'candidates.approve', dict(ids=[self.card(name)], teamId='a'))
+        dispatch(self.p, 'candidates.dismiss', dict(id=self.card('dismissed')))
         with connect(self.db) as c:
             shared = c.execute("SELECT c.id FROM cards c JOIN outbox o ON o.id=c.id WHERE o.payload LIKE '%SHARED_CANARY%'").fetchone()[0]
             c.execute("UPDATE outbox SET state='sent' WHERE id=?", (shared,))
             c.execute("UPDATE cards SET status='shared' WHERE id=?", (shared,))
             c.execute("UPDATE outbox SET state='blocked' WHERE payload LIKE '%BLOCKED_CANARY%'")
         # Still collecting: an open turn that was never batched.
-        self.p.append([self.message('buffered', '아직 묶이지 않은 원문 BUFFERED_CANARY')])
+        turn_intake.append(self.p, [self.message('buffered', '아직 묶이지 않은 원문 BUFFERED_CANARY')])
 
     def raw(self, canary):
         """Where a canary's raw text still sits, by table."""
@@ -100,21 +103,22 @@ class Retention(unittest.TestCase):
         self.assertEqual(retention.sweep(self.db, now=t0 + 30 * DAY)['purgedJobs'], 0, 'idempotent')
 
     def test_resent_message_after_clearing_is_not_reported_as_changed(self):
-        self.p.append([self.message('shared')], True)
-        self.p.process()
-        self.p.rpc('candidates.dismiss', dict(id=self.card('shared')))
+        turn_intake.append(self.p, [self.message('shared')], True)
+        classify_queued(self.p)
+        dispatch(self.p, 'candidates.dismiss', dict(id=self.card('shared')))
         t0 = time.time()
-        retention.sweep(self.db, now=t0); retention.sweep(self.db, now=t0 + 8 * DAY)
+        retention.sweep(self.db, now=t0)
+        retention.sweep(self.db, now=t0 + 8 * DAY)
         self.assertEqual(self.raw('SHARED_CANARY'), {})
-        response = self.p.append([self.message('shared')], True)
+        response = turn_intake.append(self.p, [self.message('shared')], True)
         self.assertEqual((response['newMessages'], response['intakeIssues']), (0, []))
         self.assertEqual(self.raw('SHARED_CANARY'), {})
 
     def test_reopened_batch_is_not_cleared(self):
-        self.p.append([self.message('dismissed')], True)
-        self.p.process()
+        turn_intake.append(self.p, [self.message('dismissed')], True)
+        classify_queued(self.p)
         identifier = self.card('dismissed')
-        self.p.rpc('candidates.dismiss', dict(id=identifier))
+        dispatch(self.p, 'candidates.dismiss', dict(id=identifier))
         t0 = time.time()
         retention.sweep(self.db, now=t0)
         with connect(self.db) as c:  # e.g. a later retry produced a fresh unreviewed candidate from the same batch
@@ -123,31 +127,46 @@ class Retention(unittest.TestCase):
         self.assertTrue(self.raw('DISMISSED_CANARY'))
 
     def test_resolved_quarantine_cache_and_backups_expire(self):
-        self.p.append([self.message('shared')], True)
-        issue = self.p.append([self.message('shared', '바뀐 원문 ISSUE_CANARY')])['intakeIssues'][0]['id']
-        self.p.rpc('intake.dismiss', dict(id=issue, teamId='a'))
-        open_issue = self.p.append([self.message('shared', '또 바뀐 원문 OPEN_CANARY')])['intakeIssues'][0]['id']
-        self.p.process()
+        turn_intake.append(self.p, [self.message('shared')], True)
+        issue = turn_intake.append(self.p, [self.message('shared', '바뀐 원문 ISSUE_CANARY')])['intakeIssues'][0]['id']
+        dispatch(self.p, 'intake.dismiss', dict(id=issue, teamId='a'))
+        open_issue = turn_intake.append(self.p, [self.message('shared', '또 바뀐 원문 OPEN_CANARY')])['intakeIssues'][0]['id']
+        classify_queued(self.p)
         folder = Path(self.temp.name)
         old, fresh, other = folder / 'private.sqlite.v1-abc.bak.sqlite', folder / 'private.sqlite.integration-def.bak.sqlite', folder / 'other.v1-x.bak.sqlite'
         for f in (old, fresh, other):
             f.write_bytes(b'synthetic backup')
         t0 = time.time()
-        os.utime(old, (t0 - 8 * DAY, t0 - 8 * DAY)); os.utime(other, (t0 - 8 * DAY, t0 - 8 * DAY))
+        os.utime(old, (t0 - 8 * DAY, t0 - 8 * DAY))
+        os.utime(other, (t0 - 8 * DAY, t0 - 8 * DAY))
         result = retention.sweep(self.db, now=t0)
         self.assertEqual(result['backupsDeleted'], 1)
         self.assertEqual((old.exists(), fresh.exists(), other.exists()), (False, True, True))
         later = retention.sweep(self.db, now=t0 + 8 * DAY)
-        # 8 days on, the fresh backup and the Pipeline's own migration backup have expired too; other files stay.
+        # 8 days on, the fresh backup has expired too; other files stay. A new database writes no migration backups.
         self.assertEqual(later['purgedIssues'], 1)
-        self.assertGreaterEqual(later['backupsDeleted'], 2)
+        self.assertEqual(later['backupsDeleted'], 1)
         self.assertEqual((fresh.exists(), other.exists(), list(folder.glob('private.sqlite.*.bak.sqlite'))), (False, True, []))
         self.assertGreater(later['cacheDeleted'], 0)
+        self.assertEqual(later['backupErrors'], 0)
         with connect(self.db) as c:
             issues = dict(c.execute('SELECT id,message FROM intake_issues'))
             self.assertEqual(c.execute('SELECT count(*) FROM privacy_results').fetchone()[0], 0)
         self.assertEqual(json.loads(issues[issue]), retention.PURGED)
         self.assertIn('OPEN_CANARY', issues[open_issue], 'unresolved quarantine stays')
+
+    def test_backup_delete_failure_is_counted_not_silent(self):
+        old = Path(self.temp.name) / 'private.sqlite.v1-locked.bak.sqlite'
+        old.write_bytes(b'synthetic backup')
+        t0 = time.time()
+        os.utime(old, (t0 - 8 * DAY, t0 - 8 * DAY))
+        err = io.StringIO()
+        with mock.patch.object(Path, 'unlink', side_effect=PermissionError('synthetic')), contextlib.redirect_stderr(err):
+            result = retention.sweep(self.db, now=t0)
+        self.assertEqual((result['backupsDeleted'], result['backupErrors']), (0, 1))
+        self.assertIn('PermissionError', err.getvalue())
+        self.assertNotIn('locked', err.getvalue(), 'file names stay out of the log')
+        self.assertTrue(old.exists())
 
 
 if __name__ == '__main__':

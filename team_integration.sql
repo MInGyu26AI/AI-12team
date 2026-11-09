@@ -1,4 +1,5 @@
--- Additive migration: approved shared_cards remain immutable and unchanged.
+-- Decision tracking tables, applied once: by init, or by migrate-integration on a database without them.
+-- It only adds tables and a default, so approved shared_cards remain immutable and unchanged.
 ALTER TABLE syncup.shared_cards ALTER COLUMN received_at SET DEFAULT clock_timestamp();
 CREATE TABLE syncup.record_states (
     team_id uuid NOT NULL, card_id text NOT NULL,
@@ -6,6 +7,7 @@ CREATE TABLE syncup.record_states (
     PRIMARY KEY(team_id,card_id),
     FOREIGN KEY(team_id,card_id) REFERENCES syncup.shared_cards(team_id,id)
 );
+-- team_upgrades.sql adds the diagnostics and progress columns.
 CREATE TABLE syncup.conflict_checks (
     team_id uuid NOT NULL, card_id text NOT NULL,
     state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','running','complete','failed')),
@@ -36,16 +38,19 @@ CREATE TABLE syncup.todo_states (
     FOREIGN KEY(team_id,card_id) REFERENCES syncup.shared_cards(team_id,id)
 );
 
+-- The same team-scoped policy on each table: rows of the request's team (syncup.team_id), for its members only.
+-- One definition in a loop keeps the five tables from drifting apart. Every policy is named team_access
+-- (existing databases already use that name); pg_policies tells them apart by tablename.
 DO $$ DECLARE name text; BEGIN
     FOREACH name IN ARRAY ARRAY['record_states','conflict_checks','conflicts','conflict_events','todo_states'] LOOP
-        EXECUTE format('ALTER TABLE syncup.%I ENABLE ROW LEVEL SECURITY',name);
-        EXECUTE format('ALTER TABLE syncup.%I FORCE ROW LEVEL SECURITY',name);
-        EXECUTE format('GRANT SELECT,INSERT ON syncup.%I TO syncup_api',name);
-        EXECUTE format('CREATE POLICY team_access ON syncup.%I TO syncup_api
-          USING (team_id = nullif(current_setting(''syncup.team_id'',true),'''')::uuid
-            AND EXISTS(SELECT 1 FROM syncup.memberships m WHERE m.team_id=%I.team_id))
-          WITH CHECK (team_id = nullif(current_setting(''syncup.team_id'',true),'''')::uuid
-            AND EXISTS(SELECT 1 FROM syncup.memberships m WHERE m.team_id=%I.team_id))',name,name,name);
+        EXECUTE format('ALTER TABLE syncup.%I ENABLE ROW LEVEL SECURITY', name);
+        EXECUTE format('ALTER TABLE syncup.%I FORCE ROW LEVEL SECURITY', name);
+        EXECUTE format('GRANT SELECT,INSERT ON syncup.%I TO syncup_api', name);
+        EXECUTE format($policy$CREATE POLICY team_access ON syncup.%1$I TO syncup_api
+          USING (team_id = nullif(current_setting('syncup.team_id', true), '')::uuid
+            AND EXISTS(SELECT 1 FROM syncup.memberships m WHERE m.team_id = %1$I.team_id))
+          WITH CHECK (team_id = nullif(current_setting('syncup.team_id', true), '')::uuid
+            AND EXISTS(SELECT 1 FROM syncup.memberships m WHERE m.team_id = %1$I.team_id))$policy$, name);
     END LOOP;
 END $$;
 GRANT UPDATE ON syncup.record_states,syncup.conflict_checks,syncup.conflicts,syncup.todo_states TO syncup_api;
