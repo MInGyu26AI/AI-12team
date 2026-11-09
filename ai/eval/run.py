@@ -4,23 +4,20 @@
   python3 -m eval.run conflict            # 충돌 판정 (외부 AI 필요)
   python3 -m eval.run conflict --rule     # AI 없이 규칙 판정 기준선
   결과는 eval/results/ 에 JSON 으로 저장 (커밋 안 됨)
+  검사를 끝내지 못한 묶음·쌍(낮은 확신도 등)은 incomplete 로 세고 정확도 계산에서 뺀다.
 """
 from __future__ import annotations
 
 import json
 import sys
 from collections import Counter
-from datetime import datetime
-from pathlib import Path
 
-from syncup_ai import conflict
-from syncup_ai.classify import classify_indexed
 from syncup_ai.config import LOW_CONFIDENCE, load_env
 from syncup_ai.llm import LLMNotConfigured, decider_from_env, from_env
 
 from .gold import CLASS, CONFLICT_PAIRS, EXAMPLES, HACKATHON
+from .scoring import alert_rates, classify_positions, judge, save_result, should_alert
 
-RESULTS = Path(__file__).resolve().parent / "results"
 TIME = "2026-11-06T12:00:00Z"  # = KST 21:00
 
 
@@ -46,59 +43,66 @@ def _match(expected: list[dict], got: list[dict]) -> list[tuple[dict, dict | Non
     return pairs
 
 
+def _score_example(expected: list[dict], got: list[dict], score: Counter, total: Counter) -> None:
+    exp_rel = "personal" if all(e["relevance"] == "personal" for e in expected) else "related"
+    got_rel = "related" if any(c["relevance"] == "related" for c in got) else "personal"
+    total["relevance"] += 1
+    score["relevance"] += exp_rel == got_rel
+    if exp_rel == "personal" and got_rel == "related":
+        score["personal_leak"] += 1  # 개인 내용이 공유 후보로 새는 경우 (가장 나쁨)
+    total["card_count"] += 1
+    same_count = (sum(c["relevance"] == "related" for c in got)
+                  == sum(e["relevance"] == "related" for e in expected))
+    score["card_count"] += same_count or (exp_rel == got_rel == "personal")
+    for e, g in _match(expected, got):
+        if e["relevance"] == "personal":
+            continue
+        for f in ("tag", "subtopic", "topic_key", "owner", "due", "is_change", "masked"):
+            if f in e and (f != "subtopic" or e["tag"] != "none"):
+                total[f] += 1
+                score[f] += bool(g) and g.get(f) == e[f]
+        if e.get("low_conf"):
+            total["low_conf"] += 1
+            score["low_conf"] += bool(g) and g["confidence"] < LOW_CONFIDENCE
+
+
 def eval_classify(llm, decider=None) -> dict:
     score: Counter = Counter()
     total: Counter = Counter()
-    rows = []
+    rows, incomplete = [], 0
     for idx, req in _requests():
-        out = classify_indexed(req, llm, decider)
+        out, failure = classify_positions(req, llm, decider)
         for pos, ex_i in enumerate(idx):
             _, sentence, expected = EXAMPLES[ex_i]
+            if failure:
+                incomplete += 1
+                rows.append({"sentence": sentence, "expected": expected, "failure": failure})
+                continue
             got = [c for p, c in out if p == pos]
-            exp_rel = "personal" if all(e["relevance"] == "personal" for e in expected) else "related"
-            got_rel = "related" if any(c["relevance"] == "related" for c in got) else "personal"
-            total["relevance"] += 1
-            score["relevance"] += exp_rel == got_rel
-            if exp_rel == "personal" and got_rel == "related":
-                score["personal_leak"] += 1  # 개인 내용이 공유 후보로 새는 경우 (가장 나쁨)
-            total["card_count"] += 1
-            score["card_count"] += len([c for c in got if c["relevance"] == "related"]) == len(
-                [e for e in expected if e["relevance"] == "related"]) or exp_rel == "personal" == got_rel
-            for e, g in _match(expected, got):
-                if e["relevance"] == "personal":
-                    continue
-                for f in ("tag", "subtopic", "topic_key", "owner", "due", "is_change", "masked"):
-                    if f in e and (f != "subtopic" or e["tag"] != "none"):
-                        total[f] += 1
-                        score[f] += bool(g) and g.get(f) == e[f]
-                if e.get("low_conf"):
-                    total["low_conf"] += 1
-                    score["low_conf"] += bool(g) and g["confidence"] < LOW_CONFIDENCE
+            _score_example(expected, got, score, total)
             rows.append({"sentence": sentence, "expected": expected, "got": got})
     acc = {k: round(score[k] / total[k], 3) for k in total}
     acc["personal_leak_count"] = score["personal_leak"]
+    acc["incomplete"] = incomplete
     return {"accuracy": acc, "rows": rows}
 
 
 def eval_conflict(llm, decider=None) -> dict:
-    tp = fn = fp = tn = exact = 0
-    rows = []
+    outcomes, rows, exact = [], [], 0
     for old, new, want in CONFLICT_PAIRS:
-        judged, conflicts = conflict.check_new_decision(new, [old], llm, decider)
-        got = judged[0]["judgement"] if judged else "무관(후보 아님)"
-        should_alert = want in ("충돌", "변경")
-        alerted = bool(conflicts)
-        tp += should_alert and alerted
-        fn += should_alert and not alerted
-        fp += not should_alert and alerted
-        tn += not should_alert and not alerted
-        exact += got.startswith(want)
-        rows.append({"old": old["content"], "new": new["content"], "want": want, "got": got,
-                     "reason": judged[0]["reason"] if judged else None})
+        judged, conflicts, failure = judge(new, [old], llm, decider)
+        if failure:
+            rows.append({"old": old["content"], "new": new["content"], "want": want, "got": f"미완료:{failure}",
+                         "reason": None})
+            continue
+        got = judged[0]["judgement"]
+        outcomes.append((should_alert(want), bool(conflicts)))
+        exact += got == want
+        rows.append({"old": old["content"], "new": new["content"], "want": want, "got": got, "reason": judged[0]["reason"]})
     return {
-        "detection_rate": round(tp / max(tp + fn, 1), 3),  # 목표 0.8 이상 (2차 회의)
-        "false_alarm_rate": round(fp / max(fp + tn, 1), 3),
-        "judgement_accuracy": round(exact / len(CONFLICT_PAIRS), 3),
+        **alert_rates(outcomes),
+        "judgement_accuracy": round(exact / max(len(outcomes), 1), 3),
+        "incomplete": len(CONFLICT_PAIRS) - len(outcomes),
         "rows": rows,
     }
 
@@ -124,13 +128,10 @@ def main() -> int:
         res = eval_conflict(llm, None if rule else decider_from_env())
         summary = {k: v for k, v in res.items() if k != "rows"}
         for r in res["rows"]:
-            mark = "✓" if r["got"].startswith(r["want"]) else "✗"
+            mark = "✓" if r["got"] == r["want"] else "✗"
             print(f"{mark} [{r['want']} → {r['got']}] {r['old']}  vs  {r['new']}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
-    RESULTS.mkdir(exist_ok=True)
-    out = RESULTS / f"{what}{'-rule' if rule else ''}-{datetime.now():%m%d-%H%M}.json"
-    out.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"저장: {out}")
+    print(f"저장: {save_result(what + ('-rule' if rule else ''), res)}")
     return 0
 
 

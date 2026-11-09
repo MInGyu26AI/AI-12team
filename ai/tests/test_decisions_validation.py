@@ -1,18 +1,17 @@
 """Synthetic boundary checks: no API key or external requests."""
 import copy
-import http.server
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
-import threading
 import unittest
 from unittest.mock import Mock, patch
 
 from syncup_ai import classify, conflict
 from syncup_ai.llm import DecisionsClient, LLMError, RetryableLLMError, choice_q, predicate_q
-from tests.test_ai import CTX, FakeLLM, dec, msg
+from tests.fakes import CTX, FakeLLM, dec, msg
+from tests.loopback import Reply, loopback_server
 
 
 class DecisionsValidationTest(unittest.TestCase):
@@ -55,7 +54,8 @@ class DecisionsValidationTest(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.rejected({'answers': [{**self.answer, **changes}]})
         for missing in ('name', 'type', 'choice'):
-            answer = dict(self.answer); answer.pop(missing)
+            answer = dict(self.answer)
+            answer.pop(missing)
             self.rejected({'answers': [answer]})
 
     def test_confidence_is_finite_numeric_probability(self):
@@ -73,10 +73,12 @@ class DecisionsValidationTest(unittest.TestCase):
             with self.subTest(probabilities=probabilities):
                 self.rejected({'answers': [{**self.answer, 'probabilities': probabilities}]})
         for value in (None, True, '0.2', -0.1, 1.1, float('nan'), float('inf')):
-            answer = copy.deepcopy(self.answer); answer['probabilities'][1]['probability'] = value
+            answer = copy.deepcopy(self.answer)
+            answer['probabilities'][1]['probability'] = value
             self.rejected({'answers': [answer]})
         self.rejected({'answers': [{**self.answer, 'choice': 'b'}]})
-        answer = copy.deepcopy(self.answer); answer['probabilities'][1]['value'] = []
+        answer = copy.deepcopy(self.answer)
+        answer['probabilities'][1]['value'] = []
         self.rejected({'answers': [answer]})
 
     def test_predicate_and_typed_boolean_choice(self):
@@ -139,58 +141,39 @@ class DecisionsValidationTest(unittest.TestCase):
             self.assertEqual(post.call_count, 1)
 
     def test_real_http_and_cli_keep_invalid_responses_failed(self):
-        calls = []
-        response = [b'not-json']
-
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
-
-            def do_POST(self):
-                calls.append((self.path, json.loads(self.rfile.read(int(self.headers['Content-Length'])))))
-                self.send_response(200)
-                self.send_header('Content-Length', str(len(response[0])))
-                self.end_headers()
-                self.wfile.write(response[0])
-
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-        worker = threading.Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-        base = f'http://127.0.0.1:{server.server_port}/v1'
-        self.client.base_url = base
-        try:
+        reply = Reply()
+        with loopback_server(reply) as origin:
+            base = f'{origin}/v1'
+            self.client.base_url = base
             for body in (b'not-json', b'\xff', b'{"answers": []}'):
-                response[0] = body
+                reply.body = body
                 with self.assertRaises(LLMError) as caught:
                     self.client.decide('synthetic', self.questions)
                 self.assertNotIsInstance(caught.exception, RetryableLLMError)
-            self.assertEqual(len(calls), 3)
+            self.assertEqual(len(reply.requests), 3)
             env = {k: v for k, v in os.environ.items() if not k.startswith(('AI_', 'OPENAI_'))}
             env.update(PYTHONPATH=str(Path(__file__).resolve().parents[1]), AI_BASE_URL=base,
                        AI_API_KEY='synthetic-key', AI_MODEL='synthetic-chat', AI_DECISIONS_MODEL='synthetic-decisions')
             request = {'newCards': [dec('new', 'UI', '화면 = Vue')],
                        'existing': [dec('old', 'UI', '화면 = React')]}
-            for answer, expected in ((dict(type='refusal', name='e1'), False),
-                                     (dict(type='choice', name='e1', choice='충돌', confidence=.6), True),
-                                     (dict(type='choice', name='e1', choice='충돌', confidence=.5999), False)):
-                response[0] = json.dumps({'answers': [answer]}).encode()
-                before = len(calls)
+            decisions_only, with_review = ['/v1/decisions'], ['/v1/decisions', '/v1/chat/completions']
+            # (Decisions 답, 성공 여부, 서버가 받은 경로). 낮은 확신도는 chat 독립 검토를 한 번 부른다.
+            # 이 서버는 chat 경로에도 Decisions 응답을 돌려주므로 검토는 형식 오류로 끝나고 확인 필요로 남는다.
+            for answer, expected, paths in (
+                    (dict(type='refusal', name='e1'), False, decisions_only),
+                    (dict(type='choice', name='e1', choice='충돌', confidence=.6), True, decisions_only),
+                    (dict(type='choice', name='e1', choice='충돌', confidence=.5999), False, with_review)):
+                reply.body = json.dumps({'answers': [answer]}).encode()
+                before = len(reply.requests)
                 process = subprocess.run([sys.executable, '-m', 'syncup_ai', 'conflicts'],
                     input=json.dumps(request), text=True, capture_output=True, env=env, timeout=10)
                 result = json.loads(process.stdout)
                 self.assertEqual(process.returncode, 0 if expected else 1, process.stderr)
                 self.assertEqual(result['ok'], expected)
-                paths = [path for path, _ in calls[before:]]
-                self.assertEqual(paths, ['/v1/decisions', '/v1/chat/completions']
-                                 if answer.get('confidence') == .5999 else ['/v1/decisions'])
+                self.assertEqual([path for path, _ in reply.requests[before:]], paths)
                 if not expected:
                     self.assertEqual(result['checkStatus'], 'failed')
                     self.assertFalse(result['retryable'])
-            self.assertTrue(all(path in ('/v1/decisions', '/v1/chat/completions') for path, _ in calls))
-        finally:
-            server.shutdown()
-            server.server_close()
-            worker.join()
 
 
 if __name__ == '__main__':

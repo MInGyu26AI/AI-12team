@@ -1,9 +1,11 @@
 """결정 충돌 판정: 새로 승인된 결정 ↔ 팀 보드의 기존 결정.
 
-1) 후보 찾기: 유효 승인 결정을 주제·유사도 순으로 정렬 (키·유사도로 제외하지 않음)
-2) AI 판정: CONFLICT_TOP_K 개씩 전부 비교. 한도 초과·일부 실패는 전체 검사 실패
-3) 충돌(설정에 따라 변경도) → shared/types.ts Conflict 객체
-판정 순서: Decisions API → chat 모델 → 규칙(같은 topic_key + 다른 내용, 결정자가 같으면 변경·다르면 충돌).
+1) 후보: 유효한 승인 결정을 같은 topic_key·유사도 순으로 정렬한다. 키나 유사도로 빼지 않는다.
+2) 판정: CONFLICT_TOP_K 쌍씩 Decisions 로 묻는다. Decisions 가 없거나 통신 실패(RetryableLLMError)면 그 묶음을 chat 모델로 묻는다.
+   Decisions 확신도가 낮으면 chat 모델과 Decisions 가 따로 한 번 더 본다(독립 검토).
+3) allow_rules=False(팀 worker): 누락·낮은 확신도·한도 초과는 검사 실패다.
+   allow_rules=True(CLI·오프라인): AI 가 없거나 빠뜨린 답을 규칙(같은 topic_key + 다른 내용)으로 채우고 degraded 로 끝난다.
+4) 충돌(설정에 따라 변경도) → shared/types.ts Conflict 객체
 """
 from __future__ import annotations
 
@@ -11,13 +13,15 @@ import hashlib
 import json
 import math
 import re
+import sys
 import time
 
 from . import config
-from .decide import judge_pairs
-from .llm import LLM, Decider, LLMError, RetryableLLMError
+from .decide import judge_pairs, judgement_reason
+from .llm import LLM, Decider, LLMError, RetryableLLMError, describe_failure
 from .similarity import similarities
 from .mask import mask_text
+from .schema import norm_key
 
 JUDGEMENTS = ("같음", "변경", "충돌", "무관")
 
@@ -38,20 +42,25 @@ def find_candidates(new: dict, existing: list[dict]) -> list[dict]:
         return []
     if len(pool) > config.CONFLICT_MAX_CANDIDATES:
         raise ValueError("충돌 비교 개수 한도를 초과했습니다. 검사 미완료입니다.")
-    if len(json.dumps([_brief(new), *map(_brief, pool)], ensure_ascii=False)) > config.CONFLICT_MAX_INPUT_CHARS:
+    request = json.dumps([_brief(new), *map(_brief, pool)], ensure_ascii=False)
+    if len(request) > config.CONFLICT_MAX_INPUT_CHARS:
         raise ValueError("충돌 비교 입력 크기 한도를 초과했습니다. 검사 미완료입니다.")
     return pool
 
 
 def ordered_candidates(new: dict, existing: list[dict]) -> list[dict]:
-    """Durable workers snapshot all eligible IDs; synchronous callers retain their request budget."""
-    topic = _norm(new.get("topic_key") or "")
+    """비교할 기존 결정을 한도 검사 없이 정렬만 한다. 팀 worker 는 이 목록의 ID를 저장해 두고 한 쌍씩 비교한다."""
+    topic = norm_key(new.get("topic_key") or "")
     pool = [c for c in existing if _is_decision(c) and c.get("id") != new.get("id")]
     # 순서만 정하므로 외부 임베딩 호출 없이 기존 로컬 유사도를 사용한다.
     scores = similarities(new, pool)
-    return [c for c, _ in sorted(zip(pool, scores),
-            key=lambda pair: (bool(topic) and _norm(pair[0].get("topic_key") or "") == topic, pair[1]),
-            reverse=True)]
+
+    def rank(pair: tuple[dict, float]) -> tuple[bool, float]:
+        card, score = pair
+        same_topic = bool(topic) and norm_key(card.get("topic_key") or "") == topic
+        return same_topic, score
+
+    return [card for card, _ in sorted(zip(pool, scores), key=rank, reverse=True)]
 
 
 def _brief(c: dict) -> dict:
@@ -59,15 +68,11 @@ def _brief(c: dict) -> dict:
     return {k: mask_text(v) if isinstance(v, str) else v for k, v in ((k, c.get(k)) for k in keys)}
 
 
-def _norm(content: str) -> str:
-    return re.sub(r"\s+", "", content).lower()
-
-
 def rule_judge(new: dict, old: dict) -> dict:
     """AI 없이 쓰는 판정 (오프라인·실패 대비). 같은 세부 주제만 비교."""
     if new.get("topic_key") != old.get("topic_key"):
         return {"id": old.get("id"), "judgement": "무관", "reason": "세부 주제가 다름", "confidence": 0.4}
-    if _norm(new.get("content") or "") == _norm(old.get("content") or ""):
+    if norm_key(new.get("content") or "") == norm_key(old.get("content") or ""):
         return {"id": old.get("id"), "judgement": "같음", "reason": "같은 세부 주제의 같은 내용", "confidence": 0.6}
     # 정답표(conflict_key K1·K5·K6·K12): 같은 사람이 고치거나 팀 합의로 바꾸면 변경, 다른 사람이 반대로 정하면 충돌
     same_owner = bool(new.get("owner")) and new.get("owner") == old.get("owner")
@@ -89,28 +94,32 @@ def ai_judge(new: dict, candidates: list[dict], llm: LLM, allow_rules: bool = Tr
     )
     reply = llm.chat_json(system, mask_text(user))
     if not allow_rules:
-        rows = reply.get('results')
-        if (not isinstance(rows, list) or len(rows) != len(candidates)
-                or any(not isinstance(row, dict) for row in rows)
-                or {row.get('id') for row in rows} != {c.get('id') for c in candidates}):
-            raise ValueError('충돌 판정 응답의 대상이 누락되거나 중복되었습니다.')
+        _require_every_result(reply, candidates)
     by_id = {str(r.get("id")): r for r in reply.get("results", []) if isinstance(r, dict)}
-    out = []
-    for c in candidates:
-        r = by_id.get(str(c.get("id")))
-        if not r or r.get("judgement") not in JUDGEMENTS:
-            if not allow_rules:
-                raise ValueError("충돌 판정 응답이 누락되었습니다.")
-            out.append({**rule_judge(new, c), "method": "rule"})
-            continue
-        out.append({
-            "id": c.get("id"),
-            "judgement": r["judgement"],
-            "reason": str(r.get("reason") or "").strip() or rule_judge(new, c)["reason"],
-            "confidence": r.get("confidence", 0.0),
-            "method": "chat",
-        })
-    return out
+    return [_chat_judgement(new, c, by_id.get(str(c.get("id"))), allow_rules) for c in candidates]
+
+
+def _require_every_result(reply: dict, candidates: list[dict]) -> None:
+    rows = reply.get('results')
+    if (not isinstance(rows, list) or len(rows) != len(candidates)
+            or any(not isinstance(row, dict) for row in rows)
+            or {row.get('id') for row in rows} != {c.get('id') for c in candidates}):
+        raise ValueError('충돌 판정 응답의 대상이 누락되거나 중복되었습니다.')
+
+
+def _chat_judgement(new: dict, old: dict, row: dict | None, allow_rules: bool) -> dict:
+    if not row or row.get("judgement") not in JUDGEMENTS:
+        if not allow_rules:
+            raise ValueError("충돌 판정 응답이 누락되었습니다.")
+        return {**rule_judge(new, old), "method": "rule"}
+    judgement = row["judgement"]
+    return {
+        "id": old.get("id"),
+        "judgement": judgement,
+        "reason": str(row.get("reason") or "").strip() or judgement_reason(judgement, new, old),
+        "confidence": row.get("confidence", 0.0),
+        "method": "chat",
+    }
 
 
 def conflict_id(old: dict, new: dict) -> str:
@@ -123,6 +132,11 @@ def _confident(result: dict) -> bool:
             and config.LOW_CONFIDENCE <= value <= 1)
 
 
+def _check_deadline(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise ValueError("충돌 비교 시간 한도를 초과했습니다. 검사 미완료입니다.")
+
+
 def check_new_decision(
     new: dict, existing: list[dict], llm: LLM | None = None,
     decider: Decider | None = None,
@@ -133,77 +147,103 @@ def check_new_decision(
         return [], []
     deadline = time.monotonic() + config.CONFLICT_CHECK_SECONDS
     candidates = find_candidates(new, existing)
-    if not candidates:
-        return [], []
     judged = []
     for start in range(0, len(candidates), config.CONFLICT_TOP_K):
-        if time.monotonic() >= deadline:
-            raise ValueError("충돌 비교 시간 한도를 초과했습니다. 검사 미완료입니다.")
         batch = candidates[start:start + config.CONFLICT_TOP_K]
-        result = None
-        transport_error = None
-        if decider is not None:  # 1순위: Decisions (확률 기반 판정)
-            try:
-                result = [{**r, "method": "decisions"} for r in judge_pairs(new, batch, decider)]
-            except RetryableLLMError as error:
-                transport_error = error
-        if time.monotonic() >= deadline:
-            raise ValueError("충돌 비교 시간 한도를 초과했습니다. 검사 미완료입니다.")
-        if result is None and llm is not None:  # 일시적인 통신 실패만 기존 chat 경로로 대체한다.
-            try:
-                result = ai_judge(new, batch, llm, allow_rules)
-            except RetryableLLMError as error:
-                transport_error = error
-        if time.monotonic() >= deadline:
-            raise ValueError("충돌 비교 시간 한도를 초과했습니다. 검사 미완료입니다.")
-        if result is None:
-            if not allow_rules:
-                if transport_error is not None:
-                    raise transport_error
-                raise ValueError("AI 충돌 검사를 완료하지 못했습니다. 재시도가 필요합니다.")
-            result = [{**rule_judge(new, c), "method": "rule"} for c in batch]
-        for index, judgement in enumerate(result):
-            if judgement['method'] != 'decisions' or _confident(judgement) or llm is None:
-                continue
-            if time.monotonic() >= deadline:
-                raise LowConfidenceError('확인 필요: 독립 검토 시간을 초과했습니다.')
-            candidate = next(c for c in batch if c['id'] == judgement['id'])
-            try:
-                review = ai_judge(new, [candidate], llm, allow_rules=False)[0]
-                if not _confident(review) or time.monotonic() >= deadline:
-                    continue
-                # 검토자의 결론은 Decisions에 전달하지 않는다. 두 독립 판정이 모두 기준을 넘어야 한다.
-                confirmed = judge_pairs(new, [candidate], decider, with_owner_evidence=True)[0]
-                if (time.monotonic() < deadline and _confident(confirmed)
-                        and confirmed['judgement'] == review['judgement']):
-                    result[index] = dict(confirmed, method='decisions', reviewedBy='chat',
-                                         reviewConfidence=review['confidence'],
-                                         confidence=min(confirmed['confidence'], review['confidence']))
-            except (LLMError, ValueError, TypeError):
-                # 보완 검토 실패로 최초의 불확실한 판정을 자동 통신 재시도로 바꾸지 않는다.
-                continue
+        result = _judge_batch(new, batch, llm, decider, allow_rules, deadline)
+        if llm is not None:
+            result = [_independent_review(new, c, j, llm, decider, deadline)
+                      if j["method"] == "decisions" and not _confident(j) else j
+                      for c, j in zip(batch, result)]
         if any(j["method"] != "rule" and not _confident(j) for j in result):
             raise LowConfidenceError("확인 필요: AI 판정의 확신도가 부족합니다. 검사 미완료입니다.")
         judged.extend(result)
+    return judged, _conflicts(new, candidates, judged)
 
-    alert = {"충돌", "변경"} if config.CONFLICT_ON_CHANGE else {"충돌"}
+
+def _judge_batch(new: dict, batch: list[dict], llm: LLM | None, decider: Decider | None,
+                 allow_rules: bool, deadline: float) -> list[dict]:
+    """한 묶음 판정: Decisions → (없거나 통신 실패면) chat 모델 → (allow_rules 면) 규칙."""
+    _check_deadline(deadline)
+    result, transport_error = None, None
+    if decider is not None:  # 1순위: Decisions (확률 기반 판정)
+        try:
+            result = [{**r, "method": "decisions"} for r in judge_pairs(new, batch, decider)]
+        except RetryableLLMError as error:
+            transport_error = error
+    _check_deadline(deadline)
+    if result is None and llm is not None:  # 일시적인 통신 실패만 기존 chat 경로로 대체한다.
+        try:
+            result = ai_judge(new, batch, llm, allow_rules)
+        except RetryableLLMError as error:
+            transport_error = error
+    _check_deadline(deadline)
+    if result is not None:
+        return result
+    if not allow_rules:
+        if transport_error is not None:
+            raise transport_error
+        raise ValueError("AI 충돌 검사를 완료하지 못했습니다. 재시도가 필요합니다.")
+    return [{**rule_judge(new, c), "method": "rule"} for c in batch]
+
+
+def _independent_review(new: dict, candidate: dict, judgement: dict, llm: LLM, decider: Decider,
+                        deadline: float) -> dict:
+    """확신도가 낮은 Decisions 판정 하나를 chat 모델과 Decisions 가 따로 다시 본다.
+
+    두 판정이 모두 기준을 넘고 관계가 같으면 확정한 판정을, 아니면 원래 판정을 돌려준다.
+    검토자의 결론은 Decisions 에 전달하지 않는다."""
+    if time.monotonic() >= deadline:
+        raise LowConfidenceError('확인 필요: 독립 검토 시간을 초과했습니다.')
+    try:
+        review = ai_judge(new, [candidate], llm, allow_rules=False)[0]
+        if not _confident(review) or time.monotonic() >= deadline:
+            return judgement
+        confirmed = judge_pairs(new, [candidate], decider, with_owner_evidence=True)[0]
+    except (LLMError, ValueError) as error:
+        # 보완 검토 실패로 최초의 불확실한 판정을 자동 통신 재시도로 바꾸지 않는다.
+        print(f"[syncup_ai] 독립 검토 실패, 확인 필요로 남김: {describe_failure(error)}", file=sys.stderr)
+        return judgement
+    if not (time.monotonic() < deadline and _confident(confirmed)
+            and confirmed['judgement'] == review['judgement']):
+        return judgement
+    return dict(confirmed, method='decisions', reviewedBy='chat', reviewConfidence=review['confidence'],
+                confidence=min(confirmed['confidence'], review['confidence']))
+
+
+def alert_judgements() -> set[str]:
+    """경고(Conflict)로 내보내는 판정. 평가 스크립트도 같은 기준으로 채점한다."""
+    return {"충돌", "변경"} if config.CONFLICT_ON_CHANGE else {"충돌"}
+
+
+def _conflicts(new: dict, candidates: list[dict], judged: list[dict]) -> list[dict]:
+    alert = alert_judgements()
     by_id = {c.get("id"): c for c in candidates}
-    conflicts = []
-    for r in judged:
-        if r["judgement"] in alert:
-            old = by_id[r["id"]]
-            conflicts.append({
-                "id": conflict_id(old, new),
-                "topic_key": old.get("topic_key") or new.get("topic_key"),
-                "cardA": old,  # 기존 결정
-                "cardB": new,  # 새 결정
-                "judgement": r["judgement"],
-                "reason": r["reason"],
-                "confidence": r["confidence"],
-                "method": r["method"],
-                **({"reviewedBy": r['reviewedBy']} if 'reviewedBy' in r else {}),
-            })
-    return judged, conflicts
+    return [_conflict(by_id[r["id"]], new, r) for r in judged if r["judgement"] in alert]
+
+
+def _conflict(old: dict, new: dict, judgement: dict) -> dict:
+    conflict = {
+        "id": conflict_id(old, new),
+        "topic_key": old.get("topic_key") or new.get("topic_key"),
+        "cardA": old,  # 기존 결정
+        "cardB": new,  # 새 결정
+        "judgement": judgement["judgement"],
+        "reason": judgement["reason"],
+        "confidence": judgement["confidence"],
+        "method": judgement["method"],
+    }
+    if "reviewedBy" in judgement:
+        conflict["reviewedBy"] = judgement["reviewedBy"]
+    return conflict
+
+
+def _failure_reason(error: Exception) -> str:
+    if isinstance(error, LowConfidenceError):
+        return "low-confidence"
+    if isinstance(error, RetryableLLMError):
+        return "communication"
+    return "check-failed"
 
 
 def handle_request(request: dict, llm: LLM | None, decider: Decider | None = None, *, allow_rules: bool = True) -> dict:
@@ -223,6 +263,4 @@ def handle_request(request: dict, llm: LLM | None, decider: Decider | None = Non
                 "checkStatus": "degraded" if degraded else "complete"}
     except Exception as e:
         return {"ok": False, "checkStatus": "failed", "error": f"충돌 검사 실패: {e}",
-                "failureReason": "low-confidence" if isinstance(e, LowConfidenceError) else
-                                 "communication" if isinstance(e, RetryableLLMError) else "check-failed",
-                "retryable": isinstance(e, RetryableLLMError)}
+                "failureReason": _failure_reason(e), "retryable": isinstance(e, RetryableLLMError)}
