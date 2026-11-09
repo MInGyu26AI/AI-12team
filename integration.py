@@ -14,14 +14,23 @@ from ai.syncup_ai.llm import from_env, decider_from_env
 from ai.syncup_ai.mask import mask, has_mask_token
 from ai.syncup_ai.evidence import render_evidence, locate_evidence
 from card_contract import PUBLIC_FIELDS, validate_card
-from collector import active, config
-from delivery import approve, deliver
+from collector import active
+from delivery import approve
 from diagnostics import failure
 from integration_store import initialize_integration
 import local_privacy
 from local_privacy import ALLOW, EXCLUDE, HOLD, OutboundGuard
 from storage import connect
 from team_client import bind_sharing
+
+# Messages of the latest batch queued before a job for the same team, session, conversation and site. Params: team, job id, start, conversation, site.
+PREVIOUS_BATCH = '''SELECT x.messages FROM job_context x JOIN jobs j ON j.id=x.job
+                WHERE x.team_id=? AND j.rowid<(SELECT rowid FROM jobs WHERE id=?)
+                AND json_extract(x.context,'$.collectionStart')=?
+                AND json_extract(x.messages,'$[0].conversationId')=?
+                AND json_extract(x.messages,'$[0].site')=? ORDER BY j.rowid DESC LIMIT 1'''
+# Outbox ids whose recorded destination is the current sharing binding (same team, user and server).
+CURRENT_DESTINATION_IDS = 'SELECT d.id FROM outbox_destinations d JOIN sharing s ON s.team_id=d.team_id AND s.user_id=d.user_id AND s.api_url=d.api_url'
 
 
 def digest(value):
@@ -156,6 +165,9 @@ class Pipeline:
         return dict(newMessages=count, queued=bool(clean), intakeIssues=issues)
 
     def resolve_intake(self, params, action):
+        # Type-check id/teamId → lock (self.lock + BEGIN IMMEDIATE) → check the issue is the current team's (the same action again returns
+        # the earlier result; retry also runs require_active here) → queue the retry message, record the resolution.
+        # On failure everything rolls back: the issue's state is unchanged and no replacement message is stored.
         if not isinstance(params.get('id'),str) or not isinstance(params.get('teamId'),str):
             raise ValueError('입력과 대상 팀을 확인하세요.')
         with self.lock, connect(self.db) as c:
@@ -205,6 +217,8 @@ class Pipeline:
             self.batches(c,binding['team_id'],ctx)
 
     def process(self):
+        # Runs without self.lock, so configure() can run during an AI call. The privacy review and the AI call run outside
+        # any transaction; _exclude_locally and _store_cards lock (BEGIN IMMEDIATE) and re-check require_active.
         if not self.process_lock.acquire(blocking=False):
             return
         try:
@@ -212,40 +226,20 @@ class Pipeline:
                 jobs = c.execute("SELECT j.id,x.team_id,x.context,x.messages FROM jobs j JOIN job_context x ON x.job=j.id WHERE j.state='new' ORDER BY j.rowid").fetchall()
             for job in jobs:
                 ctx = json.loads(job['context'])
-                try:
-                    self.require_active(job['team_id'],ctx['collectionStart'])
-                except ValueError:
+                # Outside the try below: a database error here aborts the whole run.
+                if not self._job_runnable(job, ctx):
                     continue
-                with connect(self.db) as c:
-                    if self.privacy.waiting(c, job['id']):
-                        continue
                 try:
                     messages = json.loads(job['messages'])
-                    with connect(self.db) as c:
-                        previous = c.execute('''SELECT x.messages FROM job_context x JOIN jobs j ON j.id=x.job
-                            WHERE x.team_id=? AND j.rowid<(SELECT rowid FROM jobs WHERE id=?)
-                            AND json_extract(x.context,'$.collectionStart')=?
-                            AND json_extract(x.messages,'$[0].conversationId')=?
-                            AND json_extract(x.messages,'$[0].site')=? ORDER BY j.rowid DESC LIMIT 1''',
-                            (job['team_id'],job['id'],ctx['collectionStart'],messages[0]['conversationId'],messages[0]['site'])).fetchone()
+                    earlier = self._previous_batch(job, ctx, messages)
                     # Batch, earlier context and metadata all pass the on-device gate before any AI client exists.
-                    review = self.privacy.review_job(self.db, job['id'], messages,
-                                                     context_tail(json.loads(previous[0])) if previous else [], ctx)
+                    review = self.privacy.review_job(self.db, job['id'], messages, earlier, ctx)
                     if review.decision == HOLD:
                         continue
                     if review.decision == EXCLUDE:
-                        with connect(self.db) as c:
-                            c.execute('BEGIN IMMEDIATE')
-                            self.require_active(job['team_id'],ctx['collectionStart'])
-                            c.execute("UPDATE jobs SET state='done',detail='개인 내용 · 로컬에서 제외, 외부 전송 없음' WHERE id=? AND state='new'", (job['id'],))
+                        self._exclude_locally(job, ctx)
                         continue
-                    llm, decider = self.llm_factory(), self.decider_factory()
-                    guard = lambda: self.require_active(job['team_id'],ctx['collectionStart'])
-                    llm.before_request = guard
-                    if decider:
-                        decider.before_request = guard
-                    llm = OutboundGuard(llm, review.fragments)
-                    decider = OutboundGuard(decider, review.fragments) if decider else None
+                    llm, decider = self._guarded_clients(job, ctx, review)
                     result = classify(dict(context=review.context,messages=review.messages,contextMessages=review.context_messages),llm,decider)
                     blocked = llm.blocked or (decider.blocked if decider else None)
                     if blocked:
@@ -253,32 +247,80 @@ class Pipeline:
                         continue
                     if not result['ok']:
                         raise ValueError(result['error'])
-                    self.require_active(job['team_id'],ctx['collectionStart'])
-                    with connect(self.db) as c:
-                        c.execute('BEGIN IMMEDIATE')
-                        self.require_active(job['team_id'],ctx['collectionStart'])
-                        for index, card in enumerate(result['cards']):
-                            if card['relevance'] != 'related' or card['tag'] == 'none':
-                                continue
-                            validate_card({k:card[k] for k in PUBLIC_FIELDS})
-                            identifier = digest([job['id'],index])
-                            kind = 'task' if card['tag']=='todo' else card['tag']
-                            c.execute("INSERT INTO cards VALUES(?,?,?,?,?,?,?,'ready') ON CONFLICT(id) DO NOTHING",
-                                      (identifier,job['id'],kind,1,card['content'],card['sentence'],card['evidence']['role']))
-                            c.execute('INSERT INTO candidate_details VALUES(?,?,?,0) ON CONFLICT(id) DO NOTHING',
-                                      (identifier,job['team_id'],json.dumps(card,ensure_ascii=False)))
-                        c.execute("UPDATE jobs SET state='done',detail='' WHERE id=?", (job['id'],))
+                    self._store_cards(job, ctx, result)
                 except Exception as error:
-                    failure('classification', error, job['id'])
-                    try:
-                        self.require_active(job['team_id'],ctx['collectionStart'])
-                    except ValueError:
-                        continue
-                    with connect(self.db) as c:
-                        c.execute("UPDATE jobs SET state='failed_new',detail=? WHERE id=?",
-                                  ('분류 실패 · '+type(error).__name__+' · 원문 보존, 재시도 가능',job['id']))
+                    self._mark_failed(job, ctx, error)
         finally:
             self.process_lock.release()
+
+    def _job_runnable(self, job, ctx):
+        """False when the job's session or team is no longer current, or the job waits for a local privacy decision."""
+        try:
+            self.require_active(job['team_id'],ctx['collectionStart'])
+        except ValueError:
+            return False
+        with connect(self.db) as c:
+            if self.privacy.waiting(c, job['id']):
+                return False
+        return True
+
+    def _previous_batch(self, job, ctx, messages):
+        """Tail of the batch queued just before this one for the same conversation and session, or []."""
+        with connect(self.db) as c:
+            previous = c.execute(PREVIOUS_BATCH,
+                (job['team_id'],job['id'],ctx['collectionStart'],messages[0]['conversationId'],messages[0]['site'])).fetchone()
+        return context_tail(json.loads(previous[0])) if previous else []
+
+    def _exclude_locally(self, job, ctx):
+        # Checked by _job_runnable before the review; here lock (BEGIN IMMEDIATE) → re-check (require_active) → mark done
+        # only while still 'new'. On failure nothing is written and the error reaches _mark_failed through process().
+        with connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            self.require_active(job['team_id'],ctx['collectionStart'])
+            c.execute("UPDATE jobs SET state='done',detail='개인 내용 · 로컬에서 제외, 외부 전송 없음' WHERE id=? AND state='new'", (job['id'],))
+
+    def _guarded_clients(self, job, ctx, review):
+        """AI clients that re-check the session before each request and refuse text the local review did not clear."""
+        llm, decider = self.llm_factory(), self.decider_factory()
+        guard = lambda: self.require_active(job['team_id'],ctx['collectionStart'])
+        llm.before_request = guard
+        if decider:
+            decider.before_request = guard
+        llm = OutboundGuard(llm, review.fragments)
+        decider = OutboundGuard(decider, review.fragments) if decider else None
+        return llm, decider
+
+    def _store_cards(self, job, ctx, result):
+        # Check (require_active) → lock (BEGIN IMMEDIATE) → re-check (require_active) → insert cards and mark the job done in
+        # one transaction. On failure it rolls back: no card is stored and the job stays 'new' for _mark_failed.
+        self.require_active(job['team_id'],ctx['collectionStart'])
+        with connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            self.require_active(job['team_id'],ctx['collectionStart'])
+            # Ids use the position in the unfiltered result; filtering first would change them and break dedup.
+            for index, card in enumerate(result['cards']):
+                if card['relevance'] != 'related' or card['tag'] == 'none':
+                    continue
+                validate_card({k:card[k] for k in PUBLIC_FIELDS})
+                identifier = digest([job['id'],index])
+                kind = 'task' if card['tag']=='todo' else card['tag']
+                c.execute("INSERT INTO cards VALUES(?,?,?,?,?,?,?,'ready') ON CONFLICT(id) DO NOTHING",
+                          (identifier,job['id'],kind,1,card['content'],card['sentence'],card['evidence']['role']))
+                c.execute('INSERT INTO candidate_details VALUES(?,?,?,0) ON CONFLICT(id) DO NOTHING',
+                          (identifier,job['team_id'],json.dumps(card,ensure_ascii=False)))
+            c.execute("UPDATE jobs SET state='done',detail='' WHERE id=?", (job['id'],))
+
+    def _mark_failed(self, job, ctx, error):
+        # Implicit transaction, no BEGIN IMMEDIATE. Check (require_active) → mark failed_new; job_context keeps the messages
+        # for jobs.retry. If the check fails (paused, ended, or session/team changed), the job is left 'new' untouched.
+        failure('classification', error, job['id'])
+        try:
+            self.require_active(job['team_id'],ctx['collectionStart'])
+        except ValueError:
+            return
+        with connect(self.db) as c:
+            c.execute("UPDATE jobs SET state='failed_new',detail=? WHERE id=?",
+                      ('분류 실패 · '+type(error).__name__+' · 원문 보존, 재시도 가능',job['id']))
 
     def status(self):
         with connect(self.db) as c:
@@ -474,6 +516,78 @@ class Pipeline:
             c.execute('UPDATE integration_settings SET config=?',(json.dumps(options,ensure_ascii=False),))
         return self.status()
 
+    def flush(self):
+        with self.lock,connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            _,binding=self.require_active()
+            self.batches(c,binding['team_id'],self.context(c,binding['team_id'],self.local_profile(c)),True)
+        return dict(queued=True)
+
+    def intake_issues(self):
+        with connect(self.db) as c:
+            return dict(items=[dict(r) for r in c.execute('''SELECT * FROM intake_issues WHERE team_id=(SELECT team_id FROM sharing)
+                    AND id NOT IN (SELECT issue_id FROM intake_resolutions) ORDER BY received''')])
+
+    def dismiss_candidate(self, params):
+        with connect(self.db) as c:
+            c.execute('''UPDATE candidate_details SET dismissed=1 WHERE id=? AND team_id=(SELECT team_id FROM sharing)
+                    AND id IN (SELECT id FROM cards WHERE status='ready')''',(params.get('id'),))
+        return dict(ok=True)
+
+    def _retry_job(self, params):
+        # Called only from rpc, which has already validated id/teamId.
+        with self.lock, connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            s,binding=self.require_active(params.get('teamId'))
+            row=c.execute("SELECT x.context FROM job_context x JOIN jobs j ON j.id=x.job WHERE x.job=? AND x.team_id=? AND j.state='failed_new'",(params.get('id'),binding['team_id'])).fetchone()
+            if not row: raise ValueError('재시도할 작업이 없습니다.')
+            ctx=json.loads(row[0]);ctx['collectionStart']=s['start']
+            c.execute('UPDATE job_context SET context=? WHERE job=?',(json.dumps(ctx),params['id']))
+            c.execute("UPDATE jobs SET state='new',detail='' WHERE id=? AND state='failed_new'",(params['id'],))
+        return dict(queued=True)
+
+    def _retry_delivery(self, params):
+        # Called only from rpc, which has already validated id/teamId.
+        with self.lock, connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            if 'teamId' in params and params['teamId'] != c.execute('SELECT team_id FROM sharing').fetchone()[0]:
+                raise ValueError('대상 팀이 변경되었습니다.')
+            updated = c.execute(f"""UPDATE outbox SET state='pending',attempts=0,next_attempt=0,detail='' WHERE id=? AND state='blocked'
+                    AND id IN ({CURRENT_DESTINATION_IDS})""",(params.get('id'),))
+            if updated.rowcount != 1: raise ValueError('현재 팀에 재시도할 전송이 없습니다.')
+        return dict(queued=True)
+
+    def approve_candidates(self, params):
+        # Validate ids → client.me() outside the lock → lock (self.lock + BEGIN IMMEDIATE) → check the sharing binding against teamId and
+        # that fresh profile (no require_active) → queue each card. One failure rolls back the call: nothing from it is queued.
+        identifiers=params.get('ids')
+        if not isinstance(identifiers,list) or not 1<=len(identifiers)<=100 or any(not isinstance(i,str) for i in identifiers): raise ValueError('승인 후보를 확인하세요.')
+        profile=self.client.me()
+        with self.lock,connect(self.db) as c:
+            c.execute('BEGIN IMMEDIATE')
+            binding=dict(c.execute('SELECT * FROM sharing').fetchone())
+            if params.get('teamId')!=binding['team_id'] or binding['team_id'] not in {t['id'] for t in profile['teams']}:
+                raise ValueError('대상 팀이 변경되었습니다. 다시 확인하세요.')
+            for identifier in identifiers:
+                row=c.execute('SELECT c.* FROM cards c JOIN candidate_details d ON d.id=c.id WHERE c.id=? AND d.team_id=? AND NOT d.dismissed',(identifier,binding['team_id'])).fetchone()
+                if not row: raise ValueError('승인 가능한 후보가 없습니다.')
+                approve(c,dict(id=identifier,text=row['draft'],quote=row['quote']).__getitem__,binding)
+        return dict(items=[dict(clientItemId=i,status='queued') for i in identifiers])
+
+    def team_request(self, method, params):
+        with connect(self.db) as c: binding=dict(c.execute('SELECT * FROM sharing').fetchone())
+        path={'team.board':'board','team.history':'history','team.conflicts':'conflicts','team.conflictHistory':'conflicts/history','team.done':'todos/done'}.get(method)
+        data=None
+        if method in ('team.resolve','team.setDone','team.retryCheck') and not (isinstance(params.get('id'),str) and params['id']):
+            raise ValueError('팀 요청 대상 id가 없습니다.')  # 'items/None/done' 같은 요청을 보내지 않는다
+        if method=='team.resolve': path='conflicts/'+quote(str(params.get('id')),safe='')+'/resolve';data=dict(resolution=params.get('resolution'),resolutionNote=params.get('resolutionNote',''))
+        if method=='team.setDone': path='items/'+quote(str(params.get('id')),safe='')+'/done';data=dict(done=params.get('done'))
+        if method=='team.retryCheck': path='items/'+quote(str(params.get('id')),safe='')+'/retry-check';data={}
+        if not path: raise ValueError('지원하지 않는 팀 요청입니다.')
+        result=self.client.request('teams/'+binding['team_id']+'/'+path,data)
+        if result.get('team_id')!=binding['team_id']: raise ValueError('대상 팀 응답 불일치')
+        return result
+
     def rpc(self, method, params):
         if not isinstance(params,dict): raise ValueError('요청 형식 오류')
         if method in ('jobs.retry','delivery.retry'):
@@ -485,69 +599,17 @@ class Pipeline:
         if method=='collection.configure': return self.configure(params)
         if method=='collection.pause': return self.configure(dict(autoCollect=False))
         if method=='turns.append': return self.append(params.get('messages'),params.get('flush') is True)
-        if method=='collection.flush':
-            with self.lock,connect(self.db) as c:
-                c.execute('BEGIN IMMEDIATE')
-                _,binding=self.require_active()
-                self.batches(c,binding['team_id'],self.context(c,binding['team_id'],self.local_profile(c)),True)
-            return dict(queued=True)
-        if method=='intake.issues':
-            with connect(self.db) as c:
-                return dict(items=[dict(r) for r in c.execute('''SELECT * FROM intake_issues WHERE team_id=(SELECT team_id FROM sharing)
-                    AND id NOT IN (SELECT issue_id FROM intake_resolutions) ORDER BY received''')])
+        if method=='collection.flush': return self.flush()
+        if method=='intake.issues': return self.intake_issues()
         if method=='intake.retry': return self.resolve_intake(params,'retry')
         if method=='intake.dismiss': return self.resolve_intake(params,'dismiss')
         if method=='privacy.list': return self.privacy_list()
         if method in ('privacy.exclude','privacy.recheck'): return self.privacy_action(method,params)
         if method=='candidates.list': return dict(cards=self.candidates(),status=self.status())
         if method=='candidates.update': return self.update(params.get('id'),params.get('patch'))
-        if method=='candidates.dismiss':
-            with connect(self.db) as c:
-                c.execute('''UPDATE candidate_details SET dismissed=1 WHERE id=? AND team_id=(SELECT team_id FROM sharing)
-                    AND id IN (SELECT id FROM cards WHERE status='ready')''',(params.get('id'),))
-            return dict(ok=True)
-        if method=='jobs.retry':
-            with self.lock, connect(self.db) as c:
-                c.execute('BEGIN IMMEDIATE')
-                s,binding=self.require_active(params.get('teamId'))
-                row=c.execute("SELECT x.context FROM job_context x JOIN jobs j ON j.id=x.job WHERE x.job=? AND x.team_id=? AND j.state='failed_new'",(params.get('id'),binding['team_id'])).fetchone()
-                if not row: raise ValueError('재시도할 작업이 없습니다.')
-                ctx=json.loads(row[0]);ctx['collectionStart']=s['start']
-                c.execute('UPDATE job_context SET context=? WHERE job=?',(json.dumps(ctx),params['id']))
-                c.execute("UPDATE jobs SET state='new',detail='' WHERE id=? AND state='failed_new'",(params['id'],))
-            return dict(queued=True)
-        if method=='delivery.retry':
-            with self.lock, connect(self.db) as c:
-                c.execute('BEGIN IMMEDIATE')
-                if 'teamId' in params and params['teamId'] != c.execute('SELECT team_id FROM sharing').fetchone()[0]:
-                    raise ValueError('대상 팀이 변경되었습니다.')
-                updated = c.execute("""UPDATE outbox SET state='pending',attempts=0,next_attempt=0,detail='' WHERE id=? AND state='blocked'
-                    AND id IN (SELECT d.id FROM outbox_destinations d JOIN sharing s ON s.team_id=d.team_id AND s.user_id=d.user_id AND s.api_url=d.api_url)""",(params.get('id'),))
-                if updated.rowcount != 1: raise ValueError('현재 팀에 재시도할 전송이 없습니다.')
-            return dict(queued=True)
-        if method=='candidates.approve':
-            identifiers=params.get('ids')
-            if not isinstance(identifiers,list) or not 1<=len(identifiers)<=100 or any(not isinstance(i,str) for i in identifiers): raise ValueError('승인 후보를 확인하세요.')
-            profile=self.client.me()
-            with self.lock,connect(self.db) as c:
-                c.execute('BEGIN IMMEDIATE')
-                binding=dict(c.execute('SELECT * FROM sharing').fetchone())
-                if params.get('teamId')!=binding['team_id'] or binding['team_id'] not in {t['id'] for t in profile['teams']}:
-                    raise ValueError('대상 팀이 변경되었습니다. 다시 확인하세요.')
-                for identifier in identifiers:
-                    row=c.execute('SELECT c.* FROM cards c JOIN candidate_details d ON d.id=c.id WHERE c.id=? AND d.team_id=? AND NOT d.dismissed',(identifier,binding['team_id'])).fetchone()
-                    if not row: raise ValueError('승인 가능한 후보가 없습니다.')
-                    approve(c,dict(id=identifier,text=row['draft'],quote=row['quote']).__getitem__,binding)
-            return dict(items=[dict(clientItemId=i,status='queued') for i in identifiers])
-        if method.startswith('team.'):
-            with connect(self.db) as c: binding=dict(c.execute('SELECT * FROM sharing').fetchone())
-            path={'team.board':'board','team.history':'history','team.conflicts':'conflicts','team.conflictHistory':'conflicts/history','team.done':'todos/done'}.get(method)
-            data=None
-            if method=='team.resolve': path='conflicts/'+quote(str(params.get('id')),safe='')+'/resolve';data=dict(resolution=params.get('resolution'),resolutionNote=params.get('resolutionNote',''))
-            if method=='team.setDone': path='items/'+quote(str(params.get('id')),safe='')+'/done';data=dict(done=params.get('done'))
-            if method=='team.retryCheck': path='items/'+quote(str(params.get('id')),safe='')+'/retry-check';data={}
-            if not path: raise ValueError('지원하지 않는 팀 요청입니다.')
-            result=self.client.request('teams/'+binding['team_id']+'/'+path,data)
-            if result.get('team_id')!=binding['team_id']: raise ValueError('대상 팀 응답 불일치')
-            return result
+        if method=='candidates.dismiss': return self.dismiss_candidate(params)
+        if method=='jobs.retry': return self._retry_job(params)
+        if method=='delivery.retry': return self._retry_delivery(params)
+        if method=='candidates.approve': return self.approve_candidates(params)
+        if method.startswith('team.'): return self.team_request(method,params)
         raise ValueError('지원하지 않는 로컬 요청입니다.')

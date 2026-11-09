@@ -1,4 +1,4 @@
-"""Single-Mac demo: private review service and isolated loopback board service."""
+"""Local review service: private review page, loopback or team board, extension /rpc (--integrated), scan and delivery workers."""
 import argparse
 import datetime as dt
 import hmac
@@ -156,7 +156,6 @@ class Review(LocalHandler):
                 FROM cards JOIN jobs ON jobs.id=cards.job LEFT JOIN outbox ON outbox.id=cards.id
                 LEFT JOIN outbox_destinations ON outbox_destinations.id=cards.id
                 ORDER BY cards.rowid DESC""").fetchall()
-            errors=c.execute("SELECT * FROM jobs WHERE state LIKE 'failed_%'").fetchall()
             if getattr(self.server, 'pipeline', None):
                 errors = c.execute("""SELECT j.* FROM jobs j JOIN job_context x ON x.job=j.id
                     WHERE x.team_id=? AND j.state='failed_new'""", (retry_team,)).fetchall()
@@ -166,6 +165,8 @@ class Review(LocalHandler):
                     body += f'<p role="alert">자동 처리에서 제외하여 보관한 입력 {len(issues)}개가 있습니다. 원래 입력은 덮어쓰지 않았습니다.</p>'
                     for issue in issues:
                         body += f'<details><summary>{esc(issue["reason"])}</summary><pre>{esc(json.loads(issue["message"]))}</pre></details>'
+            else:
+                errors=c.execute("SELECT * FROM jobs WHERE state LIKE 'failed_%'").fetchall()
         if cfg["status"]: body+=f'<p role="alert">{esc(cfg["status"])}</p>'
         for j in errors:
             body+=f'<form method="post" action="/retry">{retry_token}<input type="hidden" name="id" value="{esc(j["id"])}">처리 실패 · {esc(j["detail"])} <button>다시 시도</button></form>'
@@ -293,16 +294,14 @@ class Review(LocalHandler):
                     updated = c.execute("UPDATE outbox SET state='pending',attempts=0,next_attempt=0,detail='' WHERE id=? AND state='blocked' AND " + scope,(get("id"),))
                     if updated.rowcount != 1: raise ValueError('재시도할 전송이 없습니다.')
                 elif self.path == '/switch-team':
-                    client = getattr(self.server, 'team_client', None)
                     if not client:
                         return self.reply(400, '팀 서버 연결이 필요합니다.')
                     bind_sharing(c, client, get('team_id'), profile)
-                    if getattr(self.server, 'pipeline', None):
+                    if pipeline:
                         options = json.loads(c.execute('SELECT config FROM integration_settings').fetchone()[0])
                         options['profile'] = profile
                         c.execute('UPDATE integration_settings SET config=?', (json.dumps(options),))
                 elif self.path=="/approve":
-                    client = getattr(self.server, 'team_client', None)
                     destination = None
                     if client:
                         binding = c.execute('SELECT * FROM sharing WHERE id=1').fetchone()
@@ -330,7 +329,29 @@ def send_approved(srv):
         time.sleep(1)
 
 
+def run_integrated(db, pipeline):
+    """Integrated collection after a scan; returns the status to show instead of the scan's, or None.
+
+    Standard path: capture_local_jobs moves new scanned jobs into the pipeline's intake, then
+    pipeline.process classifies its batches. Legacy drain: process(drafts_only=True) only finishes
+    'draft' jobs left by the pre-integration collector. Integrated mode never classifies new jobs into 'draft', and
+    its review page retries only integrated jobs, so 'failed_draft' jobs (from before integration or from this drain)
+    are never retried (existing behavior).
+    """
+    status = None
+    try:
+        pipeline.capture_local_jobs()
+    except Exception as error:
+        failure('local_intake', error)
+        status = '로컬 발췌 변환 실패 · 원본 작업 보존'
+    pipeline.process()
+    process(db, drafts_only=True, gate=pipeline.privacy)
+    return status
+
+
 def watch(db,codex,claude=None,codex_sqlite=None,claude_project=None,pipeline=None):
+    """Collection loop. With a pipeline (--integrated) it runs run_integrated: the standard path, then
+    the legacy-compat drain. Without one, process(db) classifies and drafts every job itself."""
     last_retention = 0
     while True:
         # Retention runs even while collection is paused or ended: settled raw text still expires.
@@ -349,13 +370,7 @@ def watch(db,codex,claude=None,codex_sqlite=None,claude_project=None,pipeline=No
                     failure('collection_scan', error)
                     scan_status = "대화 기록 확인 실패 · " + type(error).__name__
                 if pipeline:
-                    try:
-                        pipeline.capture_local_jobs()
-                    except Exception as error:
-                        failure('local_intake', error)
-                        scan_status = '로컬 발췌 변환 실패 · 원본 작업 보존'
-                    pipeline.process()
-                    process(db, drafts_only=True, gate=pipeline.privacy)
+                    scan_status = run_integrated(db, pipeline) or scan_status
                 else:
                     process(db)
                 with connect(db) as c: c.execute("UPDATE settings SET status=?", (scan_status,))
@@ -431,7 +446,7 @@ def serve(args, parser):
         try:
             with connect(srv.db) as c:
                 binding = c.execute('SELECT * FROM sharing').fetchone()
-            recover = bool(getattr(args,'integrated',False) and binding)
+            recover = bool(args.integrated and binding)
             srv.team_client = TeamClient(args.team_api, args.team_token_file, binding['user_id'] if recover else None)
             if recover and binding['api_url'] != srv.team_client.api_url:
                 raise ValueError('오프라인 복구는 기존 연결에서만 가능합니다.')
@@ -449,7 +464,7 @@ def serve(args, parser):
             parser.error('팀 연결 키, 소속 팀과 기존 상태 폴더의 연결 사용자를 확인하세요.')
         srv.board_url = '/team-board'
         srv.pipeline = None
-        if getattr(args,'integrated',False):
+        if args.integrated:
             from integration import Pipeline
             srv.pipeline = Pipeline(srv.db,srv.team_client,profile)
             srv.rpc_secret = secrets.token_urlsafe(32)

@@ -117,4 +117,11 @@ class PipelineTest(unittest.TestCase):
         self.ai.chat_json=original; self.pipeline.configure(dict(autoCollect=True)); self.pipeline.process()
         self.assertEqual(len(self.pipeline.candidates()),1)
 
+    def test_team_relay_requires_target_id(self):
+        sent=[]; self.pipeline.client.request=lambda *a: sent.append(a)
+        for method in ('team.resolve','team.setDone','team.retryCheck'):
+            for params in ({},dict(id=None),dict(id='')):
+                with self.assertRaises(ValueError): self.pipeline.rpc(method,params)
+        self.assertEqual(sent,[],'no remote call without a target id')
+
 if __name__=='__main__': unittest.main(verbosity=2)
