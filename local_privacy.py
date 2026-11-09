@@ -38,7 +38,7 @@ TRANSIENT = ('model_unavailable', 'model_timeout', 'model_error')
 REQUESTED = ('recheck_requested', 'exclude_requested')
 RECHECK_SECONDS = 60
 DEFAULT_URL = 'http://127.0.0.1:11434'
-DEFAULT_MODEL = 'gemma4:e4b-it-qat'  # Quality/memory comparison: docs/privacy-model-v3.md; tested on Ollama 0.40.15.
+DEFAULT_MODEL = 'gemma4:e4b-it-qat'  # Quality/memory comparison: docs/appendix/privacy-model-v3.md; tested on Ollama 0.40.15.
 LOOPBACK = ('127.0.0.1', '::1')
 # Prompt + one message (<= 2000 chars) stays under 4K tokens; a fixed window keeps the KV cache small.
 NUM_CTX = 8192
@@ -83,7 +83,7 @@ SECRET_RULES: list[tuple[str, re.Pattern, str]] = [
                                   r'|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'), SECRET_TOKEN),
 ]
 # Bare opaque strings: 32+ characters mixing upper, lower and digits. Lowercase hex (git SHAs)
-# and UUIDs stay readable. Policy choice pending team agreement (see docs/local-privacy-gate.md).
+# and UUIDs stay readable. Policy choice pending team agreement (see docs/appendix/local-privacy-gate.md).
 _OPAQUE = re.compile(r'(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_-])')
 
 
