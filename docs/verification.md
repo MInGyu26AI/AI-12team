@@ -11,7 +11,7 @@
 - 모델 비교는 고정 합성 73건을 모델별 두 번 실행했습니다. QAT에서 통과 54, 혼합 구간 분리 36, 차단 50, 맥락 없는 민감 업무 보류 6회였습니다. 보호 문구 노출은 관측되지 않았습니다.
 - QAT는 기존 E4B보다 느렸습니다(문장당 중앙값 0.945초 / 0.243초). 보정 계측의 QAT RSS 최고치는 약 6.57GB이며, 모든 기기의 상한을 뜻하지 않습니다.
 
-[현재 정책·테스트 명령](appendix/privacy-model-v3.md) · [실제 모델 Pipeline 검사](../check_privacy_memory_pipeline.py)
+[현재 정책·테스트 명령](appendix/privacy-model-v3.md) · [실제 모델 → 필터 → 승인 검사](../check_privacy_memory_pipeline.py)
 
 QAT 73건 원본과 OS 계측 파일은 개발 Mac의 별도 작업 폴더에 보관되어 있으며 이 저장소에는 포함되지 않습니다. 부록의 [기존 모델 평가 JSON](appendix/local-privacy-eval-20261108/)은 이전 Gemma3·Llama·Qwen 평가이므로 QAT 근거로 대체해 읽으면 안 됩니다.
 

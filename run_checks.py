@@ -18,8 +18,8 @@ ROOT = Path(__file__).resolve().parent
 PY = sys.executable
 
 # (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`, which only runs on macOS),
-# Python 3 and Node with `npm ci` in web/ (check_local_bridge starts Next from web/node_modules; the TypeScript masking check
-# also works with extension/); rust = needs the built scanner (bin/syncup-collector); team = needs Docker and
+# Python 3 and Node with `npm ci` in web/ and extension/ (check_local_bridge starts Next from web/node_modules; the unit
+# tests run with each project's own runner); rust = needs the built scanner (bin/syncup-collector); team = needs Docker and
 # requirements-team.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
@@ -38,6 +38,8 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'selfcheck.py'], '분류 기본 동작 (외부 API 없음)'),
     ('local', ['node', 'check_local_bridge.cjs'], '웹 ↔ 로컬 수집기 연결(쿠키·출처·RPC)'),
     ('local', ['node', 'check_mask_cases.cjs'], '가림 공용 사례: TypeScript 사본'),
+    ('local', ['npm', '--prefix', 'web', 'test', '--silent'], '웹 단위 시험 (공유 폴러·승인함·/api/local 실패 응답)'),
+    ('local', ['npm', '--prefix', 'extension', 'test', '--silent'], '확장 단위 시험 (메시지 응답·신뢰 주소·자동 수집·ChatGPT 추출)'),
     ('local', [PY, '-m', 'unittest', 'discover', '-s', 'tests', '-t', '.'], 'AI 모듈 (가림 공용 사례 Python 쪽 포함)'),
     ('rust', [PY, 'check_scanner.py'], 'Rust 스캐너: Codex 로그'),
     ('rust', [PY, 'check_claude.py'], 'Rust 스캐너: Claude Code 로그'),
