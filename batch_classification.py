@@ -7,8 +7,8 @@ from batch_queue import previous_batch_tail
 from card_contract import KIND_OF_TAG, PUBLIC_FIELDS, validate_card
 from collection_settings import require_active
 from diagnostics import failure
-from local_privacy import EXCLUDE, HOLD
-from outbound_guard import OutboundGuard
+from local_privacy import ALLOW, EXCLUDE, HOLD
+from outbound_guard import OutboundGuard, blocked_reason
 from storage import connect
 from turn_pipeline import digest
 
@@ -95,8 +95,13 @@ def _guarded_clients(pipeline, job, context, review):
 
 
 def _hold_blocked(pipeline, job, review, reason):
-    """Nothing was sent; the batch stays held locally."""
-    pipeline.privacy.record(pipeline.db, job['id'], HOLD, reason, review.model, review.detail)
+    """Nothing was sent. Allowed messages that carry a blocked piece become holds, so the user can exclude them."""
+    detail = []
+    for entry in review.detail:
+        if entry['decision'] == ALLOW and blocked_reason(entry['sanitized'], review.fragments):
+            entry = dict(entry, decision=HOLD, reason=reason, sanitized=None)
+        detail.append(entry)
+    pipeline.privacy.record(pipeline.db, job['id'], HOLD, reason, review.model, detail)
 
 
 def _store_cards(pipeline, job, context, result):

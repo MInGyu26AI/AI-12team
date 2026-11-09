@@ -83,6 +83,24 @@ class FailClosed(PrivacyFixture):
         self.assertFalse(leaked(self.requests, doubt))
         self.assertTrue(any('PostgreSQL도 검토했다.' in s for s in strings(self.requests[1]['body'])))
 
+    def test_blocked_fragment_hold_can_be_excluded_by_the_user(self):
+        # The excluded message and the allowed one share a phrase, so the outbound check refuses the request.
+        personal = '허리 통증으로 병원 가야 해서, 회의록 정리는 내일 할게'
+        work = '회의록 정리는 내일 할게. API 명세도 같이 올릴게'
+        self.pipeline.privacy = Gate(Scripted({personal: dict(label='personal', personal=[personal])}))
+        configure(self.pipeline, dict(turnsPerBatch=2))
+        turn_intake.append(self.pipeline, [self.message('p', personal), self.message('w', work)], True)
+        self.run_offline()
+        self.assertEqual(self.requests, [])
+        item = dispatch(self.pipeline, 'privacy.list', {})['items'][0]
+        self.assertEqual(item['reason'], 'blocked_fragment')
+        self.assertEqual({m['id']: m['decision'] for m in item['messages']}, dict(p='exclude', w='hold'))
+        dispatch(self.pipeline, 'privacy.exclude', dict(id=item['id'], teamId='a'))
+        self.run_offline()
+        self.assertEqual(self.requests, [])
+        self.assertEqual(dispatch(self.pipeline, 'privacy.list', {})['items'], [])
+        self.assertEqual(collection_status(self.pipeline)['counts']['privacyExcluded'], 1)
+
     def test_recheck_request_stays_held_until_the_worker_decides(self):
         gate = Gate(Scripted(mode='down'))
         self.pipeline.privacy = gate
