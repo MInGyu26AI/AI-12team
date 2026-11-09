@@ -1,36 +1,30 @@
 """Real PostgreSQL, HTTP and process restart; synthetic Decisions service, no external AI."""
-import http.server
 import json
 import os
-from pathlib import Path
 import re
-import socket
-import subprocess
-import sys
 import time
 import unittest
 from unittest.mock import patch
 import psycopg
 
-from check_teams import TeamIsolation, request, running_server
-from check_team_integration import TeamIntegration, checked
-from team_records import process_checks, schedule
-from team_server import authorized
+from check_teams import TeamIsolation, own_tests, request, team_api_process
+from check_team_integration import TeamIntegration, answers, checked, stub_model
+from conflict_checks import process_checks
+from conflict_scheduler import schedule
+from team_access import AccessError
 
 
 class ResumableChecks(TeamIsolation):
     publish_card = TeamIntegration.publish_card
-    team_request = TeamIntegration.team_request
 
     def seed(self, count):
         for i in range(count):
             self.publish_card(f'old-{i:03}', f'OLD_{i:03} 서버 결정', topic='다른 주제' if i == count-1 else 'DB')
-        with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
-            c.execute("UPDATE syncup.conflict_checks SET state='complete' WHERE team_id=%s", (self.teams['A'],))
+        self.settle_checks()
         self.publish_card('new', 'NEW_TARGET 서버 결정')
 
     def job(self):
-        with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
+        with self.team_db() as c:
             return c.execute("SELECT * FROM syncup.conflict_checks WHERE card_id='new'").fetchone()
 
     def wait_complete(self, timeout=20):
@@ -53,9 +47,9 @@ class ResumableChecks(TeamIsolation):
                                judgement='충돌', reason='합성 충돌', topic_key='DB')]
             return checked(req, alerts)
         self.api.conflict_engine = engine
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         self.assertEqual((self.job()['state'], self.job()['progress']['cursor']), ('pending', 30))
-        item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id']=='new')
+        item = self.board_item('new')
         self.assertEqual(item['conflictCheckProgress'], dict(total=65, completed=30, skipped=0))
         self.api.disable_checks = False
         schedule(self.api, self.tokens['Dana'], self.teams['A'])
@@ -65,7 +59,7 @@ class ResumableChecks(TeamIsolation):
         self.assertEqual(seen[-1], 'old-064')
         self.assertEqual(len(self.team_request('GET', 'conflicts')[1]['conflicts']), 1)
         self.assertEqual(self.team_request('GET', 'board', user='Bob')[0], 403)
-        with authorized(self.api_dsn, self.tokens['Bob'], self.teams['B']) as (c, _):
+        with self.team_db('Bob', 'B') as c:
             self.assertIsNone(c.execute("SELECT progress FROM syncup.conflict_checks WHERE card_id='new'").fetchone())
 
     def test_failed_pair_resumes_only_remaining_and_partial_alert_is_visible(self):
@@ -73,21 +67,22 @@ class ResumableChecks(TeamIsolation):
         calls = []
         blocked = [True]
         def engine(req):
-            old = req['existing'][0]; calls.append(old['id'])
+            old = req['existing'][0]
+            calls.append(old['id'])
             if len(calls) == 8 and blocked[0]:
                 return dict(ok=False, failureReason='low-confidence')
             return checked(req, [dict(id='pair-'+old['id'], cardA=old, cardB=req['newCards'][0],
                                      judgement='충돌', reason='합성 충돌', topic_key='DB')])
         self.api.conflict_engine = engine
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         self.assertEqual(self.job()['progress']['cursor'], 7)
         self.assertEqual(self.job()['state'], 'failed')
         self.assertEqual(len(self.team_request('GET', 'conflicts')[1]['conflicts']), 7)
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         self.assertEqual(len(calls), 8)  # uncertainty is not retried automatically
         self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
         blocked[0] = False
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         self.assertEqual(self.job()['state'], 'complete')
         self.assertEqual(len(calls), 36)
         self.assertEqual(len(set(calls)), 35)
@@ -95,19 +90,18 @@ class ResumableChecks(TeamIsolation):
 
     def test_review_included_inactive_skipped_and_revoked_access_stops(self):
         self.seed(35)
-        with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
+        with self.team_db() as c:
             c.execute("UPDATE syncup.record_states SET state='review' WHERE card_id='old-034'")
         self.api.conflict_engine = checked
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         remaining = self.job()['progress']['ids'][30:]
-        with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
+        with self.team_db() as c:
             c.execute("UPDATE syncup.record_states SET state='superseded' WHERE card_id=%s", (remaining[0],))
         self.admin('member', '--user', self.users['Dana'], '--team', self.teams['A'], '--revoke')
-        from team_server import AccessError
         with self.assertRaises(AccessError):
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+            self.run_due_checks()
         self.admin('member', '--user', self.users['Dana'], '--team', self.teams['A'])
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         progress = self.job()['progress']
         self.assertEqual((len(progress['ids']), progress['cursor'], progress['skipped']), (35,35,1))
 
@@ -115,27 +109,19 @@ class ResumableChecks(TeamIsolation):
         self.seed(35)
         seen = []
         def engine(req):
-            seen.append(req['existing'][0]['id']); return checked(req)
+            seen.append(req['existing'][0]['id'])
+            return checked(req)
         self.api.conflict_engine = engine
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
-        with patch('team_records.CONFLICT_POLICY_SHA256', 'changed-policy'):
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
+        with patch('conflict_checks.current_policy', return_value='changed-policy'):
+            self.run_due_checks()
         self.assertEqual(self.job()['progress']['cursor'], 30)
         self.assertEqual(len(seen), 60)
         self.assertEqual(seen[:30], seen[30:])
 
     def test_checkpoint_migration_is_idempotent_and_preserves_approvals(self):
-        from team_server import verify_database
         self.seed(1)
-        with psycopg.connect(self.admin_dsn) as c:
-            before = c.execute('SELECT packet FROM syncup.shared_cards ORDER BY id').fetchall()
-            c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN progress')
-        with self.assertRaisesRegex(ValueError, 'migrate-integration'):
-            verify_database(self.api_dsn)
-        self.admin('migrate-integration'); self.admin('migrate-integration')
-        verify_database(self.api_dsn)
-        with psycopg.connect(self.admin_dsn) as c:
-            self.assertEqual(c.execute('SELECT packet FROM syncup.shared_cards ORDER BY id').fetchall(), before)
+        self.reapply_upgrade('progress')
         self.assertEqual(self.job()['progress'], {})
 
     def test_scheduler_retries_transient_db_failure_without_new_request(self):
@@ -148,7 +134,7 @@ class ResumableChecks(TeamIsolation):
             if len(calls) == 1:
                 raise psycopg.OperationalError('synthetic temporary connection outage')
             return process_checks(*args)
-        with patch('team_records.process_checks', side_effect=temporarily_down):
+        with patch('conflict_scheduler.process_checks', side_effect=temporarily_down):
             with self.assertLogs('syncup', level='WARNING'):
                 schedule(self.api, self.tokens['Dana'], self.teams['A'])
                 self.wait_complete()
@@ -157,63 +143,41 @@ class ResumableChecks(TeamIsolation):
     def test_actual_api_process_restart_uses_committed_checkpoint(self):
         self.seed(35)
         calls = []
-        class Model(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *args): pass
-            def do_POST(self):
-                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-                calls.append(re.search(r'e1:.*OLD_(\d+)', body['input']).group(1))
-                time.sleep(.06)
-                raw = json.dumps(dict(answers=[dict(name=q['name'], type='choice', choice='무관', confidence=.9)
-                                               for q in body['questions']])).encode()
-                self.send_response(200); self.send_header('Content-Length', str(len(raw))); self.end_headers()
-                try: self.wfile.write(raw)
-                except (BrokenPipeError, ConnectionResetError): pass
-        model = self.enterContext(running_server(Model))
-        children = []
-        def start():
-            with socket.socket() as s:
-                s.bind(('127.0.0.1',0)); port = s.getsockname()[1]
-            env = {k:v for k,v in os.environ.items() if not k.startswith(('AI_', 'OPENAI_', 'SYNCUP_'))}
-            env.update(SYNCUP_DATABASE_URL=self.api_dsn, AI_BASE_URL=f'http://127.0.0.1:{model.server_port}/v1',
-                       AI_API_KEY='synthetic', AI_MODEL='synthetic-chat', AI_DECISIONS_MODEL='synthetic-decisions')
-            child = subprocess.Popen([sys.executable, str(Path(__file__).with_name('team_server.py')), '--port', str(port)],
-                                     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            children.append(child)
-            target = type('Target', (), dict(server_port=port))()
-            for _ in range(100):
-                try:
-                    if request(target, 'GET', '/me', self.tokens['Dana'])[0] == 200: break
-                except OSError: pass
-                time.sleep(.05)
-            else: self.fail('API process startup failed')
-            self.assertEqual(request(target, 'GET', '/teams/'+self.teams['A']+'/board', self.tokens['Dana'])[0],200)
-            return child
-        try:
-            child = start()
+        def respond(path, raw):
+            body = json.loads(raw)
+            calls.append(re.search(r'e1:.*OLD_(\d+)', body['input']).group(1))
+            time.sleep(.06)
+            return 200, answers(body, '무관')
+        model = self.enterContext(stub_model(respond))
+        env = {k: v for k, v in os.environ.items() if not k.startswith(('AI_', 'OPENAI_', 'SYNCUP_'))}
+        env.update(SYNCUP_DATABASE_URL=self.api_dsn, AI_BASE_URL=model, AI_API_KEY='synthetic',
+                   AI_MODEL='synthetic-chat', AI_DECISIONS_MODEL='synthetic-decisions')
+        board = '/teams/'+self.teams['A']+'/board'
+        with team_api_process(env) as api:
+            # Any successful team request starts that team's worker.
+            self.assertEqual(request(api, 'GET', board, self.tokens['Dana'])[0], 200)
             end = time.monotonic()+15
-            while self.job()['progress'].get('cursor',0) < 7 and time.monotonic() < end:
+            while self.job()['progress'].get('cursor', 0) < 7 and time.monotonic() < end:
                 time.sleep(.02)
-            child.kill(); child.wait(timeout=5)
-            progress = self.job()['progress']
-            self.assertGreaterEqual(progress['cursor'],7)
-            completed = {x[-3:] for x in progress['ids'][:progress['cursor']]}
-            time.sleep(.15)  # allow the killed process's in-flight HTTP response to drain
-            restart_index = len(calls)
-            # Advance only the crash lease (normally 3 minutes) to keep the test bounded.
-            with authorized(self.api_dsn,self.tokens['Dana'],self.teams['A']) as (c,_):
-                c.execute("UPDATE syncup.conflict_checks SET next_attempt=now()-interval '1 second' WHERE card_id='new'")
-            start(); self.wait_complete()
-            self.assertFalse(completed.intersection(calls[restart_index:]))
-            self.assertEqual(set(calls), {f'{i:03}' for i in range(35)})
-            self.assertEqual(self.job()['progress']['cursor'],35)
-        finally:
-            for child in children:
-                if child.poll() is None: child.terminate()
-                child.wait(timeout=5)
+            api.process.kill()
+            api.process.wait(timeout=5)
+        progress = self.job()['progress']
+        self.assertGreaterEqual(progress['cursor'], 7)
+        completed = {x[-3:] for x in progress['ids'][:progress['cursor']]}
+        time.sleep(.15)  # allow the killed process's in-flight HTTP response to drain
+        restart_index = len(calls)
+        # Advance only the crash lease (conflict_checks.LEASE, 3 minutes) to keep the test bounded.
+        self.make_check_due('new')
+        with team_api_process(env) as api:
+            self.assertEqual(request(api, 'GET', board, self.tokens['Dana'])[0], 200)
+            self.wait_complete()
+        self.assertFalse(completed.intersection(calls[restart_index:]))
+        self.assertEqual(set(calls), {f'{i:03}' for i in range(35)})
+        self.assertEqual(self.job()['progress']['cursor'], 35)
 
 
 def load_tests(loader, tests, pattern):
-    return unittest.TestSuite(ResumableChecks(name) for name in ResumableChecks.__dict__ if name.startswith('test_'))
+    return own_tests(ResumableChecks)
 
 
 if __name__ == '__main__':

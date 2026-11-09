@@ -1,29 +1,38 @@
-"""Authenticated, append-only team board; PostgreSQL enforces team row access."""
+"""Authenticated, append-only team board API; PostgreSQL enforces team row access."""
 import argparse
-from contextlib import contextmanager
-import hashlib
 import http.server
 import json
-import math
 import os
-import re
-import time
 import threading
 import urllib.parse
 import uuid
 
 import psycopg
-from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 
 from app import LocalHandler
-from delivery import validate_packet
+from conflict_checks import retry_check
+from conflict_resolution import resolve
+from conflict_scheduler import schedule
 from diagnostics import failure
+from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
+from team_board import board, conflict_events, conflicts, done_todos, mark_todo, shared_item, shared_items
+from team_publish import publish
 
-
-class AccessError(Exception):
-    def __init__(self, status):
-        self.status = status
+# GET /teams/{id}/<path>: the response fields after team_id.
+BOARD_READS = {
+    ('board',): lambda c, team_id: dict(items=board(c, team_id)),
+    ('history',): lambda c, team_id: dict(items=board(c, team_id, history=True)),
+    ('conflicts',): lambda c, team_id: dict(conflicts=conflicts(c, team_id)),
+    ('conflicts', 'history'): lambda c, team_id: dict(conflicts=conflicts(c, team_id, history=True),
+                                                      events=conflict_events(c, team_id)),
+    ('todos', 'done'): lambda c, team_id: dict(ids=done_todos(c, team_id)),
+}
+# POST /teams/{id}/<kind>/{target}/<action> with a JSON object body.
+CHANGES = {
+    ('conflicts', 'resolve'): resolve,
+    ('items', 'done'): mark_todo,
+    ('items', 'retry-check'): lambda c, team_id, user_id, card_id, data: retry_check(c, team_id, card_id),
+}
 
 
 class TeamServer(http.server.ThreadingHTTPServer):
@@ -36,49 +45,6 @@ class TeamServer(http.server.ThreadingHTTPServer):
     def shutdown(self):
         self.checks_stop.set()
         super().shutdown()
-
-
-def verify_database(dsn):
-    with psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5) as c:
-        role = c.execute("SELECT * FROM pg_roles WHERE rolname=current_user").fetchone()
-        if (role['rolname'] != 'syncup_api' or any(role[k] for k in
-                ('rolsuper', 'rolbypassrls', 'rolcreaterole', 'rolcreatedb', 'rolreplication'))
-                or c.execute("SELECT 1 FROM pg_auth_members WHERE member=%s", (role['oid'],)).fetchone()):
-            raise ValueError('팀 API는 권한이 제한된 syncup_api DB 계정으로 실행해야 합니다.')
-        tables = c.execute("""SELECT relname,relowner,relrowsecurity,relforcerowsecurity
-            FROM pg_class WHERE relnamespace='syncup'::regnamespace AND relkind='r'
-            AND relname IN ('users','teams','memberships','shared_cards','record_states','conflict_checks','conflicts','conflict_events','todo_states')""").fetchall()
-        if len(tables) != 9 or any(t['relowner'] == role['oid'] or not t['relrowsecurity']
-                                  or not t['relforcerowsecurity'] for t in tables):
-            raise ValueError('팀 데이터베이스의 행 접근 정책 설정을 확인하세요.')
-        if not c.execute("""SELECT 1 FROM pg_attribute
-            WHERE attrelid='syncup.conflict_checks'::regclass AND attname='diagnostics'
-              AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped""").fetchone():
-            raise ValueError('team_admin.py migrate-integration으로 진단 기록 스키마를 적용하세요.')
-        if not c.execute("""SELECT 1 FROM pg_attribute
-            WHERE attrelid='syncup.conflict_checks'::regclass AND attname='progress'
-              AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped""").fetchone():
-            raise ValueError('team_admin.py migrate-integration으로 검사 진행 스키마를 적용하세요.')
-
-
-@contextmanager
-def authorized(dsn, token, team_id=None):
-    if not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
-        raise AccessError(401)
-    with psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5) as c:
-        c.execute("SET LOCAL statement_timeout = '5s'")
-        # Preserve approval timestamps exactly even when the pooler defaults to rounded output.
-        c.execute('SET LOCAL extra_float_digits = 3')
-        user_id = c.execute('SELECT syncup.authenticate(%s) AS id',
-                            (hashlib.sha256(token.encode()).hexdigest(),)).fetchone()['id']
-        if user_id is None:
-            raise AccessError(401)
-        c.execute("SELECT set_config('syncup.user_id',%s,true)", (str(user_id),))
-        if team_id is not None:
-            c.execute("SELECT set_config('syncup.team_id',%s,true)", (str(team_id),))
-            if not c.execute('SELECT 1 FROM syncup.memberships WHERE team_id=%s', (team_id,)).fetchone():
-                raise AccessError(403)
-        yield c, str(user_id)
 
 
 class TeamHandler(LocalHandler):
@@ -100,72 +66,17 @@ class TeamHandler(LocalHandler):
         self.handle_api()
 
     def handle_api(self):
-        result, status = {}, 200
-        token, team_id = '', None
+        status, result, token, team_id = 200, {}, '', None
         try:
-            if not self.valid_host():
-                raise AccessError(400)
-            path = urllib.parse.urlsplit(self.path)
-            if path.query or path.fragment:
-                raise AccessError(404)
-            parts = path.path.strip('/').split('/')
-            if len(parts) >= 3 and parts[0] == 'teams':
-                team_id = uuid.UUID(parts[1])
-            elif parts != ['me']:
-                raise AccessError(404)
-            header = self.headers.get('Authorization', '')
-            token = header[7:] if header.startswith('Bearer ') else ''
-            if not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
-                raise AccessError(401)
+            parts, team_id = self.parse_path()
+            token = self.bearer_token()
             data = json.loads(self.body()) if self.command == 'POST' else None
             with authorized(self.server.dsn, token, team_id) as (c, user_id):
-                if parts == ['me'] and self.command == 'GET':
-                    user = c.execute('SELECT name FROM syncup.users').fetchone()
-                    teams = c.execute('SELECT id::text,name FROM syncup.teams ORDER BY name,id').fetchall()
-                    result = dict(user_id=user_id, name=user['name'], teams=teams)
-                elif team_id is not None and (parts[2] != 'items' or len(parts) == 5):
-                    from team_records import handle
-                    result = handle(c, team_id, user_id, self.command, parts[2:],
-                                    data)
-                elif team_id is not None and self.command == 'GET' and len(parts) in (3,4):
-                    if len(parts) == 4:
-                        card_id = urllib.parse.unquote(parts[3], errors='strict')
-                        rows = c.execute('''SELECT packet,approved_by::text,approved_at
-                            FROM syncup.shared_cards WHERE team_id=%s AND id=%s''', (team_id, card_id)).fetchall()
-                        if not rows:
-                            raise AccessError(404)
-                    else:
-                        rows = c.execute('''SELECT packet,approved_by::text,approved_at
-                            FROM syncup.shared_cards WHERE team_id=%s ORDER BY received_at DESC,id LIMIT 200''',
-                            (team_id,)).fetchall()
-                    result = dict(team_id=str(team_id), items=rows)
-                elif team_id is not None and len(parts) == 3 and self.command == 'POST':
-                    from team_records import team_lock, enqueue
-                    team_lock(c, team_id)
-                    if not isinstance(data, dict) or set(data) != {'packet', 'approved_by', 'approved_at'}:
-                        raise ValueError('Invalid envelope')
-                    validate_packet(data['packet'])
-                    if data['approved_by'] != user_id:
-                        raise AccessError(403)
-                    stamp = data['approved_at']
-                    if type(stamp) not in (int, float) or not math.isfinite(stamp) or not 0 < stamp <= time.time()+300:
-                        raise ValueError('Invalid approval time')
-                    packet = data['packet']
-                    c.execute('''INSERT INTO syncup.shared_cards(team_id,id,approved_by,approved_at,packet)
-                        VALUES(%s,%s,%s,%s,%s) ON CONFLICT(team_id,id) DO NOTHING''',
-                        (team_id, packet['id'], user_id, stamp, Jsonb(packet)))
-                    saved = c.execute('''SELECT packet,approved_by::text,approved_at FROM syncup.shared_cards
-                        WHERE team_id=%s AND id=%s''', (team_id, packet['id'])).fetchone()
-                    if saved != data:
-                        raise AccessError(409)
-                    enqueue(c, team_id, packet)
-                    result = dict(id=packet['id'], team_id=str(team_id), approved_by=user_id)
-                else:
-                    raise AccessError(405)
+                result = dispatch(c, user_id, team_id, self.command, parts, data)
             # Respond only after the transaction has committed, including idempotent retries.
         except AccessError as error:
             status, result = error.status, {'error': '접근할 수 없거나 허용되지 않은 요청입니다.'}
-        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+        except (ValueError, TypeError, KeyError, OverflowError):
             status, result = 400, {'error': '요청 형식을 확인하세요.'}
         except psycopg.errors.InsufficientPrivilege:
             status, result = 403, {'error': '이 작업에 대한 권한이 없습니다.'}
@@ -174,8 +85,70 @@ class TeamHandler(LocalHandler):
             status, result = 503, {'error': '팀 저장소를 확인할 수 없습니다.'}
         self.reply(status, json.dumps(result, ensure_ascii=False), 'application/json; charset=utf-8')
         if status == 200 and team_id is not None:
-            from team_records import schedule
+            # No worker runs on its own: any member's successful team request resumes that team's due checks.
             schedule(self.server, token, team_id)
+
+    def parse_path(self):
+        """(path parts, team id or None for /me); checked before the token so unknown paths never touch the DB."""
+        if not self.valid_host():
+            raise AccessError(400)
+        path = urllib.parse.urlsplit(self.path)
+        if path.query or path.fragment:
+            raise AccessError(404)
+        parts = path.path.strip('/').split('/')
+        if len(parts) >= 3 and parts[0] == 'teams':
+            return parts, uuid.UUID(parts[1])
+        if parts != ['me']:
+            raise AccessError(404)
+        return parts, None
+
+    def bearer_token(self):
+        # Checked again by authorized(); here it answers 401 before the body is read.
+        header = self.headers.get('Authorization', '')
+        token = header[7:] if header.startswith('Bearer ') else ''
+        if not valid_token(token):
+            raise AccessError(401)
+        return token
+
+
+def dispatch(c, user_id, team_id, method, parts, data):
+    if team_id is None:
+        if method != 'GET':
+            raise AccessError(405)
+        return me(c, user_id)
+    tail = parts[2:]
+    if tail[0] == 'items' and len(tail) != 3:
+        return shared_cards(c, team_id, user_id, method, tail, data)
+    if method == 'GET' and tuple(tail) in BOARD_READS:
+        return dict(team_id=str(team_id), **BOARD_READS[tuple(tail)](c, team_id))
+    change = CHANGES.get((tail[0], tail[2])) if len(tail) == 3 else None
+    if method != 'POST' or not isinstance(data, dict) or change is None:
+        raise AccessError(404)
+    team_lock(c, team_id)
+    change(c, team_id, user_id, path_id(tail[1]), data)
+    return dict(ok=True, team_id=str(team_id))
+
+
+def me(c, user_id):
+    user = c.execute('SELECT name FROM syncup.users').fetchone()
+    teams = c.execute('SELECT id::text,name FROM syncup.teams ORDER BY name,id').fetchall()
+    return dict(user_id=user_id, name=user['name'], teams=teams)
+
+
+def shared_cards(c, team_id, user_id, method, tail, data):
+    """GET /items and /items/{id}, POST /items; any other method or deeper path is 405."""
+    if method == 'GET' and len(tail) <= 2:
+        items = shared_items(c, team_id) if len(tail) == 1 else shared_item(c, team_id, path_id(tail[1]))
+        return dict(team_id=str(team_id), items=items)
+    if method == 'POST' and len(tail) == 1:
+        team_lock(c, team_id)
+        return publish(c, team_id, user_id, data)
+    raise AccessError(405)
+
+
+def path_id(segment):
+    """A card or conflict id from one path segment; malformed percent-encoding is a 400, never a lookup."""
+    return urllib.parse.unquote(segment, errors='strict')
 
 
 def main():
@@ -191,8 +164,11 @@ def main():
         parser.error('SYNCUP_DATABASE_URL 환경 변수가 필요합니다.')
     try:
         verify_database(dsn)
+    except DatabaseSetupError as error:
+        parser.error(str(error))
     except (ValueError, psycopg.Error):
-        parser.error('제한된 syncup_api 계정과 팀 DB 정책을 확인하세요.')
+        # Driver messages can contain connection details; show only the kind of problem.
+        parser.error('제한된 syncup_api 계정과 팀 DB 연결을 확인하세요.')
     with TeamServer(('127.0.0.1', args.port), TeamHandler) as srv:
         srv.dsn = dsn
         print(f'팀 API http://127.0.0.1:{srv.server_port}/ · 외부 연결은 HTTPS 프록시 필요', flush=True)

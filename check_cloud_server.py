@@ -1,14 +1,45 @@
 """Real HTTP boundary checks; synthetic settings, no cloud credentials."""
+import ast
 import http.client
 import os
+from pathlib import Path
 import threading
 import unittest
 from unittest.mock import patch
 
 import psycopg
 
-from cloud_server import CloudHandler, settings
+from cloud_server import CloudHandler, main, settings
+from team_access import DatabaseSetupError
 from team_server import TeamServer
+
+ROOT = Path(__file__).resolve().parent
+
+
+def startup_modules(name, seen=None):
+    """Repository modules (top-level .py files) that importing `name` loads, following module-level imports.
+
+    Imports inside functions are left out: they belong to code paths the cloud service does not start with."""
+    seen = set() if seen is None else seen
+    seen.add(name)
+    for node in ast.parse((ROOT/f'{name}.py').read_text(encoding='utf-8')).body:
+        if isinstance(node, ast.Import):
+            imported = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            imported = [node.module]
+        else:
+            continue
+        for module in imported:
+            if (ROOT/f'{module}.py').exists() and module not in seen:
+                startup_modules(module, seen)
+    return seen
+
+
+def listed_modules(path, prefix):
+    """Top-level .py names on the `prefix` lines of a Docker file."""
+    words = [w for line in path.read_text(encoding='utf-8').splitlines() if line.startswith(prefix)
+             for w in line[len(prefix):].split()]
+    return {w.removeprefix('!')[:-3] for w in words if w.endswith('.py') and '/' not in w}
 
 
 class CloudBoundary(unittest.TestCase):
@@ -50,6 +81,11 @@ class CloudBoundary(unittest.TestCase):
         with patch('cloud_server.psycopg.connect', side_effect=psycopg.OperationalError('FAKE_DO_NOT_LOG')):
             self.assertEqual(self.request('/healthz'), (503, '{"ready": false}'))
 
+    def test_image_copies_every_module_the_service_starts_with(self):
+        copied = listed_modules(ROOT/'Dockerfile.cloud', 'COPY ')
+        self.assertLessEqual(startup_modules('cloud_server'), copied)
+        self.assertEqual(listed_modules(ROOT/'.dockerignore', '!'), copied)
+
     def test_cloud_configuration_fails_closed(self):
         env = dict(SYNCUP_DATABASE_URL='host=db.example.com sslmode=verify-full',
                    RENDER_EXTERNAL_HOSTNAME='synthetic.onrender.com', PORT='10000')
@@ -61,6 +97,20 @@ class CloudBoundary(unittest.TestCase):
                 with patch.dict(os.environ, {key: value}):
                     with self.assertRaises(ValueError):
                         settings()
+
+    def test_startup_names_fixed_reasons_but_never_driver_errors(self):
+        verified = 'host=db.example.com sslmode=verify-full password=FAKE_DO_NOT_LOG'
+        generic = 'Cloud configuration or restricted DB connection failed; credentials are not logged.'
+        for dsn, db_error, message in [
+                ('host=db.example.com sslmode=require', None, 'Database TLS hostname verification is required.'),
+                (verified, DatabaseSetupError('migrate-integration hint'), 'migrate-integration hint'),
+                (verified, psycopg.OperationalError('FAKE_DO_NOT_LOG'), generic)]:
+            with self.subTest(message=message):
+                env = dict(SYNCUP_DATABASE_URL=dsn, SYNCUP_PUBLIC_HOST='synthetic.example.com')
+                with patch.dict(os.environ, env, clear=True), patch('cloud_server.verify_database', side_effect=db_error):
+                    with self.assertRaises(SystemExit) as stop:
+                        main()
+                self.assertEqual(str(stop.exception), message)
 
 
 if __name__ == '__main__':

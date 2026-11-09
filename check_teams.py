@@ -4,6 +4,7 @@ from contextlib import closing, contextmanager
 import copy
 import http.client
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -11,27 +12,35 @@ import re
 import secrets
 import socket
 import sqlite3
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 import urllib.parse
 import uuid
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
 
 import app
+from conflict_checks import process_checks
 import delivery
+from prepare_native import prepare
 from storage import connect, initialize, initialize_v1
+from team_access import authorized, verify_database
 from team_client import TeamClient, bind_sharing
-from team_server import TeamHandler, TeamServer, authorized, verify_database
+from team_server import TeamHandler, TeamServer
 
 ROOT = Path(__file__).resolve().parent
 QUOTE = '이 문장만 공유합니다.'
 PRIVATE = 'UNAPPROVED_PRIVATE_SENTINEL_739'
+# card() stores this whole sentence as local evidence; an automatic approval shares only QUOTE.
+EVIDENCE = QUOTE + ' ' + PRIVATE
 
 
 class ObservedTeamHandler(TeamHandler):
@@ -72,6 +81,7 @@ def running_server(handler):
 
 
 def request(srv, method, path, token=None, data=None, form=False):
+    """One HTTP request to `srv` (anything with server_port); returns (status, body text)."""
     headers = {}
     if token:
         headers['Authorization'] = 'Bearer ' + token
@@ -85,6 +95,44 @@ def request(srv, method, path, token=None, data=None, form=False):
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
         return response.status, response.read().decode()
+
+
+def first_line(child, timeout):
+    """The child's first stdout line; raises queue.Empty instead of blocking when it prints nothing."""
+    lines = queue.Queue()
+    threading.Thread(target=lambda: lines.put(child.stdout.readline()), daemon=True).start()
+    return lines.get(timeout=timeout)
+
+
+def reported_address(child, what, timeout=15):
+    """The loopback address a CLI prints when it is ready, usable with request()."""
+    line = first_line(child, timeout)
+    ready = re.search(r'127\.0\.0\.1:(\d+)', line)
+    if not ready:
+        raise AssertionError(f'{what} did not report readiness: {line}')
+    return types.SimpleNamespace(server_port=int(ready.group(1)), process=child)
+
+
+@contextmanager
+def team_api_process(env):
+    """Run team_server.py the way operators start it; yields its address and process once it is ready."""
+    child = subprocess.Popen([sys.executable, str(ROOT/'team_server.py'), '--port', '0'], env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        yield reported_address(child, 'Team API CLI')
+    finally:
+        if child.poll() is None:
+            child.terminate()
+        child.communicate(timeout=10)
+
+
+def own_tests(*classes):
+    """Only the tests each class defines itself.
+
+    The team suites inherit one another so they can share one database fixture; the whole chain runs once,
+    through check_server_recovery.py, and every other file runs only its own tests with this."""
+    names = unittest.defaultTestLoader.getTestCaseNames
+    return unittest.TestSuite(cls(name) for cls in classes for name in names(cls) if name in vars(cls))
 
 
 class TeamIsolation(unittest.TestCase):
@@ -173,8 +221,6 @@ class TeamIsolation(unittest.TestCase):
 
     def test_approval_preserves_precision_with_rounded_db_default(self):
         # Keep the cloud precision regression runnable without machine-specific provisioning.
-        import math
-        from psycopg.conninfo import make_conninfo
         self.api.dsn = make_conninfo(self.api_dsn, options='-c extra_float_digits=0')
         data = dict(packet=self.packet('precision-test'), approved_by=self.users['Alice'],
                     approved_at=1790000000.1234567)
@@ -196,7 +242,7 @@ class TeamIsolation(unittest.TestCase):
 
     def card(self, identifier='c', manual=False):
         with connect(self.db) as c:
-            evidence = json.dumps([dict(n=1, role='user', text=QUOTE+' '+PRIVATE)])
+            evidence = json.dumps([dict(n=1, role='user', text=EVIDENCE)])
             c.execute("INSERT INTO jobs VALUES(?,?,?,'')", (identifier,evidence,'failed_draft' if manual else 'done'))
             c.execute("INSERT INTO cards VALUES(?,?,'decision',1,?,?,?,?)",
                 (identifier,identifier,None if manual else '승인 문구',None if manual else QUOTE,
@@ -228,6 +274,78 @@ class TeamIsolation(unittest.TestCase):
 
     def form(self, srv, path, **fields):
         return request(srv, 'POST', path, data=dict(csrf=srv.csrf, **fields), form=True)
+
+    def team_request(self, method, suffix, data=None, user='Dana'):
+        status, body = request(self.api, method, '/teams/'+self.teams['A']+'/'+suffix, self.tokens[user], data)
+        return status, json.loads(body)
+
+    def board_item(self, card_id):
+        """Team A's board entry for one card."""
+        return next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == card_id)
+
+    def reapply_upgrade(self, column):
+        """Drop one team_upgrades.sql column: the API must refuse to start until migrate-integration (run twice)
+        restores it, and the approved cards must be untouched."""
+        with psycopg.connect(self.admin_dsn) as c:
+            before = c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall()
+            c.execute(f'ALTER TABLE syncup.conflict_checks DROP COLUMN {column}')
+        with self.assertRaisesRegex(ValueError, 'migrate-integration'):
+            verify_database(self.api_dsn)
+        self.admin('migrate-integration')
+        self.admin('migrate-integration')
+        verify_database(self.api_dsn)
+        with psycopg.connect(self.admin_dsn) as c:
+            self.assertEqual(c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall(), before)
+
+    @contextmanager
+    def team_db(self, user='Dana', team='A'):
+        """A transaction as `user` in `team`, under the same row-level security as the API."""
+        with authorized(self.api_dsn, self.tokens[user], self.teams[team]) as (c, _user):
+            yield c
+
+    def run_due_checks(self):
+        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+
+    def settle_checks(self):
+        """Mark team A's queued checks done, so only cards published afterwards are checked."""
+        with self.team_db() as c:
+            c.execute("UPDATE syncup.conflict_checks SET state='complete' WHERE team_id=%s", (self.teams['A'],))
+
+    def make_check_due(self, card_id):
+        """Skip the waiting time (retry delay or lease) of one card's check."""
+        with self.team_db() as c:
+            c.execute("UPDATE syncup.conflict_checks SET next_attempt=now()-interval '1 second' WHERE card_id=%s",
+                      (card_id,))
+
+    def native_host(self, srv):
+        """Register a native-messaging host for `srv`'s RPC endpoint; returns (connection file, host manifest)."""
+        connection = self.state/'connection.json'
+        connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{srv.server_port}/rpc', token=srv.rpc_secret)))
+        connection.chmod(0o600)
+        return connection, json.loads(prepare('a'*32, connection, self.state/'native').read_text())
+
+    def native_frame(self, registration, method, params=None):
+        """Run the registered host once with one length-prefixed request, as Chrome does; returns its response."""
+        payload = json.dumps(dict(version=1, method=method, params=params or {})).encode()
+        done = subprocess.run([registration['path'], registration['allowed_origins'][0]],
+                              input=struct.pack('=I', len(payload))+payload, capture_output=True, timeout=15)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(struct.unpack('=I', done.stdout[:4])[0], len(done.stdout)-4)
+        return json.loads(done.stdout[4:])
+
+    def test_failed_token_issue_leaves_no_key_file(self):
+        path = self.state/'unknown-user.key'
+        for args, message in [(['--user', str(uuid.uuid4())], 'ForeignKeyViolation'),
+                              (['--user', self.users['Alice'], '--days', '91'], 'Token validity must be 1 to 90 days')]:
+            with self.subTest(message=message):
+                command = [sys.executable, str(ROOT/'team_admin.py'), 'token', *args, '--output', str(path)]
+                failed = subprocess.run(command, env=dict(os.environ, SYNCUP_ADMIN_DATABASE_URL=self.admin_dsn),
+                                        text=True, capture_output=True)
+                self.assertEqual(failed.returncode, 1)
+                self.assertIn(message, failed.stderr)
+                self.assertFalse(path.exists())
+        self.admin('token', '--user', self.users['Alice'], '--output', str(path))
+        self.assertEqual(request(self.api, 'GET', '/me', path.read_text().strip())[0], 200)
 
     def test_api_authentication_cross_team_and_forged_approval(self):
         self.assertEqual(request(self.api,'GET','/me')[0],401)
@@ -448,49 +566,48 @@ class TeamIsolation(unittest.TestCase):
             child=subprocess.Popen(command+['--team-api',self.url,'--team-token-file',str(self.keys['Dana'])],
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
             try:
-                lines=queue.Queue()
-                threading.Thread(target=lambda:lines.put(child.stdout.readline()),daemon=True).start()
-                line=lines.get(timeout=10)
-                self.assertIn('127.0.0.1:',line,'Review CLI did not report readiness')
-                port=int(re.search(r'127\.0\.0\.1:(\d+)',line).group(1))
-                with closing(http.client.HTTPConnection('127.0.0.1',port,timeout=5)) as conn:
-                    conn.request('GET','/')
-                    response=conn.getresponse()
-                    self.assertEqual(response.status,200)
-                    self.assertIn('A팀',response.read().decode())
+                status, html = request(reported_address(child, 'Review CLI', timeout=10), 'GET', '/')
+                self.assertEqual(status, 200)
+                self.assertIn('A팀', html)
             finally:
                 child.terminate()
                 child.communicate(timeout=5)
 
+    def test_team_server_cli_refuses_unsafe_configuration_with_its_reason(self):
+        unreachable = 'postgresql://syncup_api:FAKE_DO_NOT_LOG@127.0.0.1:1/syncup_test'
+        for env, reason in [(dict(SYNCUP_DATABASE_URL=self.api_dsn, SYNCUP_ADMIN_DATABASE_URL=self.admin_dsn),
+                             'SYNCUP_ADMIN_DATABASE_URL'),
+                            (dict(SYNCUP_DATABASE_URL=self.admin_dsn), '권한이 제한된 syncup_api DB 계정으로 실행해야'),
+                            (dict(SYNCUP_DATABASE_URL=unreachable), '팀 DB 연결을 확인하세요')]:
+            with self.subTest(reason=reason):
+                rejected = subprocess.run([sys.executable, str(ROOT/'team_server.py'), '--port', '0'],
+                                          env=dict(os.environ, **env), capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn(reason, rejected.stderr)
+                for secret in (self.admin_dsn, 'FAKE_DO_NOT_LOG'):
+                    self.assertNotIn(secret, rejected.stderr)
+
     def test_team_server_cli_and_manual_review(self):
-        rejected=subprocess.run([sys.executable,str(ROOT/'team_server.py'),'--port','0'],
-            env=dict(os.environ,SYNCUP_DATABASE_URL=self.api_dsn,SYNCUP_ADMIN_DATABASE_URL=self.admin_dsn),
-            capture_output=True,text=True,timeout=10)
-        self.assertNotEqual(rejected.returncode,0)
-        self.assertIn('SYNCUP_ADMIN_DATABASE_URL',rejected.stderr)
-        self.assertNotIn(self.admin_dsn,rejected.stderr)
-        child=subprocess.Popen([sys.executable,str(ROOT/'team_server.py'),'--port','0'],
-            env=dict(os.environ,SYNCUP_DATABASE_URL=self.api_dsn),
-            stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-        try:
-            lines=queue.Queue()
-            threading.Thread(target=lambda:lines.put(child.stdout.readline()),daemon=True).start()
-            line=lines.get(timeout=10)
-            self.assertIn('127.0.0.1:',line,'Team API CLI did not report readiness')
-            port=int(re.search(r'127\.0\.0\.1:(\d+)',line).group(1))
-            cli_client=TeamClient(f'http://127.0.0.1:{port}/',self.keys['Alice'])
-            self.assertEqual(cli_client.user_id,self.users['Alice'])
-        finally:
-            child.terminate()
-            child.communicate(timeout=5)
-        fields=self.card('manual',manual=True)
+        self.assertEqual(self.publish('Alice', 'A', 'cli')[0], 200)
+        with team_api_process(dict(os.environ, SYNCUP_DATABASE_URL=self.api_dsn)) as cli:
+            cli_client = TeamClient(f'http://127.0.0.1:{cli.server_port}/', self.keys['Alice'])
+            self.assertEqual(cli_client.user_id, self.users['Alice'])
+            # The started script must answer refusals itself instead of dropping the connection.
+            team = '/teams/'+self.teams['A']
+            for method, path, data, expected in [('GET', team+'/unknown', None, 404),
+                                                 ('POST', team+'/items/cli/retry-check', {}, 409)]:
+                status, body = request(cli, method, path, self.tokens['Alice'], data)
+                self.assertEqual(status, expected)
+                self.assertIn('error', json.loads(body))
+        self.card('manual', manual=True)
         review=self.review()
         self.assertEqual(self.form(review,'/approve',id='manual',text='수동 검토 후 승인',
                                   source='1',target_team=self.teams['A'])[0],303)
         self.deliver()
         items=self.client.items(self.teams['A'])
         self.assertEqual(items[0]['packet']['text'],'수동 검토 후 승인')
-        self.assertEqual(items[0]['packet']['quote'],QUOTE+' '+PRIVATE)
+        # A manual approval shares the whole evidence sentence the reviewer picked.
+        self.assertEqual(items[0]['packet']['quote'],EVIDENCE)
         with connect(self.db) as c:
             self.assertEqual(c.execute("SELECT state FROM jobs WHERE id='manual'").fetchone()[0],'done')
 
