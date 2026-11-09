@@ -1,6 +1,7 @@
 """Rust scanner checks for Codex logs, using synthetic rollout logs and SQLite index files."""
 import hashlib
 import json
+import subprocess
 import tempfile
 import time
 import unittest
@@ -10,9 +11,11 @@ from unittest.mock import patch
 
 import collector
 from check_local_privacy import work_gate
+from runtime import child_environment, collector_binary
 
 SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
 PROMPT = "DB는 Supabase로 확정했어. 이메일 demo@example.com"
+COLLECTION_STOPPED = ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start")
 # src/excerpt.rs limits
 MAX_EXCERPTS = 24
 MAX_EXCERPT_CHARS = 600
@@ -20,6 +23,11 @@ MAX_EXCERPT_CHARS = 600
 
 def job_id(key):
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def run_scanner(*args):
+    """Runs the built scanner directly, past the check in collector.scan() that collection is running."""
+    return subprocess.run([str(collector_binary()), *map(str, args)], env=child_environment(), capture_output=True)
 
 
 def split_last_line(text):
@@ -166,13 +174,23 @@ class CodexScannerChecks(unittest.TestCase):
         self.append(valid, self.turn("first"))
         self.scan()
         self.append(valid, self.turn("second", began=40, ended=41))
-        for stopped in ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start"):
+        for stopped in COLLECTION_STOPPED:
             self.execute(stopped)
             self.scan()
             self.assertEqual(self.job_ids(), {job_id("valid/first")}, stopped)
         self.execute("UPDATE settings SET end=?", (self.start + 600,))
         self.scan()
         self.assertEqual(self.job_ids(), {job_id("valid/first"), job_id("valid/second")})
+
+    def test_scanner_itself_collects_nothing_while_paused_or_expired(self):
+        self.append(self.add_chat("valid"), self.turn("first"))
+        for stopped in COLLECTION_STOPPED:
+            self.execute(stopped)
+            self.assertEqual(run_scanner(self.db, self.codex).returncode, 0, stopped)
+            self.assertEqual(self.jobs(), [], stopped)
+        self.execute("UPDATE settings SET end=?", (self.start + 600,))
+        self.assertEqual(run_scanner(self.db, self.codex).returncode, 0)
+        self.assertEqual(self.job_ids(), {job_id("valid/first")})
 
     def test_long_turn_is_cut_to_the_excerpt_limits(self):
         long_sentence = "가" * (MAX_EXCERPT_CHARS + 100) + "."

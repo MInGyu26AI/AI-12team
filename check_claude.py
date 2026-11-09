@@ -14,7 +14,7 @@ import collector
 import delivery
 from check_integrity import post, server
 from check_local_privacy import work_gate
-from check_scanner import decision_answers, fake_api, job_id, split_last_line
+from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line
 
 HIDDEN = ("demo@example.com", "TOOL_SECRET", "TOOL_RESULT_SECRET", "PRIVATE_THOUGHT", "COMMENTARY_NOT_EVIDENCE")
 CLAUDE_EXCERPT_FIELDS = {"n", "role", "text", "source", "session_id", "message_id", "timestamp",
@@ -182,13 +182,23 @@ class ClaudeScannerChecks(unittest.TestCase):
         session = self.add_session()
         self.scan()
         self.write(session, self.transcript(session, "2", 120, 130, parent="a1"), True)
-        for stopped in ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start"):
+        for stopped in COLLECTION_STOPPED:
             self.execute(stopped)
             self.scan()
             self.assertEqual(len(self.rows()), 1, stopped)
         self.execute("UPDATE settings SET end=?", (self.start + 600,))
         self.scan()
         self.assertEqual({e["message_id"] for e in json.loads(self.rows()[1]["evidence"])}, {"u2", "a2"})
+
+    def test_scanner_itself_collects_nothing_while_paused_or_expired(self):
+        session = self.add_session()
+        for stopped in COLLECTION_STOPPED:
+            self.execute(stopped)
+            self.assertEqual(run_scanner(self.db, self.codex, self.claude).returncode, 0, stopped)
+            self.assertEqual(self.rows(), [], stopped)
+        self.execute("UPDATE settings SET end=?", (self.start + 600,))
+        self.assertEqual(run_scanner(self.db, self.codex, self.claude).returncode, 0)
+        self.assertEqual(self.job_sessions(), [session])
 
     def test_failed_job_insert_keeps_cursor_and_retry_imports_once(self):
         session = self.add_session()
