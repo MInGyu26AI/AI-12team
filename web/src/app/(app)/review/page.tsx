@@ -70,12 +70,7 @@ export default function ReviewPage() {
     }
   };
 
-  const who = collector.status?.userName ?? team.me;
-  const subtitle = collector.cards.length
-    ? `${who} 님의 로컬 검토함에 후보 ${review.shareable.length}개가 있어요. 체크하고 승인한 카드만 팀에 공유해요.`
-    : review.pastedCount
-      ? `${review.pastedLabel}에서 후보 ${review.shareable.length}개를 찾았어요. 체크한 것만 팀 결정 기록에 올라가요.`
-      : "브라우저 확장이 모은 대화나 붙여넣은 대화에서 팀에 올릴 후보를 골라요.";
+  const subtitle = subtitleOf(review, collector.status?.userName ?? team.me);
   const held = collector.privacy.list?.items ?? [];
   const excluded = collector.privacy.list?.excluded ?? [];
   const excludedCount = collector.privacy.list?.excludedCount ?? 0;
@@ -136,11 +131,20 @@ export default function ReviewPage() {
             setConflicts(null);
             router.push("/board");
           }}
-          onResolved={() => {}}
         />
       )}
     </div>
   );
+}
+
+function subtitleOf(review: ReturnType<typeof useReviewCandidates>, who: string) {
+  if (review.collector.cards.length) {
+    return `${who} 님의 로컬 검토함에 후보 ${review.shareable.length}개가 있어요. 체크하고 승인한 카드만 팀에 공유해요.`;
+  }
+  if (review.pastedCount) {
+    return `${review.pastedLabel}에서 후보 ${review.shareable.length}개를 찾았어요. 체크한 것만 팀 결정 기록에 올라가요.`;
+  }
+  return "브라우저 확장이 모은 대화나 붙여넣은 대화에서 팀에 올릴 후보를 골라요.";
 }
 
 // 내용을 비워 저장한 카드는 원문 문장으로 올린다 (목업 붙여넣기 카드용. 수집기 카드는 이미 저장된 내용을 쓴다)

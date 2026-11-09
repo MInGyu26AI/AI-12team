@@ -6,6 +6,7 @@ import { fmtDue, parseSource } from "@shared/format";
 import { CLASSIFICATION_METHOD_LABEL, TAG_BORDER, TAG_COLOR, TAG_LABEL, statusBadges } from "@shared/labels";
 import type { RelatedCard } from "@shared/types";
 import { Checkbox } from "@/components/ui/checkbox";
+import { isSelectable } from "@/lib/review-candidates";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -14,12 +15,12 @@ interface Props {
   onCheckedChange: (checked: boolean) => void;
   onContentChange: (content: string) => void;
   onDismiss: () => void; // 버리기 (확장에서 온 카드는 검토 대기에서도 지움)
-  onConfirmRole?: (role: "user" | "assistant") => void;
+  onConfirmUser?: () => void; // 화자 추정 카드를 사용자 발화로 확인
   onEvidenceChange?: (sentence: string) => void;
 }
 
 // 피그마 4번 승인함 카드: 체크박스 · 표시 · 내용 · 이유/담당·기한/출처, 표시마다 테두리 색
-export function CandidateCard({ card: c, checked, onCheckedChange, onContentChange, onDismiss, onConfirmRole, onEvidenceChange }: Props) {
+export function CandidateCard({ card: c, checked, onCheckedChange, onContentChange, onDismiss, onConfirmUser, onEvidenceChange }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(c.content);
   const id = `pick-${c.id}`;
@@ -35,7 +36,7 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
       <Checkbox
         id={id}
         checked={checked}
-        disabled={!!c.evidence?.roleGuessed}
+        disabled={!isSelectable(c)}
         onCheckedChange={(v) => onCheckedChange(v === true)}
         className="mt-1 size-5 data-checked:border-brand data-checked:bg-brand"
         aria-label="이 카드 선택"
@@ -99,7 +100,7 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
         <p className="text-xs text-muted-foreground/80 break-keep">“{c.sentence}”</p>
         {onEvidenceChange && <EvidenceEditor sentence={c.sentence} onSave={onEvidenceChange} />}
         {c.evidence && <p className="text-xs text-muted-foreground">{evidenceLine(c)}</p>}
-        {c.evidence?.roleGuessed && <RoleConfirm onConfirm={() => onConfirmRole?.("user")} onDismiss={onDismiss} />}
+        {c.evidence?.roleGuessed && <RoleConfirm onConfirm={() => onConfirmUser?.()} onDismiss={onDismiss} />}
       </div>
     </article>
   );

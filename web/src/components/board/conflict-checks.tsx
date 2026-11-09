@@ -3,14 +3,15 @@
 import type { RelatedCard } from "@shared/types";
 import { Button } from "@/components/ui/button";
 
-const UNFINISHED = ["pending", "running", "failed"];
+type CheckStatus = NonNullable<RelatedCard["conflictCheckStatus"]>;
+const UNFINISHED: CheckStatus[] = ["pending", "running", "failed"];
 
 // 팀 서버의 충돌 검사가 아직 끝나지 않은 카드. 실패한 검사는 남은 비교를 다시 시작할 수 있다
 export function ConflictChecks({ cards, onRetry }: { cards: RelatedCard[]; onRetry: (id: string) => void }) {
   return (
     <>
       {cards
-        .filter((c) => UNFINISHED.includes(c.conflictCheckStatus ?? ""))
+        .filter((c) => !!c.conflictCheckStatus && UNFINISHED.includes(c.conflictCheckStatus))
         .map((c) => (
           <div key={c.id} className="space-y-2 rounded border p-3">
             <p>

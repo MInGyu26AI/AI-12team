@@ -16,7 +16,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { USE_MOCK, api } from "@/lib/api";
 import { resetMockData } from "@/lib/api/mock";
-import { boardToMarkdown } from "@/lib/record";
+import { boardToMarkdown } from "@/lib/board-markdown";
 import { useBoard } from "@/lib/use-board";
 
 // 피그마 6번: 팀 결정 기록 보드
@@ -25,18 +25,9 @@ export default function BoardPage() {
   const [topic, setTopic] = useState<string | null>(null); // 왼쪽 세부 주제 필터
   const [dialog, setDialog] = useState(false);
 
-  if (load.state === "loading")
-    return (
-      <Shell>
-        <LoadingState />
-      </Shell>
-    );
-  if (load.state === "error")
-    return (
-      <Shell>
-        <ErrorState message={load.message} onRetry={reload} />
-      </Shell>
-    );
+  if (load.state !== "ready") {
+    return <Shell>{load.state === "loading" ? <LoadingState /> : <ErrorState message={load.message} onRetry={reload} />}</Shell>;
+  }
 
   const { cards, conflicts, done } = load;
   const { decisions, todos, research, topics, lastUpdate } = boardSections(cards);

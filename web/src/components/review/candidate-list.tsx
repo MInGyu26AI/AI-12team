@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronDown, EyeOff } from "lucide-react";
 import { TURNS_PER_BATCH } from "@shared/batch";
-import { PERSONAL_COLOR } from "@shared/labels";
+import { PERSONAL_COLOR, TAG_COLOR } from "@shared/labels";
 import type { RelatedCard } from "@shared/types";
 import { CandidateCard } from "@/components/review/candidate-card";
 import { EmptyState } from "@/components/states";
@@ -34,7 +34,7 @@ export function CandidateList({ review, selection, othersOpen, onToggleOthers }:
           onCheckedChange={(on) => selection.setChecked(c.id, on)}
           onContentChange={(v) => review.editContent(c.id, v)}
           onDismiss={() => review.drop([c.id], "dismissed")}
-          onConfirmRole={(role) => collector.action("candidates.update", { id: c.id, patch: { confirmedRole: role } })}
+          onConfirmUser={() => collector.action("candidates.update", { id: c.id, patch: { confirmedRole: "user" } })}
           onEvidenceChange={
             review.fromCollector(c.id)
               ? (sentence) => collector.action("candidates.update", { id: c.id, patch: { sentence } })
@@ -104,7 +104,7 @@ function OtherContent({ cards, open, onToggle, onDismiss }: {
         <ul className="divide-y border-t">
           {cards.map((c) => (
             <li key={c.id} className="flex items-center gap-3 px-5 py-3 text-sm text-muted-foreground">
-              <span className={cn("rounded-full px-2 py-0.5 text-xs", PERSONAL_COLOR)}>제안</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-xs", TAG_COLOR.none)}>제안</span>
               <span className="min-w-0 flex-1 break-keep">{c.content}</span>
               <button className="text-xs underline" onClick={() => onDismiss(c.id)}>
                 지우기

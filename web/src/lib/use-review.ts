@@ -2,7 +2,7 @@
 // 승인함 화면 상태: 후보 모으기·수정·버리기(useReviewCandidates)와 체크 상태(useReviewSelection)
 import { useEffect, useRef, useState } from "react";
 import type { RelatedCard } from "@shared/types";
-import { api, USE_MOCK } from "./api";
+import { boardTopicKeys, USE_MOCK } from "./api";
 import { useLocalCandidates } from "./local-candidates";
 import { useLocalCollector } from "./local-collector";
 import { isChecked, mergeCandidates, selectionOf, type Overrides } from "./review-candidates";
@@ -14,9 +14,8 @@ function useBoardTopicKeys() {
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
-    api
-      .getBoard()
-      .then((board) => setKeys(new Set(board.map((c) => c.topic_key).filter((k): k is string => !!k))))
+    boardTopicKeys()
+      .then(setKeys)
       .catch(() => {});
   }, []);
   return keys;

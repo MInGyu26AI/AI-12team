@@ -11,7 +11,7 @@ import type { Utterance } from "@shared/utterance";
 import { ExportUpload } from "@/components/review/export-upload";
 import { PasteInput } from "@/components/review/paste-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api, USE_MOCK } from "@/lib/api";
+import { boardTopicKeys, USE_MOCK } from "@/lib/api";
 import { appendToCollector } from "@/lib/collector-intake";
 import { useLocalCandidates } from "@/lib/local-candidates";
 import { knownNamesOf, useTeam } from "@/lib/team";
@@ -26,8 +26,7 @@ export default function PastePage() {
 
   // 목업 모드: 브라우저 안 규칙 분류기로 바로 후보를 만든다 (기존 세부 주제 이름을 먼저 쓴다)
   const classifyInBrowser = async (utterances: Utterance[], label: string) => {
-    const board = await api.getBoard().catch(() => []);
-    const existingTopicKeys = [...new Set(board.map((c) => c.topic_key).filter((k): k is string => !!k))];
+    const existingTopicKeys = [...(await boardTopicKeys().catch(() => new Set<string>()))];
     const cards = mockClassify(utterances, {
       userName: team.me,
       knownNames: [...new Set([...knownNamesOf(team), ...DEMO_KNOWN_NAMES])],

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 export function ShareBar({ selected, personal, canSelect, allSelected, sharing, onToggleAll, onShare }: {
   selected: number;
   personal: number;
-  canSelect: boolean; // 공유 후보가 하나라도 있는지
+  canSelect: boolean; // 고를 수 있는 후보(화자 확인이 필요 없는 카드)가 하나라도 있는지
   allSelected: boolean;
   sharing: boolean;
   onToggleAll: () => void;

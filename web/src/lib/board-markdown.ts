@@ -1,4 +1,4 @@
-// 팀 보드 → AI 에 붙여넣기 좋은 마크다운
+// 팀 기록 복사: 팀 보드 → AI 에 붙여넣기 좋은 마크다운
 import { TAG_LABEL } from "@shared/labels";
 import { SUBTOPICS, type Conflict, type RelatedCard } from "@shared/types";
 
@@ -14,7 +14,7 @@ export function boardToMarkdown(cards: RelatedCard[], conflicts: Conflict[]): st
     const inSection = cards.filter((c) => (c.subtopic ?? "기타") === subtopic);
     if (!inSection.length) continue;
     lines.push("", `## ${subtopic}`);
-    for (const c of uniqueByTopic(inSection)) {
+    for (const c of groupedByTopic(inSection)) {
       const meta = [
         c.tag === "todo" ? `담당 ${c.owner ?? "미정"}` : c.owner && `결정 ${c.owner}`,
         c.tag === "todo" && `기한 ${c.due ?? "미정"}`,
@@ -34,8 +34,8 @@ export function boardToMarkdown(cards: RelatedCard[], conflicts: Conflict[]): st
   return lines.join("\n");
 }
 
-// 같은 세부 주제끼리 모으고(처음 나온 주제 순서), 같은 내용이 여러 번 승인됐으면 한 번만
-function uniqueByTopic(cards: RelatedCard[]): RelatedCard[] {
+// 같은 세부 주제끼리 모으고(처음 나온 주제 순서), 같은 내용이 여러 번 승인됐으면 한 번만 남긴다
+function groupedByTopic(cards: RelatedCard[]): RelatedCard[] {
   const byTopic = new Map<string, RelatedCard[]>();
   const seen = new Set<string>();
   for (const c of cards) {

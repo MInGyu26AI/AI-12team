@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, parseSource } from "@shared/format";
@@ -25,7 +25,7 @@ export function ConflictDialog({
 }: {
   conflicts: Conflict[];
   onClose: () => void;
-  onResolved: () => void; // 하나 처리할 때마다 (목록 새로고침용)
+  onResolved?: () => void; // 하나 처리할 때마다 (보드 목록 새로고침용)
 }) {
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState<string[]>([]);
@@ -33,27 +33,10 @@ export function ConflictDialog({
   const [note, setNote] = useState("");
   const [viewingExisting, setViewingExisting] = useState<string | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog, onClose);
   const left = conflicts.filter((c) => !done.includes(c.id));
-  const x = left[Math.min(index, left.length - 1)];
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.focus();
-    return () => previous?.focus();
-  }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key !== 'Tab') return;
-      const controls = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled])') ?? [])];
-      const first = controls[0], last = controls.at(-1);
-      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
+  const position = Math.min(index, left.length - 1);
+  const x = left[position];
   if (!x) return null;
   const isChange = x.judgement === "변경";
 
@@ -63,7 +46,7 @@ export function ConflictDialog({
       await api.resolveConflict(x.id, choice, note.trim() || undefined);
       toast.success(DONE_MSG[choice]);
       setNote("");
-      onResolved();
+      onResolved?.();
       if (left.length <= 1) onClose();
       else setDone((d) => [...d, x.id]);
     } catch (e) {
@@ -93,7 +76,7 @@ export function ConflictDialog({
             </h2>
             <p className="text-muted-foreground">
               주제: {x.topic_key} · 앞으로 적용할 결정을 선택해 주세요
-              {left.length > 1 && <span className="ml-2 font-medium text-foreground">({Math.min(index, left.length - 1) + 1}/{left.length})</span>}
+              {left.length > 1 && <span className="ml-2 font-medium text-foreground">({position + 1}/{left.length})</span>}
             </p>
           </div>
         </div>
@@ -105,7 +88,7 @@ export function ConflictDialog({
 
         <div className={cn("mt-4 rounded-lg p-4", isChange ? "bg-change-soft/60" : "bg-sensitive-soft")}>
           <p className={cn("text-sm font-semibold", isChange ? "text-change" : "text-sensitive")}>
-            {x.method === 'rule' ? '규칙 참고' : 'AI 판정'}: {x.judgement}
+            {x.method === "rule" ? "규칙 참고" : "AI 판정"}: {x.judgement}
             {x.resolution === "discuss" && <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-xs text-foreground">논의 요청됨</span>}
           </p>
           <p className="mt-1 text-sm break-keep">{x.reason}</p>
@@ -119,34 +102,90 @@ export function ConflictDialog({
           className="mt-4 h-10 w-full rounded-lg border px-3 text-sm outline-none focus:border-brand"
         />
 
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          {left.length > 1 && (
-            <Button variant="ghost" className="h-11 sm:mr-auto" onClick={() => setIndex((i) => (i + 1) % left.length)}>
-              다음 경고 보기
-            </Button>
-          )}
-          {isChange && <Button variant="outline" className="h-11 px-5" disabled={!!pending}
-            aria-expanded={viewingExisting === x.id} onClick={() => setViewingExisting(viewingExisting === x.id ? null : x.id)}>
-            기존 안 확인하기
-          </Button>}
-          <Button variant="outline" className="h-11 px-5" disabled={!!pending} onClick={() => resolve("adopt-new")}>
-            {pending === "adopt-new" ? "처리 중…" : isChange ? "예" : "새 결정으로 변경"}
-          </Button>
-          <Button variant="outline" className="h-11 px-5" disabled={!!pending} onClick={() => resolve("keep-existing")}>
-            {pending === "keep-existing" ? "처리 중…" : isChange ? "아니오" : "기존 유지"}
-          </Button>
-          {!isChange && <Button variant="outline" className="h-11 px-5" disabled={!!pending} onClick={() => resolve("both-valid")}>
-            {pending === "both-valid" ? "처리 중…" : "둘 다 유효"}
-          </Button>}
-          {!isChange && <Button
-            className="h-11 bg-brand px-5 hover:bg-brand-hover"
-            disabled={!!pending || x.resolution === "discuss"}
-            onClick={() => resolve("discuss")}
-          >
-            {pending === "discuss" ? "처리 중…" : x.resolution === "discuss" ? "논의 요청됨" : "팀에 논의 요청"}
-          </Button>}
-        </div>
+        <ResolutionActions
+          isChange={isChange}
+          pending={pending}
+          discussed={x.resolution === "discuss"}
+          hasNext={left.length > 1}
+          viewingExisting={viewingExisting === x.id}
+          onNext={() => setIndex((i) => (i + 1) % left.length)}
+          onToggleExisting={() => setViewingExisting(viewingExisting === x.id ? null : x.id)}
+          onResolve={resolve}
+        />
       </div>
+    </div>
+  );
+}
+
+// 열릴 때 대화상자에 포커스를 주고 닫히면 이전 요소로 돌려준다. Esc 로 닫고, Tab 은 대화상자 안에서만 돈다
+function useDialogFocus(dialog: RefObject<HTMLDivElement | null>, onClose: () => void) {
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.focus();
+    return () => previous?.focus();
+  }, [dialog]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key !== "Tab") return;
+      const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not([disabled]),input:not([disabled])") ?? [])];
+      const first = controls[0];
+      const last = controls.at(-1);
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === dialog.current)) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dialog, onClose]);
+}
+
+// '변경' 판정은 예/아니오(+기존 안 확인), '충돌'은 새 결정·기존 유지·둘 다 유효·논의 요청
+function ResolutionActions({ isChange, pending, discussed, hasNext, viewingExisting, onNext, onToggleExisting, onResolve }: {
+  isChange: boolean;
+  pending: Resolution | null;
+  discussed: boolean; // 이미 논의 요청된 경고
+  hasNext: boolean;
+  viewingExisting: boolean;
+  onNext: () => void;
+  onToggleExisting: () => void;
+  onResolve: (choice: Resolution) => void;
+}) {
+  const label = (choice: Resolution, text: string) => (pending === choice ? "처리 중…" : text);
+  return (
+    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+      {hasNext && (
+        <Button variant="ghost" className="h-11 sm:mr-auto" onClick={onNext}>
+          다음 경고 보기
+        </Button>
+      )}
+      {isChange && (
+        <Button variant="outline" className="h-11 px-5" disabled={!!pending} aria-expanded={viewingExisting} onClick={onToggleExisting}>
+          기존 안 확인하기
+        </Button>
+      )}
+      <Button variant="outline" className="h-11 px-5" disabled={!!pending} onClick={() => onResolve("adopt-new")}>
+        {label("adopt-new", isChange ? "예" : "새 결정으로 변경")}
+      </Button>
+      <Button variant="outline" className="h-11 px-5" disabled={!!pending} onClick={() => onResolve("keep-existing")}>
+        {label("keep-existing", isChange ? "아니오" : "기존 유지")}
+      </Button>
+      {!isChange && (
+        <Button variant="outline" className="h-11 px-5" disabled={!!pending} onClick={() => onResolve("both-valid")}>
+          {label("both-valid", "둘 다 유효")}
+        </Button>
+      )}
+      {!isChange && (
+        <Button className="h-11 bg-brand px-5 hover:bg-brand-hover" disabled={!!pending || discussed} onClick={() => onResolve("discuss")}>
+          {label("discuss", discussed ? "논의 요청됨" : "팀에 논의 요청")}
+        </Button>
+      )}
     </div>
   );
 }
@@ -175,4 +214,3 @@ function Side({ label, card, tone }: { label: string; card: RelatedCard; tone: "
     </div>
   );
 }
-

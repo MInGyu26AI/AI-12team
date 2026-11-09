@@ -85,8 +85,12 @@ function subscribe(listener: () => void, need: Need) {
       clearInterval(timer);
       timer = null;
     }
-    // 후보 화면을 떠나면 후보를 비워, 다음에 열 때 다른 팀의 옛 후보가 잠깐 보이지 않게 한다
-    if (need === "candidates" && !wantsCandidates()) publish(NO_CANDIDATES);
+    // 후보 화면을 떠나면 후보를 비워, 다음에 열 때 다른 팀의 옛 후보가 잠깐 보이지 않게 한다.
+    // 아직 오는 중인 candidates.list 응답이 비운 목록을 다시 채우지 않도록 그 요청도 버린다
+    if (need === "candidates" && !wantsCandidates()) {
+      generation += 1;
+      publish(NO_CANDIDATES);
+    }
   };
 }
 
