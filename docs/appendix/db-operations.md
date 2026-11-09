@@ -14,7 +14,7 @@
 2. 새 DB만: [팀 서버 사용법](../../팀_서버_사용법.md)의 관리자 초기화를 따른다. init은 기존 DB에 재실행하지 않는다.
 3. 기존 DB: API 쓰기를 중지하고 백업을 확인한 뒤 `python3 team_admin.py migrate-integration`. 하나의 트랜잭션에서 실행하며 두 번 실행해도 진단·진행 열을 중복 생성하지 않는다. 임의로 변경된 모든 스키마를 자동 복구하는 도구는 아니다. 누락 테이블/컬럼/정책은 카탈로그 대조 후 별도 처리한다.
 4. API에는 제한 계정 SYNCUP_DATABASE_URL만 전달한다. 관리자 환경변수를 제거하고 서버를 시작한다. 진단·진행 열 업그레이드가 빠져 있으면 API가 시작을 거부한다.
-5. `team_server.py`(CLI)의 바인딩과 HTTPS 프록시 조건은 [팀 서버 사용법](../../팀_서버_사용법.md)에 있다. 클라우드 이미지(`Dockerfile.cloud` → `cloud_server.py`)는 관리형 HTTPS 인그레스 뒤에서 `0.0.0.0:$PORT`에 바인딩하고 정확한 공개 호스트(`SYNCUP_PUBLIC_HOST`, 없으면 `RENDER_EXTERNAL_HOSTNAME`)만 받는다. 예외로 `GET /healthz`는 Railway 점검 호스트(`healthcheck.railway.app`)도 받는다. `SYNCUP_DATABASE_URL`에 `sslmode=verify-full`이 없으면 시작하지 않는다. 이미지에 들어 있는 CA는 Supabase 공개 CA(`PGSSLROOTCERT=/app/supabase-ca.crt`)뿐이다. Supabase DB는 연결 문자열에 `sslrootcert`가 필요 없고, 다른 제공자는 그 제공자의 CA를 `sslrootcert`로 지정해야 한다. DB 생성만으로 API 배포나 외부 접근이 완료되지는 않는다.
+5. `team_server.py`(CLI)의 바인딩과 HTTPS 프록시 조건은 [팀 서버 사용법](../../팀_서버_사용법.md)에 있다. 클라우드 이미지(`Dockerfile.cloud` → `cloud_server.py`)는 관리형 HTTPS 인그레스 뒤에서 `0.0.0.0:$PORT`에 바인딩하고 정확한 공개 호스트(`SYNCUP_PUBLIC_HOST`, 없으면 `RENDER_EXTERNAL_HOSTNAME`)만 받는다. 예외로 `GET /healthz`는 Railway 점검 호스트(`healthcheck.railway.app`)도 받는다. `SYNCUP_DATABASE_URL`에 `sslmode=verify-full`이 없으면 시작하지 않는다. libpq는 기본으로 이미지의 Supabase 공개 CA(`PGSSLROOTCERT=/app/supabase-ca.crt`)만 믿는다. Supabase DB는 연결 문자열에 `sslrootcert`가 필요 없다. 다른 제공자를 쓰려면 그 CA 파일을 이미지에 넣고(`Dockerfile.cloud`의 COPY와 `.dockerignore` 허용 목록) 연결 문자열의 `sslrootcert`로 지정한다. DB 생성만으로 API 배포나 외부 접근이 완료되지는 않는다.
 6. 실제 사용자 대화를 옮기기 전에 가짜 계정 두 개/팀 두 개로 승인·중복 재전송·권한 회수·재시작을 수행한다. 다른 기기에서 같은 HTTPS API에 연결해 검증한 별도 결과를 남긴다.
 
 ## 백업과 복구 절차

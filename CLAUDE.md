@@ -91,7 +91,7 @@ B. ChatGPT 대화 자동 추출
   - 사이트별 추출 코드는 파일을 분리(ChatGPT 화면 구조가 바뀌면 그 파일만 수정)
 C. 로컬 수집기 연동 (분류는 김하은님 ai/ — 확장 코드는 하은님 규칙에 맞춘다)
   - Background에서 Native Messaging RPC(turns.append·candidates.list)로 발화 전달, 수집기 연결이 실패하면 팝업·화면에 오류를 알림(목업 분류로 대체하지 않음)
-  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(묶기는 ai/syncup_ai/batch.py, shared/batch.ts에는 기본값만). 수동 보내기(지금 분류하기·싱크업에 보내기·선택한 내용 보내기) 땐 남은 것까지, 일시중지·종료 때는 보내지 않고 로컬에 둠
+  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(묶기는 ai/syncup_ai/batch.py, shared/batch.ts에는 기본값과 상한 1..50만). 수동 보내기(지금 분류하기·싱크업에 보내기·선택한 내용 보내기)는 수집 중일 때만 되고 남은 것까지 보냄. 일시중지·종료 때는 보내지 않고 로컬에 뒀다가 다시 수집하면 다음 묶음에 합침
   - 민감정보 가림 규칙(ai/syncup_ai/mask.py = shared/classify.ts mask, shared/mask-cases.json으로 함께 검사), 충돌 판정은 팀 서버의 ai/syncup_ai/conflict.py (shared/conflict.ts는 목업 모드용 근사)
   - 분류 완료 시 팝업의 후보 수 갱신 (배지는 공유 후보만 셈)
 D. 승인함 (웹 /review — 확장이 모은 후보 + 붙여넣기 후보, 본인만 보는 비공개 화면)

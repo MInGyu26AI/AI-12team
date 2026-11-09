@@ -1,14 +1,18 @@
-"""Pipeline schema migration and approval contract checks against real temporary SQLite files."""
+"""Pipeline schema migration and approval contract checks against real temporary SQLite files, plus the shared
+TypeScript constants the collector must agree with."""
 import json
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from card_contract import PUBLIC_FIELDS, validate_packet
+import collection_settings
 from delivery import approve
 from local_fixtures import public_card
+import local_rpc
 from pipeline_schema import ensure_pipeline_schema
 from storage import PRIVATE_SCHEMA, connect, initialize
 
@@ -99,6 +103,22 @@ class PipelineSchema(unittest.TestCase):
         p['speaker']='AI'
         with self.assertRaises(ValueError):
             validate_packet(p)
+
+
+def ts_constant(relative, name):
+    """The number an `export const NAME = <number>;` line in a shared TypeScript file gives."""
+    text = (Path(__file__).resolve().parent / relative).read_text(encoding='utf-8')
+    return int(re.search(rf'export const {name} = (\d+);', text).group(1))
+
+
+class SharedConstants(unittest.TestCase):
+    """Values the web and the extension copy from shared/*.ts must equal what the collector accepts."""
+
+    def test_batch_size_cap_matches_configure(self):
+        self.assertEqual(ts_constant('shared/batch.ts', 'MAX_TURNS_PER_BATCH'), collection_settings.MAX_BATCH_TURNS)
+
+    def test_rpc_version_matches_the_envelope_check(self):
+        self.assertEqual(ts_constant('shared/collector.ts', 'LOCAL_RPC_VERSION'), local_rpc.RPC_VERSION)
 
 
 if __name__ == '__main__':

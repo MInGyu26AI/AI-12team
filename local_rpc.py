@@ -8,12 +8,14 @@ import privacy_holds
 import team_relay
 import turn_intake
 
+RPC_VERSION = 1  # shared/collector.ts LOCAL_RPC_VERSION
+
 
 def read_envelope(request):
-    """(method, params) of a {version: 1, method, params} request; anything else is a ValueError."""
+    """(method, params) of a {version: RPC_VERSION, method, params} request; anything else is a ValueError."""
     if not isinstance(request, dict) or set(request) != {'version', 'method', 'params'}:
         raise ValueError('요청 버전 오류')
-    if type(request['version']) is not int or request['version'] != 1 or not isinstance(request['method'], str):
+    if type(request['version']) is not int or request['version'] != RPC_VERSION or not isinstance(request['method'], str):
         raise ValueError('요청 버전 오류')
     return request['method'], request['params']
 

@@ -13,7 +13,6 @@ from storage import connect
 from team_client import TEAM_ERRORS, TeamClient
 from turn_intake import unresolved_issues
 
-SOURCE_LABELS = SITE_LABEL | {'manual': '직접 입력', 'chatgpt-export': 'ChatGPT 내보내기'}
 STATE_LABELS = {'ended': '종료', 'paused': '일시중지', 'collecting': '수집 중'}
 CARDS = """SELECT cards.*,jobs.evidence,outbox.state AS delivery_state,outbox.detail AS delivery_detail,
     outbox.attempts,outbox_destinations.team_id AS approved_team
@@ -84,7 +83,7 @@ def _issues_html(issues):
 def _source_label(evidence):
     if not evidence:
         return "Codex"
-    label = SOURCE_LABELS.get(evidence[0].get("source", "codex"), "Codex")
+    label = SITE_LABEL.get(evidence[0].get("source", "codex"), "Codex")
     return label + " · 추가 답변" if evidence[0].get("continuation_of") else label
 
 

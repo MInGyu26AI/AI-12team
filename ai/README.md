@@ -25,7 +25,7 @@ ai/
   RESPONSE_VALIDATION.md       Decisions 응답 검증 규칙
   syncup_ai/
     __main__.py    명령줄 (python -m syncup_ai)
-    config.py      조정값: 10턴 묶음, AI 답변 발췌 길이, 충돌 호출당 1쌍·전체 비교 한도, '변경'도 경고할지
+    config.py      조정값: 10턴 묶음, AI 답변 발췌 길이, 충돌 호출당 1쌍·CLI 동기 호출 후보 상한, '변경'도 경고할지
     batch.py       대화 횟수(턴) 기준 묶기
     mask.py        민감정보 가림 (외부 AI로 보내기 전에)
     classify.py    분류 → 출력 형식 정리
@@ -93,7 +93,7 @@ python3 -m eval.sheet_eval e2e                  # 분류 결과로 충돌까지 
 수동 보내기 때는 `"flush": true` 로 남은 것까지 보낸다. 일시중지·종료 때 남은 대화는 보내지 않고 로컬에 둔다. flush 가 아니면 답을 아직 못 받은 마지막 질문은 다음으로 넘긴다.
 
 ### 3) 충돌 판정 — 팀 서버의 충돌 검사 worker(`process_checks`)가 한 쌍씩 호출
-승인 API(`/items/approve`)는 카드를 저장만 하고, 검사 결과는 보드의 `conflictCheckProgress`와 충돌 목록으로 본다.
+승인 API(`POST /teams/{id}/items`)는 카드를 저장만 하고, 검사 결과는 보드의 `conflictCheckProgress`와 충돌 목록으로 본다.
 `conflict.handle_request` 입력과 반환 모양:
 ```jsonc
 {"newCards": [ /* 이번에 승인된 카드 (id 포함) */ ], "existing": [ /* 팀 보드의 기존 결정 */ ]}
