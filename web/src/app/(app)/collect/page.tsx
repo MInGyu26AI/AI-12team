@@ -2,21 +2,17 @@
 
 import Link from "next/link";
 import { Minus, Plus } from "lucide-react";
+import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
+import { CollectionSettings } from "@/components/collect/collection-settings";
 import { buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/switch";
-import { useExtensionBridge } from "@/lib/use-extension-bridge";
+import { useLocalCollector } from "@/lib/local-collector";
 import { cn } from "@/lib/utils";
-
-// <input type="datetime-local"> 값 (로컬 시각)
-const toLocalInput = (iso: string) => {
-  const d = new Date(iso), p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
 
 // 피그마 3번: 대화 자동 수집 (브라우저 확장 상태·수집 기준·최근 수집)
 export default function CollectPage() {
-  const ext = useExtensionBridge();
+  const ext = useLocalCollector();
   const st = ext.status;
   const connected = ext.available && !!st;
   const pendingIds = new Set(ext.cards.map((c) => c.id));
@@ -30,12 +26,7 @@ export default function CollectPage() {
         </p>
       </div>
       {ext.error && <p role="alert">{ext.error}</p>}
-      {connected && <section className="space-y-3 rounded-xl border bg-card p-6">
-        <label className="block">승인 대상 팀<select aria-label="승인 대상 팀" value={st.teamId ?? ''} onChange={e => ext.updateSettings({ teamId: e.target.value })} className="ml-3 rounded border p-2">{st.teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-        <label className="block">프로젝트 주제<input aria-label="프로젝트 주제" key={st.projectTopic ?? ''} defaultValue={st.projectTopic ?? ''} onBlur={e => ext.updateSettings({ projectTopic: e.target.value })} className="ml-3 rounded border p-2" /></label>
-        <label className="block">수집 종료 시각<input aria-label="수집 종료 시각" type="datetime-local" key={st.endsAt ? toLocalInput(st.endsAt) : ''} defaultValue={st.endsAt ? toLocalInput(st.endsAt) : ''} onBlur={e => e.target.value && e.target.value !== e.target.defaultValue && ext.updateSettings({ endsAt: new Date(e.target.value).toISOString() })} className="ml-3 rounded border p-2" /></label>
-        <p className="text-sm text-muted-foreground">Codex·Claude Code는 선택한 프로젝트에서 완료된 새 발화를 모읍니다. 이미 승인한 카드의 대상 팀은 변경되지 않습니다.</p>
-      </section>}
+      {connected && <CollectionSettings status={st} onChange={ext.updateSettings} />}
 
       {/* 연결된 AI */}
       <section className="rounded-xl border bg-card p-6">
@@ -71,8 +62,14 @@ export default function CollectPage() {
             )
           }
         />
-        <AiRow name="Claude 웹" detail="행사 이후 지원 예정이에요" on={false} action={<SoonChip />} />
-        <AiRow name="Gemini 웹" detail="행사 이후 지원 예정이에요" on={false} action={<SoonChip />} last />
+        <AiRow
+          name="Codex·Claude Code"
+          detail={connected ? "로컬 수집기가 선택한 프로젝트에서 완료된 새 발화를 모아요" : "로컬 수집기를 실행하면 연결돼요"}
+          on={connected}
+          action={connected ? <span className="rounded-full bg-ok-soft px-3 py-1 text-sm font-semibold text-ok">연결됨</span> : null}
+        />
+        <AiRow name="Claude 웹" detail="지원 예정이에요" on={false} action={<SoonChip />} />
+        <AiRow name="Gemini 웹" detail="지원 예정이에요" on={false} action={<SoonChip />} last />
       </section>
 
       {/* 수집 기준 */}
@@ -89,10 +86,10 @@ export default function CollectPage() {
             >
               <Minus className="size-4" />
             </button>
-            <b className="w-8 text-center text-lg text-brand">{st?.turnsPerBatch ?? 10}</b>
+            <b className="w-8 text-center text-lg text-brand">{st?.turnsPerBatch ?? TURNS_PER_BATCH}</b>
             <button
               className="px-3 py-2 text-muted-foreground disabled:opacity-40"
-              disabled={!connected || st.turnsPerBatch >= 50}
+              disabled={!connected || st.turnsPerBatch >= MAX_TURNS_PER_BATCH}
               onClick={() => st && ext.updateSettings({ turnsPerBatch: st.turnsPerBatch + 1 })}
               aria-label="늘리기"
             >
@@ -115,13 +112,12 @@ export default function CollectPage() {
             </button>
           </div>
         )}
-        <ToggleRow
-          title="이 팀 프로젝트와 관련된 대화만 수집"
-          desc="수집한 발화를 AI로 분류하고 팀 관련 후보만 검토함에 보여줍니다. 팀 공유는 승인 후에만 진행됩니다."
-          checked
-          disabled
-          onChange={() => {}}
-        />
+        <div>
+          <p className="font-medium">이 팀 프로젝트와 관련된 대화만 수집</p>
+          <p className="text-sm text-muted-foreground break-keep">
+            수집한 발화를 AI로 분류하고 팀 관련 후보만 검토함에 보여줍니다. 팀 공유는 승인 후에만 진행됩니다.
+          </p>
+        </div>
         <ToggleRow
           title="수집 일시정지"
           desc="일시중지하면 새 수집과 AI 요청을 멈춥니다. 이미 승인한 카드의 전송은 계속됩니다."

@@ -7,6 +7,7 @@ import type { PrivacyExcluded, PrivacyHold, PrivacyMessage } from "@shared/bridg
 import { EmptyState, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { USE_MOCK } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const REASON: Record<string, string> = {
@@ -200,6 +201,15 @@ export function ExcludedMessages({ items, total }: { items: PrivacyExcluded[]; t
   );
 }
 
-export function PrivacyError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <ErrorState message={`개인정보 검사 목록을 새로 읽지 못했어요. 마지막으로 받은 목록을 보여 줘요. (${message})`} onRetry={onRetry} />;
+// '확인 필요'·'제외됨' 탭 공통: 목업 모드 안내, 목록을 새로 읽지 못했을 때의 오류
+export function PrivacyTab({ error, onRetry, children }: { error: string | null; onRetry: () => void; children: React.ReactNode }) {
+  if (USE_MOCK) return <p className="text-muted-foreground">예시 모드에는 로컬 개인정보 검사 결과가 없어요.</p>;
+  return (
+    <>
+      {error && (
+        <ErrorState message={`개인정보 검사 목록을 새로 읽지 못했어요. 마지막으로 받은 목록을 보여 줘요. (${error})`} onRetry={onRetry} />
+      )}
+      {children}
+    </>
+  );
 }

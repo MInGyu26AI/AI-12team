@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { fmtDue, parseSource } from "@shared/format";
-import { TAG_BORDER, TAG_COLOR, TAG_LABEL, statusBadges } from "@shared/labels";
+import { CLASSIFICATION_METHOD_LABEL, TAG_BORDER, TAG_COLOR, TAG_LABEL, statusBadges } from "@shared/labels";
 import type { RelatedCard } from "@shared/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ interface Props {
   onCheckedChange: (checked: boolean) => void;
   onContentChange: (content: string) => void;
   onDismiss: () => void; // 버리기 (확장에서 온 카드는 검토 대기에서도 지움)
-  onConfirmRole?: (role: 'user'|'assistant') => void;
+  onConfirmRole?: (role: "user" | "assistant") => void;
   onEvidenceChange?: (sentence: string) => void;
 }
 
@@ -50,7 +50,15 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
           ))}
           <span className="ml-auto flex gap-1 opacity-70 group-hover:opacity-100">
             {!editing && (
-              <button type="button" onClick={() => (setDraft(c.content), setEditing(true))} className="rounded-md p-1 hover:bg-muted" aria-label="내용 수정">
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(c.content);
+                  setEditing(true);
+                }}
+                className="rounded-md p-1 hover:bg-muted"
+                aria-label="내용 수정"
+              >
                 <Pencil className="size-3.5" />
               </button>
             )}
@@ -89,12 +97,52 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
 
         {meta && <p className={cn("text-sm break-keep", c.tag === "todo" ? "font-semibold text-tag-todo" : "text-muted-foreground")}>{meta}</p>}
         <p className="text-xs text-muted-foreground/80 break-keep">“{c.sentence}”</p>
-        {onEvidenceChange && <details className="text-sm"><summary className="cursor-pointer">공유할 근거 범위 수정</summary><form className="mt-2 space-y-2" onSubmit={e => { e.preventDefault(); onEvidenceChange(String(new FormData(e.currentTarget).get('sentence'))); }}><textarea key={c.sentence} name="sentence" aria-label="공유할 근거" defaultValue={c.sentence} maxLength={1200} required className="w-full rounded border p-2" /><button className="rounded border px-3 py-1">근거 저장</button></form></details>}
-        {c.evidence && <p className="text-xs text-muted-foreground">근거 화자 · {c.evidence.role === 'user' ? '사용자' : 'AI'}{c.evidence.roleGuessed && ' (확인 필요)'} · 분류 방식 {c.classificationMethod}</p>}
-        {c.evidence?.roleGuessed && <div className="space-x-3 text-sm"><span>실제 사용자 발화인지 확인하세요.</span><button className="underline" onClick={() => onConfirmRole?.('user')}>사용자 발화로 확인</button><button className="underline" onClick={onDismiss}>AI 제안이면 제외</button></div>}
+        {onEvidenceChange && <EvidenceEditor sentence={c.sentence} onSave={onEvidenceChange} />}
+        {c.evidence && <p className="text-xs text-muted-foreground">{evidenceLine(c)}</p>}
+        {c.evidence?.roleGuessed && <RoleConfirm onConfirm={() => onConfirmRole?.("user")} onDismiss={onDismiss} />}
       </div>
     </article>
   );
+}
+
+// 팀에 함께 보낼 근거 문장 고치기 (수집기가 원문에 있는 문장인지 다시 확인한다)
+function EvidenceEditor({ sentence, onSave }: { sentence: string; onSave: (sentence: string) => void }) {
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer">공유할 근거 범위 수정</summary>
+      <form
+        className="mt-2 space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave(String(new FormData(e.currentTarget).get("sentence")));
+        }}
+      >
+        <textarea key={sentence} name="sentence" aria-label="공유할 근거" defaultValue={sentence} maxLength={1200} required className="w-full rounded border p-2" />
+        <button className="rounded border px-3 py-1">근거 저장</button>
+      </form>
+    </details>
+  );
+}
+
+// 화자를 추정한 카드: 사용자 발화로 확인하거나, AI 제안이면 버린다
+function RoleConfirm({ onConfirm, onDismiss }: { onConfirm: () => void; onDismiss: () => void }) {
+  return (
+    <div className="space-x-3 text-sm">
+      <span>실제 사용자 발화인지 확인하세요.</span>
+      <button className="underline" onClick={onConfirm}>
+        사용자 발화로 확인
+      </button>
+      <button className="underline" onClick={onDismiss}>
+        AI 제안이면 제외
+      </button>
+    </div>
+  );
+}
+
+function evidenceLine(c: RelatedCard) {
+  const role = c.evidence?.role === "user" ? "사용자" : "AI";
+  const method = c.classificationMethod && CLASSIFICATION_METHOD_LABEL[c.classificationMethod];
+  return [`근거 화자 · ${role}${c.evidence?.roleGuessed ? " (확인 필요)" : ""}`, method && `분류 방식 ${method}`].filter(Boolean).join(" · ");
 }
 
 function metaLine(c: RelatedCard) {

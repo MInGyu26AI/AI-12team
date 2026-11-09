@@ -13,14 +13,8 @@ export function boardToMarkdown(cards: RelatedCard[], conflicts: Conflict[]): st
   for (const subtopic of SUBTOPICS) {
     const inSection = cards.filter((c) => (c.subtopic ?? "기타") === subtopic);
     if (!inSection.length) continue;
-    // 같은 세부 주제끼리 모으고, 같은 내용이 여러 번 승인됐으면 한 번만
-    const seen = new Set<string>();
-    const list = [...Map.groupBy(inSection, (c) => c.topic_key ?? "").values()].flat().filter((c) => {
-      const key = `${c.tag}|${c.topic_key}|${c.content.replace(/\s/g, "")}`;
-      return !seen.has(key) && seen.add(key);
-    });
     lines.push("", `## ${subtopic}`);
-    for (const c of list) {
+    for (const c of uniqueByTopic(inSection)) {
       const meta = [
         c.tag === "todo" ? `담당 ${c.owner ?? "미정"}` : c.owner && `결정 ${c.owner}`,
         c.tag === "todo" && `기한 ${c.due ?? "미정"}`,
@@ -38,4 +32,20 @@ export function boardToMarkdown(cards: RelatedCard[], conflicts: Conflict[]): st
     }
   }
   return lines.join("\n");
+}
+
+// 같은 세부 주제끼리 모으고(처음 나온 주제 순서), 같은 내용이 여러 번 승인됐으면 한 번만
+function uniqueByTopic(cards: RelatedCard[]): RelatedCard[] {
+  const byTopic = new Map<string, RelatedCard[]>();
+  const seen = new Set<string>();
+  for (const c of cards) {
+    const key = `${c.tag}|${c.topic_key}|${c.content.replace(/\s/g, "")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const topic = c.topic_key ?? "";
+    const group = byTopic.get(topic);
+    if (group) group.push(c);
+    else byTopic.set(topic, [c]);
+  }
+  return [...byTopic.values()].flat();
 }

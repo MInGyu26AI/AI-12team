@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, parseSource } from "@shared/format";
-import type { Conflict, RelatedCard } from "@shared/types";
+import type { Conflict, RelatedCard, Resolution } from "@shared/types";
 import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
-import { api, type ConflictChoice } from "@/lib/api";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const DONE_MSG: Record<ConflictChoice, string> = {
+const DONE_MSG: Record<Resolution, string> = {
   "keep-existing": "기존 결정을 유지했어요",
   "adopt-new": "새 결정으로 변경했어요",
   "both-valid": "두 결정을 모두 유효하게 유지했어요",
@@ -29,7 +29,7 @@ export function ConflictDialog({
 }) {
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState<string[]>([]);
-  const [pending, setPending] = useState<ConflictChoice | null>(null);
+  const [pending, setPending] = useState<Resolution | null>(null);
   const [note, setNote] = useState("");
   const [viewingExisting, setViewingExisting] = useState<string | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -57,7 +57,7 @@ export function ConflictDialog({
   if (!x) return null;
   const isChange = x.judgement === "변경";
 
-  const resolve = async (choice: ConflictChoice) => {
+  const resolve = async (choice: Resolution) => {
     setPending(choice);
     try {
       await api.resolveConflict(x.id, choice, note.trim() || undefined);

@@ -1,8 +1,8 @@
 // ChatGPT 내보내기(zip 또는 conversations.json)를 브라우저 안에서만 연다.
 // 원본 파일은 어디로도 전송하지 않는다 (CLAUDE.md §9).
 import JSZip from "jszip";
-import type { Utterance } from "@shared/classify";
-import { nowSource } from "@shared/classify";
+import { formatSource } from "@shared/format";
+import type { Utterance } from "@shared/utterance";
 
 interface RawNode {
   parent?: string | null;
@@ -53,7 +53,7 @@ function toUtterances(conv: RawConversation, conversationId: string): Utterance[
     const text = (m?.content?.parts ?? []).filter((p): p is string => typeof p === "string").join("\n").trim();
     if (!text) continue;
     const at = toDate(m?.create_time) ?? toDate(conv.create_time) ?? new Date();
-    out.push({ id: ids[index], conversationId, collectedAt: at.toISOString(), roleGuessed: false, speaker: role === "user" ? "user" : "ai", text, source: nowSource("ChatGPT", at) });
+    out.push({ id: ids[index], conversationId, collectedAt: at.toISOString(), roleGuessed: false, speaker: role === "user" ? "user" : "ai", text, source: formatSource("ChatGPT", at) });
   }
   return out;
 }

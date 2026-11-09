@@ -1,14 +1,14 @@
 "use client";
 
-// 웹에서 붙여넣기·내보내기 업로드로 분류한 후보 (이 브라우저에만, 승인 전까지).
-// 개인 내용은 개수만 남기고 문장은 저장하지 않는다.
+// 목업 모드에서 붙여넣기·내보내기 업로드로 분류한 후보 (이 브라우저에만, 승인 전까지).
+// 개인 내용은 개수만 남기고 문장은 저장하지 않는다. 실제 모드의 붙여넣기는 로컬 수집기 후보가 된다.
 import { useCallback } from "react";
 import type { Card, RelatedCard } from "@shared/types";
 import { useLocal } from "./local-store";
 
 const KEY = "syncup:local-candidates:v1";
 
-interface LocalCandidates {
+export interface LocalCandidates {
   cards: RelatedCard[];
   personal: number;
   label: string; // "붙여넣은 대화" / "ChatGPT 내보내기 파일"

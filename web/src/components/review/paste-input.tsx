@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
+import { formatSource } from "@shared/format";
+import { parsePasted, type Utterance } from "@shared/utterance";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { nowSource, parsePasted, type Utterance } from "@shared/classify";
+import { USE_MOCK } from "@/lib/api";
 
-// 시연용 예시 대화 (평가용 정답표와 겹치지 않는 새 문장).
+// 시연용 예시 대화 (평가용 정답표와 겹치지 않는 새 문장). 목업 모드에서만 넣을 수 있다 (실제 모드에선 진짜 입력이 된다).
 // 할 일 · 요청 속 숨은 결정 · AI 답변 속 조사 · 단톡방 줄의 결정(화자 = 결정자, 기존 '싱크업'과 충돌) · 전화번호 가림 · 제안 · 개인
 const SAMPLE = `나: 분류 기준표는 내가 내일까지 만들게.
 나: 프론트는 Next.js 기준으로 화면 코드 짜 줘.
@@ -31,10 +33,16 @@ export function PasteInput({ busy, onClassify }: { busy: boolean; onClassify: (u
         className="bg-background"
       />
       <div className="flex flex-wrap justify-between gap-2">
-        <Button variant="ghost" size="sm" onClick={() => setText(SAMPLE)}>
-          예시 대화 넣기
-        </Button>
-        <Button className="bg-brand hover:bg-brand-hover" disabled={!text.trim() || busy} onClick={() => onClassify(parsePasted(text, nowSource("ChatGPT")))}>
+        {USE_MOCK && (
+          <Button variant="ghost" size="sm" onClick={() => setText(SAMPLE)}>
+            예시 대화 넣기
+          </Button>
+        )}
+        <Button
+          className="ml-auto bg-brand hover:bg-brand-hover"
+          disabled={!text.trim() || busy}
+          onClick={() => onClassify(parsePasted(text, formatSource("ChatGPT")))}
+        >
           <Sparkles />
           {busy ? "분류 중…" : "분류하기"}
         </Button>
