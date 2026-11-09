@@ -125,7 +125,7 @@ export default function CollectPage() {
           disabled={!connected}
           onChange={(paused) => collector.updateSettings({ autoCollect: !paused })}
         />
-        {connected && st.endsAt && (
+        {connected && (
           <p className="text-sm text-muted-foreground">
             수집 종료 시각 {fmtMDHM(new Date(st.endsAt))} — 남은 대화는 보관하고 수집과 AI 요청을 멈춰요.
           </p>

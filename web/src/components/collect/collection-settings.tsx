@@ -12,7 +12,7 @@ const toLocalInput = (iso: string) => {
 // 승인 대상 팀 · 프로젝트 주제 · 수집 종료 시각. 글자 칸은 값이 바뀌었을 때만 collection.configure 로 보낸다
 export function CollectionSettings({ status, onChange }: { status: ExtStatus; onChange: (patch: ExtSettingsPatch) => void }) {
   const topic = status.projectTopic ?? "";
-  const endsAt = status.endsAt ? toLocalInput(status.endsAt) : "";
+  const endsAt = toLocalInput(status.endsAt);
   return (
     <section className="space-y-3 rounded-xl border bg-card p-6">
       <label className="block">

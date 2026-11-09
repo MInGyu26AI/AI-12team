@@ -10,10 +10,10 @@ export const BRIDGE_FROM_EXT = "syncup-ext";
 export interface BatchRecord {
   id: string;
   at: string; // ISO
-  site: CollectedMessage["site"]; // 묶음 첫 발화의 출처
+  site: CollectedMessage["site"] | "codex" | "claude-code"; // 묶음 첫 발화의 출처 (코딩 도구 발화는 스캐너가 붙인 이름)
   turns: number; // 대화 횟수 (질문 + 답변 = 1턴)
   cardIds: string[]; // 이 묶음에서 나온 검토 대기 카드 (공유 후보만)
-  trigger: "auto" | "flush" | "manual" | "selection";
+  trigger: "auto" | "flush" | "manual"; // flush = 수동·선택 보내기, manual = 수집 오류 발화를 고쳐 다시 넣음
 }
 
 export interface ExtStatus {
@@ -27,7 +27,7 @@ export interface ExtStatus {
   autoCollect: boolean; // false = 수집 일시정지
   turnsPerBatch: number;
   bufferedTurns: number; // 아직 분류에 안 보낸 대화 수
-  endsAt: string | null; // 수집 종료 시각 (ISO)
+  endsAt: string; // 수집 종료 시각 (ISO)
   lastCollectedAt: string | null;
   lastClassifier: "native" | null;
   teamName: string;
@@ -73,12 +73,12 @@ export interface PrivacyList {
   excludedCount: number;
 }
 
-// collection.configure 가 받는 수집 설정 (integration.py configure 의 허용 필드)
+// collection.configure 가 받는 수집 설정 (collection_settings.CONFIGURABLE)
 export interface ExtSettingsPatch {
   teamId?: string;
   projectTopic?: string;
   enabledSubtopics?: Subtopic[];
   autoCollect?: boolean;
   turnsPerBatch?: number;
-  endsAt?: string | null;
+  endsAt?: string;
 }

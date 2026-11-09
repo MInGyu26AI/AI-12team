@@ -1,5 +1,6 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
+import type { BatchRecord } from "./bridge";
 import type { Card, Judgement, RelatedCard, Resolution, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
@@ -25,6 +26,15 @@ export const TAG_BORDER: Record<Tag, string> = {
   todo: "border-tag-todo/70",
   research: "border-tag-research/70",
   none: "border-border",
+};
+
+// 최근 수집 묶음의 출처 (collection.status recent 의 site)
+export const SITE_LABEL: Record<BatchRecord["site"], string> = {
+  chatgpt: "ChatGPT",
+  manual: "붙여넣기",
+  "chatgpt-export": "ChatGPT 내보내기 파일",
+  codex: "Codex",
+  "claude-code": "Claude Code",
 };
 
 // 충돌 판정 배지 (변경도 경고로 보여 주되 색으로 구분)
