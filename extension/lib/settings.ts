@@ -2,31 +2,51 @@
 import { storage } from '#imports';
 import type { ExtStatus } from '@shared/bridge';
 import { TURNS_PER_BATCH } from '@shared/batch';
+import { isShareable } from '@shared/labels';
 import { SUBTOPICS, type RelatedCard, type Subtopic } from '@shared/types';
-import { DEFAULT_WEB_URL } from './config';
 
+// webUrl·enabledSubtopics 는 팝업 설정 화면이 저장한다. 나머지는 background 가 로컬 수집기 status(candidates.list)에서
+// 옮겨 온 값이라 확장에서 바꾸려면 collection.configure 를 부른다.
 export interface Settings {
+  webUrl?: string; // 개인 검토함 웹 주소 (origin). 없으면 DEFAULT_WEB_URL
+  enabledSubtopics: Subtopic[]; // 수집기 status 에는 없어서 마지막으로 저장한 값을 둔다
+  configured?: boolean; // false = 등록된 팀에 접근할 수 없음 (teamName 은 '접근 불가')
   teamName: string;
   projectTopic: string;
   userName: string;
-  enabledSubtopics: Subtopic[];
-  autoCollect: boolean; // false = 수집 일시정지
-  webUrl?: string; // 개인 검토함 웹 주소 (origin). 없으면 DEFAULT_WEB_URL
-  turnsPerBatch?: number; // 대화 N회(질문+답변)마다 분류. 없으면 TURNS_PER_BATCH(10)
-  endsAt?: string | null; // 수집 종료 시각 (ISO). 지나면 남은 대화를 보내고 자동 수집을 끈다
-  // 아래는 로컬 수집기 상태(candidates.list 의 status)를 background 가 병합한 값
-  bufferedTurns?: ExtStatus['bufferedTurns'];
-  lastCollectedAt?: ExtStatus['lastCollectedAt'];
-  lastClassifier?: ExtStatus['lastClassifier'];
+  autoCollect: boolean; // false = 수집 일시정지 또는 종료 시각 지남
+  turnsPerBatch?: number; // 대화 N회(질문+답변)마다 분류
+  endsAt?: string | null; // 수집 종료 시각 (ISO). 지나면 수집기가 새 수집과 AI 요청을 멈춘다
+  bufferedTurns?: number;
+  lastCollectedAt?: string | null;
 }
 
 export const settingsItem = storage.defineItem<Settings>('local:settings', {
   fallback: { teamName: '', projectTopic: '', userName: '', enabledSubtopics: [...SUBTOPICS], autoCollect: false },
 });
 
-// 예전에 저장된 설정에는 새 필드가 없을 수 있으므로 항상 이 함수들로 읽는다
-export const webUrlOf = (s: Settings) => s.webUrl || DEFAULT_WEB_URL;
-export const turnsOf = (s: Settings) => Math.min(Math.max(Math.round(s.turnsPerBatch ?? TURNS_PER_BATCH), 1), 50);
+/** 수집기 status 를 저장할 설정으로. 확장이 정한 값은 그대로 두고, 확장이 읽지 않는 status 필드는 담지 않는다 */
+export const settingsFromStatus = (previous: Settings, status: ExtStatus): Settings => ({
+  webUrl: previous.webUrl,
+  enabledSubtopics: previous.enabledSubtopics,
+  configured: status.configured,
+  teamName: status.teamName,
+  projectTopic: status.projectTopic ?? previous.projectTopic,
+  userName: status.userName,
+  autoCollect: status.autoCollect,
+  turnsPerBatch: status.turnsPerBatch,
+  endsAt: status.endsAt,
+  bufferedTurns: status.bufferedTurns,
+  lastCollectedAt: status.lastCollectedAt,
+});
+
+// 묶음 크기 범위. 수집기 configure 도 같은 범위만 받는다 (integration.py)
+const MIN_TURNS = 1;
+const MAX_TURNS = 50;
+export const clampTurns = (turns: number) => Math.min(Math.max(Math.round(turns), MIN_TURNS), MAX_TURNS);
+
+// 수집기 status 를 옮기기 전에는 아래 값이 비어 있을 수 있으므로 항상 이 함수들로 읽는다
+export const turnsOf = (s: Settings) => clampTurns(s.turnsPerBatch ?? TURNS_PER_BATCH);
 export const endsAtOf = (s: Settings) => (s.endsAt ? new Date(s.endsAt) : null);
 export const isEnded = (s: Settings, now = Date.now()) => {
   const end = endsAtOf(s);
@@ -36,7 +56,7 @@ export const isEnded = (s: Settings, now = Date.now()) => {
 export const isConfigured = (s: Settings) => !!(s.teamName.trim() && s.projectTopic.trim() && s.userName.trim());
 
 // 확장 자신이 로컬 수집기를 부른 마지막 실패. unreachable: 수집기에 닿지 못함, op: 실패한 호출 종류.
-// 언제 지우는지는 background.ts 가 정한다.
+// 언제 지우는지는 collector-status.ts 가 정한다.
 export interface CollectState {
   lastError: string | null;
   unreachable?: boolean;
@@ -49,3 +69,6 @@ export const collectStateItem = storage.defineItem<CollectState>('local:collectS
 
 // 검토 대기 카드: 개인(personal)은 버렸고 민감정보는 가린 상태
 export const pendingItem = storage.defineItem<RelatedCard[]>('local:pending', { fallback: [] });
+
+// 배지와 팝업이 함께 쓰는 검토 대기 수. 수집기는 공유 후보만 보내지만 프로세스 경계라 한 번 더 거른다
+export const shareableCount = (cards: RelatedCard[]) => cards.filter(isShareable).length;

@@ -11,8 +11,12 @@ export interface ExtractResult {
 export interface SiteAdapter {
   id: CollectedMessage['site'];
   label: string; // 출처 표시용, 예: "ChatGPT"
-  hosts: string[]; // location.hostname 비교용
+  hosts: string[]; // location.hostname 비교용 (https 만)
   isConversationPage(): boolean;
+  /** 주소에서 대화 id. 대화 화면이 아니면 'new' */
+  conversationIdOf(url: string): string;
+  /** 탭 제목에서 사이트 이름을 뺀 대화 제목 */
+  titleOf(documentTitle: string): string;
   /** 지금 화면에 보이는 메시지. 답변 생성 중인 마지막 AI 메시지는 빼고 돌려준다 */
   extract(): ExtractResult;
 }
