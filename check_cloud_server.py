@@ -1,6 +1,8 @@
 """Real HTTP boundary checks; synthetic settings, no cloud credentials."""
+import ast
 import http.client
 import os
+from pathlib import Path
 import threading
 import unittest
 from unittest.mock import patch
@@ -9,6 +11,34 @@ import psycopg
 
 from cloud_server import CloudHandler, settings
 from team_server import TeamServer
+
+ROOT = Path(__file__).resolve().parent
+
+
+def startup_modules(name, seen=None):
+    """Repository modules (top-level .py files) that importing `name` loads, following module-level imports.
+
+    Imports inside functions are left out: they belong to code paths the cloud service does not start with."""
+    seen = set() if seen is None else seen
+    seen.add(name)
+    for node in ast.parse((ROOT/f'{name}.py').read_text(encoding='utf-8')).body:
+        if isinstance(node, ast.Import):
+            imported = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            imported = [node.module]
+        else:
+            continue
+        for module in imported:
+            if (ROOT/f'{module}.py').exists() and module not in seen:
+                startup_modules(module, seen)
+    return seen
+
+
+def listed_modules(path, prefix):
+    """Top-level .py names on the `prefix` lines of a Docker file."""
+    words = [w for line in path.read_text(encoding='utf-8').splitlines() if line.startswith(prefix)
+             for w in line[len(prefix):].split()]
+    return {w.removeprefix('!')[:-3] for w in words if w.endswith('.py') and '/' not in w}
 
 
 class CloudBoundary(unittest.TestCase):
@@ -49,6 +79,11 @@ class CloudBoundary(unittest.TestCase):
             connect.assert_called_with(self.server.dsn, connect_timeout=3)
         with patch('cloud_server.psycopg.connect', side_effect=psycopg.OperationalError('FAKE_DO_NOT_LOG')):
             self.assertEqual(self.request('/healthz'), (503, '{"ready": false}'))
+
+    def test_image_copies_every_module_the_service_starts_with(self):
+        copied = listed_modules(ROOT/'Dockerfile.cloud', 'COPY ')
+        self.assertLessEqual(startup_modules('cloud_server'), copied)
+        self.assertEqual(listed_modules(ROOT/'.dockerignore', '!'), copied)
 
     def test_cloud_configuration_fails_closed(self):
         env = dict(SYNCUP_DATABASE_URL='host=db.example.com sslmode=verify-full',

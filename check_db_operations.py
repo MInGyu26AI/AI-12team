@@ -19,8 +19,24 @@ from team_access import verify_database
 from team_client import TeamClient
 
 
+# Catalog facts a dump/restore or upgrade must keep exactly.
+CATALOG = {
+    'columns': '''SELECT table_name,column_name,data_type,is_nullable,column_default
+        FROM information_schema.columns WHERE table_schema='syncup' ORDER BY 1,2''',
+    'rls': '''SELECT relname,relrowsecurity,relforcerowsecurity
+        FROM pg_class WHERE relnamespace='syncup'::regnamespace AND relkind='r' ORDER BY 1''',
+    'policies': '''SELECT tablename,policyname,roles,cmd,qual,with_check
+        FROM pg_policies WHERE schemaname='syncup' ORDER BY 1,2''',
+    'grants': '''SELECT table_name,grantee,privilege_type
+        FROM information_schema.table_privileges WHERE table_schema='syncup' ORDER BY 1,2,3''',
+    'constraints': '''SELECT conrelid::regclass::text,conname,pg_get_constraintdef(oid)
+        FROM pg_constraint WHERE connamespace='syncup'::regnamespace ORDER BY 1,2''',
+}
+
+
 def sqlite_rows(c):
-    names = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    names = [r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
     return {n: sorted([tuple(r) for r in c.execute('SELECT * FROM "'+n+'"')], key=repr) for n in names}
 
 
@@ -55,18 +71,27 @@ class LocalUpgrade(IntegrationStore):
 
 
 class ServerUpgrade(TeamIntegration):
-    def snapshot(self,dsn):
+    def snapshot(self, dsn):
+        """(rows of every syncup table as sorted JSON, CATALOG facts)."""
         with psycopg.connect(dsn) as c:
             names = [r[0] for r in c.execute("SELECT tablename FROM pg_tables WHERE schemaname='syncup' ORDER BY tablename")]
-            rows = {n:sorted([json.dumps(r[0],sort_keys=True) for r in c.execute(sql.SQL('SELECT to_jsonb(t) FROM syncup.{} t').format(sql.Identifier(n)))]) for n in names}
-            schema = {
-                'columns':c.execute("SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='syncup' ORDER BY 1,2").fetchall(),
-                'rls':c.execute("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='syncup'::regnamespace AND relkind='r' ORDER BY 1").fetchall(),
-                'policies':c.execute("SELECT tablename,policyname,roles,cmd,qual,with_check FROM pg_policies WHERE schemaname='syncup' ORDER BY 1,2").fetchall(),
-                'grants':c.execute("SELECT table_name,grantee,privilege_type FROM information_schema.table_privileges WHERE table_schema='syncup' ORDER BY 1,2,3").fetchall(),
-                'constraints':c.execute("SELECT conrelid::regclass::text,conname,pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace='syncup'::regnamespace ORDER BY 1,2").fetchall(),
-            }
-        return rows,schema
+            rows = {}
+            for name in names:
+                query = sql.SQL('SELECT to_jsonb(t) FROM syncup.{} t').format(sql.Identifier(name))
+                rows[name] = sorted(json.dumps(r[0], sort_keys=True) for r in c.execute(query))
+            schema = {key: c.execute(query).fetchall() for key, query in CATALOG.items()}
+        return rows, schema
+
+    def restored_copy(self):
+        """pg_dump the syncup schema into a new database; returns its (admin DSN, API DSN)."""
+        def postgres(tool, *args, input=None):
+            stdin = [] if input is None else ['-i']
+            return subprocess.run(['docker', 'exec', *stdin, self.container, tool, '-U', 'postgres', *args],
+                                  input=input, check=True, capture_output=True).stdout
+        dump = postgres('pg_dump', '-Fc', '--schema=syncup', 'syncup_test')
+        postgres('createdb', 'syncup_restore')
+        postgres('pg_restore', '--exit-on-error', '-d', 'syncup_restore', input=dump)
+        return make_conninfo(self.admin_dsn, dbname='syncup_restore'), make_conninfo(self.api_dsn, dbname='syncup_restore')
 
     def test_populated_upgrade_dump_restore_and_process_restart(self):
         self.change_after_discussion()
@@ -76,7 +101,8 @@ class ServerUpgrade(TeamIntegration):
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
         before,_ = self.snapshot(self.admin_dsn)
         self.assertTrue(all(before.values()),'All ten tables must contain synthetic records')
-        self.admin('migrate-integration'); self.admin('migrate-integration')
+        self.admin('migrate-integration')
+        self.admin('migrate-integration')
         verify_database(self.api_dsn)
         after,schema = self.snapshot(self.admin_dsn)
         for name in before:
@@ -89,11 +115,7 @@ class ServerUpgrade(TeamIntegration):
                     values.append(json.dumps(row,sort_keys=True))
                 values.sort()
             self.assertEqual(values,before[name],name)
-        dump = subprocess.check_output(['docker','exec',self.container,'pg_dump','-U','postgres','-Fc','--schema=syncup','syncup_test'])
-        subprocess.run(['docker','exec',self.container,'createdb','-U','postgres','syncup_restore'],check=True,capture_output=True)
-        subprocess.run(['docker','exec','-i',self.container,'pg_restore','-U','postgres','--exit-on-error','-d','syncup_restore'],input=dump,check=True,capture_output=True)
-        restored_admin = make_conninfo(self.admin_dsn,dbname='syncup_restore')
-        restored_api = make_conninfo(self.api_dsn,dbname='syncup_restore')
+        restored_admin, restored_api = self.restored_copy()
         self.assertEqual(self.snapshot(restored_admin),(after,schema))
         verify_database(restored_api)
         # Restart the actual CLI twice against the restored DB; credentials remain local to subprocesses.

@@ -10,7 +10,7 @@ OBSOLETE_NOTE = '관련 결정이 다른 해결에서 종료됨'
 
 def resolve(c, team_id, user_id, conflict_id, data):
     """Apply one member's choice; the caller holds the team lock."""
-    choice, note = _requested(data)
+    choice, note = _parse_choice(data)
     row = c.execute('SELECT * FROM syncup.conflicts WHERE team_id=%s AND id=%s FOR UPDATE',
                     (team_id, conflict_id)).fetchone()
     if not row:
@@ -22,14 +22,14 @@ def resolve(c, team_id, user_id, conflict_id, data):
         raise AccessError(409)
     c.execute('UPDATE syncup.conflicts SET resolution=%s,note=%s WHERE team_id=%s AND id=%s',
               (choice, note, team_id, row['id']))
-    _log(c, team_id, row['id'], user_id, choice, note)
+    _log_event(c, team_id, row['id'], user_id, choice, note)
     if choice in CLOSES:
         column, state = CLOSES[choice]
         _close(c, team_id, user_id, row[column], state)
     _refresh_review_states(c, team_id)
 
 
-def _requested(data):
+def _parse_choice(data):
     if set(data) - {'resolution', 'resolutionNote'}:
         raise ValueError('해결 필드 오류')
     choice, note = data.get('resolution'), data.get('resolutionNote', '')
@@ -45,7 +45,7 @@ def _close(c, team_id, user_id, card_id, state):
         WHERE team_id=%s AND (card_a=%s OR card_b=%s) AND (resolution IS NULL OR resolution='discuss')
         RETURNING id''', (OBSOLETE_NOTE, team_id, card_id, card_id)).fetchall()
     for r in stale:
-        _log(c, team_id, r['id'], user_id, 'obsolete', OBSOLETE_NOTE)
+        _log_event(c, team_id, r['id'], user_id, 'obsolete', OBSOLETE_NOTE)
 
 
 def _refresh_review_states(c, team_id):
@@ -56,6 +56,6 @@ def _refresh_review_states(c, team_id):
         WHERE s.team_id=%s AND s.state IN ('active','review')''', (team_id,))
 
 
-def _log(c, team_id, conflict_id, user_id, resolution, note):
+def _log_event(c, team_id, conflict_id, user_id, resolution, note):
     c.execute('''INSERT INTO syncup.conflict_events(team_id,conflict_id,actor,resolution,note)
         VALUES(%s,%s,%s,%s,%s)''', (team_id, conflict_id, user_id, resolution, note))

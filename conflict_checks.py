@@ -18,7 +18,7 @@ from team_access import AccessError, authorized, team_lock
 
 MAX_CHECK_ATTEMPTS = 3  # 최초 시도 + 일시적인 통신 실패 재시도 2회
 CHECK_SLICE_PAIRS = 30  # pairs one pass handles before the scheduler looks again; not a coverage limit
-# A lease must outlast one judgement (CONFLICT_CHECK_SECONDS = 90 in ai/syncup_ai/config.py).
+# A lease must outlast one judgement (CONFLICT_CHECK_SECONDS in ai/syncup_ai/config.py).
 LEASE = timedelta(minutes=3)
 RETRY_DELAY = timedelta(seconds=30)
 CONFLICT_POLICY_SHA256 = conflict_policy_fingerprint()
@@ -96,11 +96,11 @@ def _reclaim_expired(c, team_id):
     """An expired lease means its worker stopped mid-pair: resume from the checkpoint with a fresh budget."""
     c.execute("""UPDATE syncup.conflict_checks SET state='pending',detail='중단된 검사 이어서 진행',attempts=0
         WHERE team_id=%s AND state='running' AND next_attempt<=now() AND progress ? 'ids'""", (team_id,))
-    # Only rows leased before checkpoints existed are left: they cannot resume, so a member must retry them.
+    # Rows leased before checkpoints existed have no pair list to resume from, so a member must retry them.
     c.execute("""UPDATE syncup.conflict_checks SET state='failed',detail='중단된 검사 · 수동 재시도 필요',
         diagnostics=diagnostics || jsonb_build_object('outcome','interrupted',
             'finished_at',extract(epoch from clock_timestamp()),'checked_count',NULL,'elapsed_ms',NULL)
-        WHERE team_id=%s AND state='running' AND next_attempt<=now()""", (team_id,))
+        WHERE team_id=%s AND state='running' AND next_attempt<=now() AND NOT (progress ? 'ids')""", (team_id,))
 
 
 def _next_job(c, team_id):
@@ -116,15 +116,16 @@ def _lease_or_skip(c, team_id, job):
     new = board_card(row)
     progress, attempts = _checkpoint(c, team_id, job, row, new)
     ids, cursor = progress['ids'], progress['cursor']
-    if not _live_card(c, team_id, new['id']):
+    if _live_decision(c, team_id, new['id']) is None:
         _skip(c, team_id, new['id'], progress, len(ids) - cursor)
         return None
     existing = []
     if cursor < len(ids):
-        existing = _live_card(c, team_id, ids[cursor])
-        if not existing:
+        earlier = _live_decision(c, team_id, ids[cursor])
+        if earlier is None:
             _skip(c, team_id, new['id'], progress, 1)
             return None
+        existing = [earlier]
     return _lease(c, team_id, new, existing, progress, attempts + 1)
 
 
@@ -144,12 +145,12 @@ def _checkpoint(c, team_id, job, row, new):
     return dict(ids=ids, cursor=0, skipped=0, policy=CONFLICT_POLICY_SHA256), attempts
 
 
-def _live_card(c, team_id, card_id):
-    """[the card] while it is an active or in-review decision, else []."""
+def _live_decision(c, team_id, card_id):
+    """The board card while it is an active or in-review decision, else None."""
     row = c.execute('''SELECT r.packet,r.approved_by::text,r.approved_at FROM syncup.shared_cards r
         JOIN syncup.record_states s ON (s.team_id,s.card_id)=(r.team_id,r.id)
         WHERE r.team_id=%s AND r.id=%s AND s.state IN ('active','review')''', (team_id, card_id)).fetchone()
-    return [board_card(row)] if row else []
+    return board_card(row) if row else None
 
 
 def _skip(c, team_id, card_id, progress, count):
@@ -185,6 +186,7 @@ def _judge(server, lease):
 
 
 def _ai_judgement(request, diagnostic):
+    """Judge with the configured AI models; records the policy and model fingerprints into `diagnostic`."""
     try:
         llm = from_env()
     except LLMNotConfigured:

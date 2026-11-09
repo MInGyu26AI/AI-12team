@@ -68,11 +68,11 @@ class TeamHandler(LocalHandler):
     def handle_api(self):
         status, result, token, team_id = 200, {}, '', None
         try:
-            parts, team_id = self.route()
+            parts, team_id = self.parse_path()
             token = self.bearer_token()
             data = json.loads(self.body()) if self.command == 'POST' else None
             with authorized(self.server.dsn, token, team_id) as (c, user_id):
-                result = respond(c, user_id, team_id, self.command, parts, data)
+                result = dispatch(c, user_id, team_id, self.command, parts, data)
             # Respond only after the transaction has committed, including idempotent retries.
         except AccessError as error:
             status, result = error.status, {'error': '접근할 수 없거나 허용되지 않은 요청입니다.'}
@@ -88,7 +88,7 @@ class TeamHandler(LocalHandler):
             # No worker runs on its own: any member's successful team request resumes that team's due checks.
             schedule(self.server, token, team_id)
 
-    def route(self):
+    def parse_path(self):
         """(path parts, team id or None for /me); checked before the token so unknown paths never touch the DB."""
         if not self.valid_host():
             raise AccessError(400)
@@ -111,7 +111,7 @@ class TeamHandler(LocalHandler):
         return token
 
 
-def respond(c, user_id, team_id, method, parts, data):
+def dispatch(c, user_id, team_id, method, parts, data):
     if team_id is None:
         if method != 'GET':
             raise AccessError(405)

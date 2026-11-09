@@ -11,7 +11,7 @@ from check_teams import TeamIsolation, own_tests, request, team_api_process
 from check_team_integration import TeamIntegration, answers, checked, stub_model
 from conflict_checks import process_checks
 from conflict_scheduler import schedule
-from team_access import AccessError, verify_database
+from team_access import AccessError
 
 
 class ResumableChecks(TeamIsolation):
@@ -49,7 +49,7 @@ class ResumableChecks(TeamIsolation):
         self.api.conflict_engine = engine
         self.run_due_checks()
         self.assertEqual((self.job()['state'], self.job()['progress']['cursor']), ('pending', 30))
-        item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id']=='new')
+        item = self.board_item('new')
         self.assertEqual(item['conflictCheckProgress'], dict(total=65, completed=30, skipped=0))
         self.api.disable_checks = False
         schedule(self.api, self.tokens['Dana'], self.teams['A'])
@@ -121,16 +121,7 @@ class ResumableChecks(TeamIsolation):
 
     def test_checkpoint_migration_is_idempotent_and_preserves_approvals(self):
         self.seed(1)
-        with psycopg.connect(self.admin_dsn) as c:
-            before = c.execute('SELECT packet FROM syncup.shared_cards ORDER BY id').fetchall()
-            c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN progress')
-        with self.assertRaisesRegex(ValueError, 'migrate-integration'):
-            verify_database(self.api_dsn)
-        self.admin('migrate-integration')
-        self.admin('migrate-integration')
-        verify_database(self.api_dsn)
-        with psycopg.connect(self.admin_dsn) as c:
-            self.assertEqual(c.execute('SELECT packet FROM syncup.shared_cards ORDER BY id').fetchall(), before)
+        self.reapply_upgrade('progress')
         self.assertEqual(self.job()['progress'], {})
 
     def test_scheduler_retries_transient_db_failure_without_new_request(self):

@@ -3,12 +3,9 @@ import hashlib
 import json
 import unittest
 
-import psycopg
-
 from check_team_integration import TeamIntegration, checked, decisions_model
 from check_teams import own_tests
 from diagnostics import check_finished, check_started, checked_count, model_fingerprint
-from team_access import verify_database
 
 SECRET = 'SYNTHETIC_PRIVATE_TOKEN_AND_PERSONAL_TEXT_739'
 
@@ -88,7 +85,7 @@ class DiagnosticPersistence(TeamIntegration):
             self.run_due_checks()
         d = self.saved()['diagnostics']
         self.assertEqual((d['candidate_count'], d['outcome'], len(calls)), (1, 'needs-review', 2))
-        item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == 'new')
+        item = self.board_item('new')
         self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=1, skipped=0))
         self.assertIsNone(d['checked_count'])
         self.assertNotIn(SECRET, json.dumps(d))
@@ -143,22 +140,13 @@ class DiagnosticPersistence(TeamIntegration):
         self.assertEqual(row['diagnostics']['checked_count'], 1)
 
     def test_diagnostic_late_worker_cannot_replace_new_lease(self):
-        self.lose_lease_to_manual_retry()
+        self.assert_late_worker_loses_lease()
         self.assertEqual(self.saved('late')['diagnostics'], {})  # Manual retry cleared the old attempt.
 
     def test_diagnostic_legacy_upgrade_twice_preserves_records(self):
         self.ready()
-        with psycopg.connect(self.admin_dsn) as c:
-            before = c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall()
-            c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
-        with self.assertRaisesRegex(ValueError, 'migrate-integration'):
-            verify_database(self.api_dsn)
-        self.admin('migrate-integration')
-        self.admin('migrate-integration')
-        verify_database(self.api_dsn)
+        self.reapply_upgrade('diagnostics')
         self.assertEqual(self.saved()['diagnostics'], {})
-        with psycopg.connect(self.admin_dsn) as c:
-            self.assertEqual(c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall(), before)
 
 
 def load_tests(loader, tests, pattern):

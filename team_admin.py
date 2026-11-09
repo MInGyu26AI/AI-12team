@@ -17,7 +17,7 @@ class AdminInputError(ValueError):
     """An operator input problem with a fixed message; safe to print."""
 
 
-def apply(c, name):
+def apply_sql(c, name):
     c.execute(Path(__file__).with_name(name).read_text(encoding='utf-8'))
 
 
@@ -27,17 +27,17 @@ def init(c, password_file):
         raise AdminInputError('API DB password too short')
     c.execute(sql.SQL('CREATE ROLE syncup_api LOGIN PASSWORD {} '
                       'NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION').format(sql.Literal(password)))
-    apply(c, 'team_schema.sql')
-    apply(c, 'team_integration.sql')
-    apply(c, 'team_upgrades.sql')
+    apply_sql(c, 'team_schema.sql')
+    apply_sql(c, 'team_integration.sql')
+    apply_sql(c, 'team_upgrades.sql')
 
 
 def migrate_integration(c):
     # team_integration.sql creates its tables once, so it runs only where they are missing. Every later
     # change goes into team_upgrades.sql, which must stay safe to apply again on any database.
     if not c.execute("SELECT to_regclass('syncup.conflict_checks')").fetchone()[0]:
-        apply(c, 'team_integration.sql')
-    apply(c, 'team_upgrades.sql')
+        apply_sql(c, 'team_integration.sql')
+    apply_sql(c, 'team_upgrades.sql')
 
 
 def issue_token(c, user_id, path, days):
@@ -115,7 +115,8 @@ def main():
         cli.exit(1, f'설정을 확인하세요: {error}\n')
     except (ValueError, OSError, psycopg.Error) as error:
         # 예외 메시지에는 접속 정보가 섞일 수 있어 종류만 알린다
-        cli.exit(1, f'설정을 확인하세요 ({type(error).__name__}). 기존 키 파일은 덮어쓰지 않습니다.\n')
+        key_note = ' 기존 키 파일은 덮어쓰지 않습니다.' if args.command == 'token' else ''
+        cli.exit(1, f'설정을 확인하세요 ({type(error).__name__}).{key_note}\n')
 
 
 if __name__ == '__main__':

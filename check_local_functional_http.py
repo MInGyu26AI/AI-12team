@@ -14,7 +14,8 @@ from storage import connect
 
 class FunctionalHTTP(TeamIsolation):
     def test_recovery_approval_and_second_member(self):
-        with connect(self.db) as c: c.execute('UPDATE settings SET end=?',(time.time()+600,))
+        with connect(self.db) as c:
+            c.execute('UPDATE settings SET end=?', (time.time()+600,))
         pipeline=Pipeline(self.db,self.client)
         pipeline.llm_factory=lambda:AI(); pipeline.decider_factory=lambda:None; pipeline.privacy=work_gate()
         srv = self.review()
@@ -45,13 +46,15 @@ class FunctionalHTTP(TeamIsolation):
         self.assertEqual(self.client.items(self.teams['A']),[])
         frame('candidates.approve',dict(ids=[card['id']],teamId=self.teams['A']))
         self.assertEqual(frame('collection.status')['counts']['deliveryPending'],1)
-        self.api.failure=403; self.deliver()
+        self.api.failure = 403
+        self.deliver()
         blocked=frame('candidates.list')['cards'][0]
         self.assertEqual((blocked['deliveryState'],blocked['deliveryAttempts']),('blocked',1))
         self.assertEqual(frame('collection.status')['counts']['deliveryBlocked'],1)
         frame('delivery.retry',dict(id=card['id'],teamId=self.teams['B']),ok=False)
         frame('delivery.retry',dict(id=card['id'],teamId=self.teams['A']))
-        self.api.failure=0; self.deliver()
+        self.api.failure = 0
+        self.deliver()
         self.assertEqual(frame('candidates.list')['cards'],[])
         status,body=request(self.api,'GET','/teams/'+self.teams['A']+'/board',self.tokens['Alice'])
         self.assertEqual(status,200)

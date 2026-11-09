@@ -1,4 +1,4 @@
-"""What team members read: shared cards, the decision board, open conflicts, resolution history and to-do checkmarks."""
+"""The team board: shared cards, decisions, open conflicts and resolution history, plus to-do checkmarks."""
 from card_contract import LABELS, board_card
 from team_access import AccessError
 
@@ -11,6 +11,7 @@ def shared_items(c, team_id):
 
 
 def shared_item(c, team_id, card_id):
+    """One card as a one-row list: GET /items/{id} answers in the same `items` shape as the list."""
     rows = c.execute('SELECT packet,approved_by::text,approved_at FROM syncup.shared_cards WHERE team_id=%s AND id=%s',
                      (team_id, card_id)).fetchall()
     if not rows:

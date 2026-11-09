@@ -104,17 +104,22 @@ def first_line(child, timeout):
     return lines.get(timeout=timeout)
 
 
+def reported_address(child, what, timeout=15):
+    """The loopback address a CLI prints when it is ready, usable with request()."""
+    line = first_line(child, timeout)
+    ready = re.search(r'127\.0\.0\.1:(\d+)', line)
+    if not ready:
+        raise AssertionError(f'{what} did not report readiness: {line}')
+    return types.SimpleNamespace(server_port=int(ready.group(1)), process=child)
+
+
 @contextmanager
 def team_api_process(env):
     """Run team_server.py the way operators start it; yields its address and process once it is ready."""
     child = subprocess.Popen([sys.executable, str(ROOT/'team_server.py'), '--port', '0'], env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        line = first_line(child, 15)
-        ready = re.search(r'127\.0\.0\.1:(\d+)', line)
-        if not ready:
-            raise AssertionError('Team API CLI did not report readiness: ' + line)
-        yield types.SimpleNamespace(server_port=int(ready.group(1)), process=child)
+        yield reported_address(child, 'Team API CLI')
     finally:
         if child.poll() is None:
             child.terminate()
@@ -273,6 +278,24 @@ class TeamIsolation(unittest.TestCase):
     def team_request(self, method, suffix, data=None, user='Dana'):
         status, body = request(self.api, method, '/teams/'+self.teams['A']+'/'+suffix, self.tokens[user], data)
         return status, json.loads(body)
+
+    def board_item(self, card_id):
+        """Team A's board entry for one card."""
+        return next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == card_id)
+
+    def reapply_upgrade(self, column):
+        """Drop one team_upgrades.sql column: the API must refuse to start until migrate-integration (run twice)
+        restores it, and the approved cards must be untouched."""
+        with psycopg.connect(self.admin_dsn) as c:
+            before = c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall()
+            c.execute(f'ALTER TABLE syncup.conflict_checks DROP COLUMN {column}')
+        with self.assertRaisesRegex(ValueError, 'migrate-integration'):
+            verify_database(self.api_dsn)
+        self.admin('migrate-integration')
+        self.admin('migrate-integration')
+        verify_database(self.api_dsn)
+        with psycopg.connect(self.admin_dsn) as c:
+            self.assertEqual(c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall(), before)
 
     @contextmanager
     def team_db(self, user='Dana', team='A'):
@@ -543,10 +566,7 @@ class TeamIsolation(unittest.TestCase):
             child=subprocess.Popen(command+['--team-api',self.url,'--team-token-file',str(self.keys['Dana'])],
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
             try:
-                line = first_line(child, 10)
-                self.assertIn('127.0.0.1:', line, 'Review CLI did not report readiness')
-                review = types.SimpleNamespace(server_port=int(re.search(r'127\.0\.0\.1:(\d+)', line).group(1)))
-                status, html = request(review, 'GET', '/')
+                status, html = request(reported_address(child, 'Review CLI', timeout=10), 'GET', '/')
                 self.assertEqual(status, 200)
                 self.assertIn('A팀', html)
             finally:

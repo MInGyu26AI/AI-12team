@@ -64,6 +64,11 @@ def decisions_model(client):
         yield
 
 
+def decisions_api(base_url):
+    """decisions_model() with the real Decisions client pointed at a stub_model() URL."""
+    return decisions_model(DecisionsClient(base_url, 'synthetic-key'))
+
+
 class TeamIntegration(TeamIsolation):
     def publish_card(self, identifier, text, tag='decision', topic='DB'):
         card = public_card(text)
@@ -95,7 +100,7 @@ class TeamIntegration(TeamIsolation):
         resolution = dict(resolution='adopt-new', resolutionNote='예')
         self.assertEqual(self.team_request('POST', 'conflicts/pair/resolve', resolution)[0], 200)
 
-    def lose_lease_to_manual_retry(self):
+    def assert_late_worker_loses_lease(self):
         """A member retries while the engine is still judging; the late verdict must not replace the new lease."""
         self.publish_card('late', 'SQLite로 결정했다.')
         entered, release = threading.Event(), threading.Event()
@@ -183,9 +188,8 @@ class TeamIntegration(TeamIsolation):
         self.publish_card('new', 'PostgreSQL로 결정했다.')
         self.api.conflict_engine = checked
         self.run_due_checks()
-        board = self.team_request('GET', 'board')[1]['items']
-        self.assertEqual(next(c for c in board if c['id'] == 'legacy')['decisionState'], 'active')
-        item = next(c for c in board if c['id'] == 'new')
+        self.assertEqual(self.board_item('legacy')['decisionState'], 'active')
+        item = self.board_item('new')
         self.assertEqual((item['conflictCheckStatus'], item['conflictCheckDetail'], item['conflictCheckProgress']),
                          ('complete', '', dict(total=0, completed=0, skipped=0)))
 
@@ -217,12 +221,11 @@ class TeamIntegration(TeamIsolation):
                       (self.teams['A'],))
         self.settle_checks()
         self.publish_card('new', 'NEW_DECISION')
-        with decisions_model(DecisionsClient(model, 'synthetic-key')):
+        with decisions_api(model):
             self.run_due_checks()
             self.assertEqual(len(calls), 2)
             self.assertFalse(self.team_request('GET', 'conflicts')[1]['conflicts'])
-            board = self.team_request('GET', 'board')[1]['items']
-            self.assertEqual(next(c for c in board if c['id'] == 'new')['conflictCheckStatus'], 'failed')
+            self.assertEqual(self.board_item('new')['conflictCheckStatus'], 'failed')
             self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
             fail_second[0] = False
             calls.clear()
@@ -234,8 +237,7 @@ class TeamIntegration(TeamIsolation):
         for marker in ('OTHER_TEAM_SENTINEL', 'INACTIVE_SENTINEL', 'TODO_SENTINEL'):
             self.assertNotIn(marker, prompts)
         self.assertIn('CROSS_KEY_TARGET', calls[-1][1]['input'])
-        board = self.team_request('GET', 'board')[1]['items']
-        self.assertEqual(next(c for c in board if c['id'] == 'new')['conflictCheckStatus'], 'complete')
+        self.assertEqual(self.board_item('new')['conflictCheckStatus'], 'complete')
         found = self.team_request('GET', 'conflicts')[1]['conflicts']
         self.assertEqual(len(found), 1)
         alert = found[0]
@@ -253,11 +255,10 @@ class TeamIntegration(TeamIsolation):
         self.publish_card('old', '기존 결정')
         self.settle_checks()
         self.publish_card('new', '새 결정')
-        with decisions_model(DecisionsClient(model, 'synthetic-key')):
+        with decisions_api(model):
             self.run_due_checks()
             self.assertEqual([len(b['questions']) for b in calls], [1])
-            board = self.team_request('GET', 'board')[1]['items']
-            item = next(c for c in board if c['id'] == 'new')
+            item = self.board_item('new')
             self.assertEqual(item['conflictCheckStatus'], 'failed')
             self.assertIn('확인 필요', item['conflictCheckDetail'])
             self.assertIn('확신도 부족', item['conflictCheckDetail'])
@@ -268,8 +269,7 @@ class TeamIntegration(TeamIsolation):
             confidence[0] = .9
             self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
             self.run_due_checks()
-        board = self.team_request('GET', 'board')[1]['items']
-        self.assertEqual(next(c for c in board if c['id'] == 'new')['conflictCheckStatus'], 'complete')
+        self.assertEqual(self.board_item('new')['conflictCheckStatus'], 'complete')
         self.assertEqual(len(calls), 2)
 
     def test_actual_transport_retry_waits_and_stops_at_three_attempts(self):
@@ -284,7 +284,7 @@ class TeamIntegration(TeamIsolation):
         self.publish_card('old', '기존 결정')
         self.settle_checks()
         self.publish_card('new', '새 결정')
-        with decisions_model(DecisionsClient(model, 'synthetic-key')):
+        with decisions_api(model):
             for attempt in range(1, 4):
                 self.run_due_checks()
                 self.assertEqual(len(calls), attempt)
@@ -305,7 +305,7 @@ class TeamIntegration(TeamIsolation):
             available[0] = True
             self.run_due_checks()
             self.assertEqual(len(calls), 4)
-            item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == 'new')
+            item = self.board_item('new')
             self.assertEqual(item['conflictCheckStatus'], 'complete')
             self.assertEqual(item['conflictCheckDetail'], '')
             self.assertEqual(len(self.team_request('GET', 'conflicts')[1]['conflicts']), 1)
@@ -319,7 +319,7 @@ class TeamIntegration(TeamIsolation):
                 row = c.execute("SELECT state,attempts FROM syncup.conflict_checks WHERE card_id='recovered'").fetchone()
             # Retry budget resets after each committed pair; the review-state decision also participates.
             self.assertEqual((row['state'], row['attempts']), ('complete', 1))
-            item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == 'recovered')
+            item = self.board_item('recovered')
             self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=2, skipped=0))
 
     def test_unknown_interruption_and_legacy_failure_require_manual_retry(self):
@@ -351,7 +351,7 @@ class TeamIntegration(TeamIsolation):
         model = self.enterContext(stub_model(respond))
         self.publish_card('old', '기존 결정')
         self.settle_checks()
-        with decisions_model(DecisionsClient(model, 'synthetic-key')):
+        with decisions_api(model):
             for i, value in enumerate([400, 401, 403, 422, 'json', 'missing']):
                 mode[0] = value
                 identifier = 'invalid-'+str(i)

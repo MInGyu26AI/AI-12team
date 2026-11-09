@@ -45,14 +45,15 @@ class ServerRecovery(check_team_integration.TeamIntegration):
         self.assertEqual(self.team_request('GET','board')[1]['items'][0]['conflictCheckStatus'], 'complete')
 
     def test_late_worker_cannot_overwrite_retried_attempt_with_same_number(self):
-        self.lose_lease_to_manual_retry()
+        self.assert_late_worker_loses_lease()
 
     def test_legacy_approval_and_switch_network_outside_local_lock(self):
         srv = self.enterContext(running_server(app.Review))
         srv.db, srv.csrf, srv.team_client = self.db, 'csrf', self.client
         original = self.client.me
         def probe():
-            with connect(self.db) as c: c.execute('BEGIN IMMEDIATE')
+            with connect(self.db) as c:
+                c.execute('BEGIN IMMEDIATE')
             return original()
         with patch.object(self.client, 'me', side_effect=probe):
             self.assertEqual(request(srv,'POST','/switch-team',data=dict(csrf='csrf',team_id=self.teams['B']),form=True)[0],303)
