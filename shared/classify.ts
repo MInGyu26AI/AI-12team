@@ -1,6 +1,6 @@
 // 분류 전 가림(mask)과 웹 목업 모드의 규칙 분류기(mockClassify).
 // 실제 모드의 분류는 로컬 수집기(ai/syncup_ai)가 한다. mockClassify 는 docs/classification.md "신호 표현" 키워드로 대충 분류한다.
-// check_mask_cases.cjs 가 이 파일을 그대로 읽어 mask() 를 검사하므로 런타임 import 를 두지 않는다 (타입 import 만).
+// checks/check_mask_cases.cjs 가 이 파일을 그대로 읽어 mask() 를 검사하므로 런타임 import 를 두지 않는다 (타입 import 만).
 import type { Card, RelatedCard, Speaker, Subtopic, Tag } from "./types";
 import type { Utterance } from "./utterance";
 

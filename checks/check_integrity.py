@@ -298,7 +298,7 @@ class Integrity(IntegrityFixture):
                                 env=child_environment(), capture_output=True, text=True, encoding="utf-8", timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("팀 서버 연결이 필요합니다", result.stderr)
-        self.assertIn("팀_서버_사용법.md", result.stderr)
+        self.assertIn("docs/team-server.md", result.stderr)
         self.assertFalse(state.exists())
 
     def test_cli_restart_and_single_owner(self):

@@ -33,6 +33,6 @@ export const webUrlOf = (s: Pick<Settings, 'webUrl'>) => s.webUrl || DEFAULT_WEB
 
 /**
  * 이 출처의 페이지가 로컬 수집기 RPC(개인 후보 읽기·승인 등)를 부를 수 있는지. 사용자가 설정한 개인 검토함 주소 하나만 믿는다.
- * 로컬 개발 주소도 팝업에서 그 주소를 골랐을 때만 믿는다 (통합_사용법.md 4장).
+ * 로컬 개발 주소도 팝업에서 그 주소를 골랐을 때만 믿는다 (docs/running.md 확장 연결).
  */
 export const isTrustedWebOrigin = (settings: Pick<Settings, 'webUrl'>, origin: string) => origin === webUrlOf(settings);

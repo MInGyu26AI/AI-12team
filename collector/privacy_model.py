@@ -9,7 +9,7 @@ import socket
 import urllib.parse
 
 DEFAULT_URL = 'http://127.0.0.1:11434'
-DEFAULT_MODEL = 'gemma4:e4b-it-qat'  # Quality/memory comparison: docs/appendix/privacy-model-v3.md; tested on Ollama 0.40.15.
+DEFAULT_MODEL = 'gemma4:e4b-it-qat'  # Settings: docs/privacy.md (model comparisons are kept in the team Notion); tested on Ollama 0.40.15.
 LOOPBACK = ('127.0.0.1', '::1')
 # Prompt + one message (<= 2000 chars) stays under 4K tokens; a fixed window keeps the KV cache small.
 NUM_CTX = 8192

@@ -44,7 +44,7 @@ def verify_database(dsn):
             if not c.execute("""SELECT 1 FROM pg_attribute
                 WHERE attrelid='syncup.conflict_checks'::regclass AND attname=%s
                   AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped""", (column,)).fetchone():
-                raise DatabaseSetupError(f'team_admin.py migrate-integration으로 {purpose} 스키마를 적용하세요.')
+                raise DatabaseSetupError(f'server/team_admin.py migrate-integration으로 {purpose} 스키마를 적용하세요.')
 
 
 def _restricted(c, role):

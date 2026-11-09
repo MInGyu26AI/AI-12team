@@ -17,7 +17,7 @@ const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const ENABLED_OS: &[&str] = &[
     "macos",
     // Windows 네이티브·Linux x64·WSL·Intel Mac 미검증. Linux ARM64는 컨테이너 검사 통과.
-    // 실제 계정/외부 AI 흐름·전체 로그 버전 호환은 미검증이며 호환성_검증.md에 범위를 기록한다.
+    // 실제 계정/외부 AI 흐름·전체 로그 버전 호환은 미검증이다. 지원 범위는 docs/running.md에 적는다.
     // User-requested rollout: keep these connections disabled after compatibility checks.
     // "windows",
     // "linux",

@@ -9,7 +9,7 @@
 | `NEXT_PUBLIC_USE_MOCK` | `true` | 예시 데이터 데모. 팀 보드는 이 브라우저(localStorage)에 저장하고, 붙여넣은 대화는 브라우저 안 규칙 분류기(`shared/classify.ts`)로 분류한다. 실제 승인 증거가 아니다. |
 | | `false` (기본) | 실제 모드. 로컬 수집기 RPC로 후보를 읽고 팀 서버에 승인한다. 팀과 사용자는 관리자가 미리 등록한다. |
 | `NEXT_PUBLIC_LOCAL_BRIDGE` | `false` (기본) | 브라우저 확장(web-bridge 콘텐츠 스크립트)을 거쳐 로컬 수집기에 닿는다. |
-| | `true` | 웹 서버의 `/api/local`이 로컬 수집기에 직접 중계한다. 루트의 `local_web.cjs`로만 실행한다. |
+| | `true` | 웹 서버의 `/api/local`이 로컬 수집기에 직접 중계한다. `collector/local_web.cjs`로만 실행한다. |
 
 ## 실행
 
@@ -21,10 +21,10 @@ npm run build      # 빌드 결과는 .next-integration (next.config.ts distDir)
 npm test           # 승인함 후보·체크 계산, 승인 요청, 공유 폴러, /api/local 실패 응답 시험 (node:test)
 ```
 
-로컬 브리지로 검증할 때는 저장소 루트에서 실행한다. 자세한 순서는 루트의 `통합_사용법.md` 3절에 있다.
+로컬 브리지로 검증할 때는 저장소 루트에서 실행한다. 자세한 순서는 [docs/running.md](../docs/running.md)에 있다.
 
 ```sh
-SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node local_web.cjs
+SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collector/local_web.cjs
 ```
 
 ## 구조

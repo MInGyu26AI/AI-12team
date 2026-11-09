@@ -49,8 +49,8 @@ const STEPS = [
     title: "로컬 수집기 연결",
     body: (
       <>
-        확장은 이 컴퓨터의 로컬 수집기를 거쳐서만 동작해요. 저장소의 <code>통합_사용법.md</code> 2·4절에 따라 수집기를 먼저 실행하고,
-        확장 ID로 Native Messaging 설정(<code>prepare_native.py</code>)을 만들어 크롬에 등록해요.
+        확장은 이 컴퓨터의 로컬 수집기를 거쳐서만 동작해요. 저장소의 <code>docs/running.md</code>에 따라 수집기를 먼저 실행하고,
+        확장 ID로 Native Messaging 설정(<code>collector/prepare_native.py</code>)을 만들어 크롬에 등록해요.
       </>
     ),
   },

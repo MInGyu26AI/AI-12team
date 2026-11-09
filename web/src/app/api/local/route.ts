@@ -1,4 +1,4 @@
-// 로컬 전용 웹 서버(local_web.cjs)가 띄운 페이지의 요청만 로컬 수집기 RPC 로 중계한다.
+// 로컬 전용 웹 서버(collector/local_web.cjs)가 띄운 페이지의 요청만 로컬 수집기 RPC 로 중계한다.
 // 세션 쿠키·루프백 출처·연결 파일 권한을 모두 확인한 뒤에만 수집기에 닿는다 (check_local_bridge.cjs 가 검사).
 import { open } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -19,7 +19,7 @@ function sessionCookie(request: Request) {
     ?.slice("syncup_local=".length);
 }
 
-// local_web.cjs 가 심은 HttpOnly 세션 쿠키가 있고 아직 만료되지 않았는지 (상수 시간 비교)
+// collector/local_web.cjs 가 심은 HttpOnly 세션 쿠키가 있고 아직 만료되지 않았는지 (상수 시간 비교)
 function hasValidSession(request: Request) {
   const session = process.env.SYNCUP_LOCAL_SESSION;
   const cookie = sessionCookie(request);

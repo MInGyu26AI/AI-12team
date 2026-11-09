@@ -35,9 +35,9 @@
 - /web : Next.js 팀 웹
 - /shared : 두 프로젝트가 같이 쓰는 타입 정의(카드, 충돌 등)와 목업 데이터
 - /ai : 분류·충돌 판정 AI 모듈 (하은님)
-- /src : Codex·Claude Code 대화 기록을 읽는 Rust 수집기
-- 루트의 *.py : Mac 로컬 수집기·개인 검토함, 팀 서버, 검사(check_*.py) (동균님, 실행·검사 방법은 README.md)
-- /docs : 분류 기준, 설계와 검증 기록
+- /scanner : Codex·Claude Code 대화 기록을 읽는 Rust 스캐너
+- /collector : Mac 로컬 수집기·개인 검토함, /server : 팀 서버, /contract : 둘이 함께 쓰는 형식, /checks : 검사 (동균님, 실행·검사 방법은 README.md)
+- /docs : 분류 기준, 구조·실행·팀 서버·개인정보 문서 (검증 기록은 팀 노션)
 
 ## 6. 데이터 형식 (코드는 /shared/types.ts)
 **분류 기준은 [docs/classification.md](docs/classification.md)를 따른다.** (관련성 → 소주제 → 표시, 민감정보 별도 검사, 분류 예시 22개)
@@ -116,7 +116,7 @@ F. 상태·에러 처리
 ## 8. 팀 서버 API
 - 승인한 카드는 로컬 전송 대기열을 거쳐 POST /teams/{id}/items로 올라간다. 충돌 검사는 팀 서버가 저장 뒤 비동기로 하므로 실제 모드의 승인 응답에는 충돌이 없다 (보드의 검사 진행·충돌 배너로 확인)
 - 웹의 TeamApi(web/src/lib/api/types.ts)는 로컬 RPC를 부른다: 승인 candidates.approve, 조회 team.board·team.history·team.conflicts·team.conflictHistory·team.done, 처리 team.resolve·team.setDone·team.retryCheck
-- 로컬 수집기는 team.* 요청을 연결된 팀의 /teams/{id}/... 경로로 넘긴다 (team_relay.py, 경로 목록은 team_server.py)
+- 로컬 수집기는 team.* 요청을 연결된 팀의 /teams/{id}/... 경로로 넘긴다 (collector/team_relay.py, 경로 목록은 server/team_server.py)
 - 충돌 처리 resolution: keep-existing | adopt-new | both-valid | discuss (+ resolutionNote)
 - 웹은 별도 API 주소를 쓰지 않는다. 실제 모드는 로컬 수집기 RPC로 팀 서버에 접근한다: 기본은 확장 경유, `NEXT_PUBLIC_LOCAL_BRIDGE=true`면 웹 서버의 `/api/local` 경유(서버 쪽 `SYNCUP_CONNECTION_FILE`·`SYNCUP_LOCAL_*` 필요). 목업 여부는 `NEXT_PUBLIC_USE_MOCK`
 

@@ -1,6 +1,6 @@
 """Format rules of the local privacy gate: secrets and contacts masked before anything else, plus the personal-word lexicon.
 
-The rules here are policy (docs/appendix/local-privacy-gate.md); change them only with the team's agreement.
+The rules here are policy (docs/privacy.md); change them only with the team's agreement.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ SECRET_RULES: list[tuple[str, re.Pattern, str]] = [
                                   r'|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'), SECRET_TOKEN),
 ]
 # Bare opaque strings: 32+ characters mixing upper, lower and digits. Lowercase hex (git SHAs)
-# and UUIDs stay readable. Policy choice pending team agreement (see docs/appendix/local-privacy-gate.md).
+# and UUIDs stay readable. Policy choice pending team agreement (see docs/privacy.md).
 _OPAQUE = re.compile(r'(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_-])')
 
 

@@ -31,7 +31,7 @@ from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, TeamClient
 from turn_pipeline import TurnPipeline
 
 MAX_MINUTES = 1440
-NEEDS_TEAM = '팀 서버 연결이 필요합니다. --team-api와 --team-token-file을 지정하세요 (팀_서버_사용법.md 참고).'
+NEEDS_TEAM = '팀 서버 연결이 필요합니다. --team-api와 --team-token-file을 지정하세요 (docs/team-server.md 참고).'
 
 
 def parse_args():

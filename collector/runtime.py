@@ -6,7 +6,7 @@ import sys
 import tomllib
 
 
-# 검증 범위: 호환성_검증.md
+# 지원 범위: docs/running.md
 ENABLED_PLATFORMS = {
     "darwin",
     # User-requested rollout: keep these connections disabled after compatibility checks.

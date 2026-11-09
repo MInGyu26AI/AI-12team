@@ -1,9 +1,9 @@
 """One entry point for the repository checks, grouped by what they need and what they cover.
 
-    python3 run_checks.py            # local group (no Docker, no Rust build, no local model)
-    python3 run_checks.py team rust  # several groups
-    python3 run_checks.py all        # every group except the opt-in model measurements
-    python3 run_checks.py --list     # which check covers which part, without running anything
+    python3 checks/run_checks.py            # local group (no Docker, no Rust build, no local model)
+    python3 checks/run_checks.py team rust  # several groups
+    python3 checks/run_checks.py all        # every group except the opt-in model measurements
+    python3 checks/run_checks.py --list     # which check covers which part, without running anything
 
 Every check in the selected groups runs even after a failure; the exit code is non-zero if any failed.
 """
@@ -19,8 +19,8 @@ PY = sys.executable
 
 # (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`, which only runs on macOS),
 # Python 3 and Node with `npm ci` in web/ and extension/ (check_local_bridge starts Next from web/node_modules; the unit
-# tests run with each project's own runner); rust = needs the built scanner (bin/syncup-collector); team = needs Docker and
-# requirements-team.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
+# tests run with each project's own runner); rust = macOS and the built scanner (bin/syncup-collector); team = macOS (it starts the collector), Docker and
+# server/requirements.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
     ('local', [PY, 'checks/check_pipeline_schema.py'], '로컬 DB 마이그레이션·승인 계약·TS 공용 상수'),

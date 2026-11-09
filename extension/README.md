@@ -2,7 +2,7 @@
 
 ChatGPT 화면에서 새로 끝난 대화를 읽어 Mac 로컬 수집기(Native Messaging host `com.syncup.collector`)로 보내고,
 개인 검토함 웹이 로컬 수집기를 부를 수 있게 중계한다. 분류·개인정보 검사·팀 공유는 로컬 수집기가 한다.
-전체 연결 순서는 저장소 루트의 `통합_사용법.md` 4장에 있다.
+전체 연결 순서는 [docs/running.md](../docs/running.md)에 있다.
 
 ## 빌드와 설치
 
@@ -13,7 +13,7 @@ npm test           # 시험 (vitest, 가짜 browser API)
 ```
 
 1. `chrome://extensions` 에서 개발자 모드를 켜고 `.output/chrome-mv3` 를 불러온다.
-2. 표시된 확장 ID 로 저장소 루트에서 `python3 prepare_native.py --extension-id <ID> --connection <connection.json> --output <새 폴더>` 를 실행하고,
+2. 표시된 확장 ID 로 저장소 루트에서 `python3 collector/prepare_native.py --extension-id <ID> --connection <connection.json> --output <새 폴더>` 를 실행하고,
    만들어진 `com.syncup.collector.json` 을 Chrome 의 NativeMessagingHosts 폴더에 등록한다.
 3. 팝업에서 프로젝트 주제와 개인 검토함 주소를 저장한다. 웹 브리지는 그 주소의 페이지에만 답한다.
    로컬에서 고친 웹으로 시험할 때는 "로컬 개발 주소 쓰기"를 누르거나 `.env` 에 `WXT_WEB_URL=http://localhost:3000` 을 넣고 빌드한다.
