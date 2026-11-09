@@ -1,16 +1,18 @@
 """Synthetic fixtures shared by the local checks. No TestCase with tests lives here, so importing it runs nothing twice.
 
 Fake team client and external AI, scripted local privacy model, offline network capture, a ready private database and
-pipeline, loopback HTTP servers and requests, child-process waits.
+pipeline, loopback HTTP servers and requests, a loopback fake team API, child-process waits.
 """
 from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
+import hmac
 import http.client
 import http.server
 import io
 import json
 from pathlib import Path
 import queue
+import secrets
 import socket
 import tempfile
 import threading
@@ -22,9 +24,11 @@ from unittest.mock import patch
 from ai.syncup_ai import llm
 from batch_classification import classify_queued
 from candidate_review import list_candidates
+from card_contract import validate_packet
 from collection_settings import configure
 from local_privacy import Gate
 from privacy_model import ModelError, ModelOutputError, ModelTimeout, ModelUnavailable
+from secure_http import SecureHandler
 from storage import connect, initialize
 import turn_intake
 from turn_pipeline import TurnPipeline
@@ -264,7 +268,14 @@ def server(handler, db):
     srv.db, srv.secret, srv.csrf = db, "fixture-only", "fixture-csrf"
     srv.board_url = f"http://127.0.0.1:{srv.server_port}/"
     srv.team_client = srv.pipeline = None
-    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    with _serving(srv):
+        yield srv
+
+
+@contextmanager
+def _serving(srv):
+    # A short poll keeps shutdown() quick: every check using the fake team API starts and stops one.
+    thread = threading.Thread(target=srv.serve_forever, args=(.05,), daemon=True)
     thread.start()
     try:
         yield srv
@@ -272,6 +283,85 @@ def server(handler, db):
         srv.shutdown()
         srv.server_close()
         thread.join()
+
+
+# The fake team API's only user and team; UUIDs, as the team server answers them.
+FAKE_USER = '00000000-0000-4000-8000-000000000001'
+FAKE_TEAM = '00000000-0000-4000-8000-00000000000a'
+
+
+class FakeTeamAPI(SecureHandler):
+    """Loopback stand-in for the two team server routes approvals use: GET /me and POST /teams/{id}/items.
+
+    Refuses as team_server does (400 another Host, 404 another path or team, 401 without the key, 400 a malformed
+    envelope, 403 another approver) and stores like team_publish.publish: an envelope once per card, the same answer
+    for a repeated one and 409 when a retry changes it. Knobs on the server: failure (answer this status instead),
+    before_reply (called before a successful approval answer), lose_reply (store, then drop the connection),
+    bad_reply (acknowledge another card).
+    """
+    def do_GET(self):
+        refused = self.refusal('/me')
+        if refused:
+            return self.answer(refused, error='refused')
+        self.answer(200, user_id=FAKE_USER, name='테스트', teams=[dict(id=FAKE_TEAM, name='팀 A')])
+
+    def do_POST(self):
+        srv = self.server
+        if srv.failure:
+            return self.answer(srv.failure, error='synthetic')
+        refused = self.refusal(f'/teams/{FAKE_TEAM}/items')
+        if refused:
+            return self.answer(refused, error='refused')
+        try:
+            data = json.loads(self.body())
+            if not isinstance(data, dict) or set(data) != {'packet', 'approved_by', 'approved_at'}:
+                raise ValueError('envelope')
+            validate_packet(data['packet'])
+        except (ValueError, TypeError, KeyError):
+            return self.answer(400, error='invalid')
+        if data['approved_by'] != FAKE_USER:
+            return self.answer(403, error='approver')
+        if srv.records.setdefault(data['packet']['id'], data) != data:
+            return self.answer(409, error='changed')
+        if srv.before_reply:
+            srv.before_reply()
+        if srv.lose_reply:
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
+            return
+        card = 'wrong-card' if srv.bad_reply else data['packet']['id']
+        self.answer(200, id=card, team_id=FAKE_TEAM, approved_by=FAKE_USER)
+
+    def refusal(self, path):
+        """The status the team server refuses this request with, or None."""
+        if not self.valid_host():
+            return 400
+        if self.path != path:
+            return 404
+        if not hmac.compare_digest(self.headers.get('Authorization', '').encode(), b'Bearer ' + self.server.token.encode()):
+            return 401
+        return None
+
+    def answer(self, status, **result):
+        self.reply(status, json.dumps(result, ensure_ascii=False), 'application/json; charset=utf-8')
+
+
+@contextmanager
+def fake_team_api(folder):
+    """A FakeTeamAPI on a loopback port, with its connection key file (mode 600) in folder.
+
+    Yields the server: .url and .key_file for TeamClient or `app.py run --team-api … --team-token-file …`, and
+    .records, the stored envelope of each card id.
+    """
+    srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), FakeTeamAPI)
+    srv.token = secrets.token_urlsafe(32)
+    srv.key_file = Path(folder) / 'team.key'
+    srv.key_file.write_text(srv.token, encoding='utf-8')
+    srv.key_file.chmod(0o600)
+    srv.url = f'http://127.0.0.1:{srv.server_port}/'
+    srv.records, srv.failure, srv.before_reply, srv.lose_reply, srv.bad_reply = {}, 0, None, False, False
+    with _serving(srv):
+        yield srv
 
 
 def _send(srv, method, path, body=None, headers=None):
@@ -302,18 +392,6 @@ def get_page(srv, path='/'):
     """(status, decoded body) of a GET."""
     status, body = _send(srv, "GET", path)
     return status, body.decode()
-
-
-def free_ports(count):
-    """Loopback ports that were free a moment ago (bound, read and released together)."""
-    sockets = [socket.socket() for _ in range(count)]
-    try:
-        for s in sockets:
-            s.bind(("127.0.0.1", 0))
-        return [s.getsockname()[1] for s in sockets]
-    finally:
-        for s in sockets:
-            s.close()
 
 
 def first_line(child, timeout=READY_TIMEOUT):

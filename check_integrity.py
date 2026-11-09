@@ -1,10 +1,9 @@
-"""Offline regression tests: isolated SQLite, loopback HTTP and child processes."""
+"""Offline regression tests: isolated SQLite, loopback HTTP (review page, fake team API) and child processes."""
 import concurrent.futures
 import http.client
 import json
 import os
 from pathlib import Path
-import socket
 import ssl
 import sqlite3
 import subprocess
@@ -14,13 +13,15 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+from collection_session import bind_sharing
 import collector
 import delivery
 from demo_board import Board
-from local_fixtures import first_line, free_ports, get_page, post, public_card, server, wait_until, work_gate
+from local_fixtures import FAKE_TEAM, fake_team_api, first_line, get_page, post, public_card, server, wait_until, work_gate
 from review_page import Review
 from runtime import child_environment
 from storage import connect, initialize, runtime_lock
+from team_client import TeamClient
 
 APP = Path(__file__).with_name("app.py")
 
@@ -35,38 +36,22 @@ CREATE TABLE cards(id TEXT PRIMARY KEY,job TEXT,kind TEXT,adopted INTEGER,draft 
 """
 
 
-class FaultBoard(Board):
-    def do_POST(self):
-        if getattr(self.server, "failure", 0):
-            return self.reply(self.server.failure, "synthetic error")
-        super().do_POST()
-
-    def reply(self, status, value, mime="text/html; charset=utf-8"):
-        if status == 200 and self.command == "POST":
-            callback = getattr(self.server, "before_reply", None)
-            if callback:
-                callback()
-            if getattr(self.server, "lose_reply", False):
-                self.connection.shutdown(socket.SHUT_RDWR)
-                self.connection.close()
-                return
-            if getattr(self.server, "bad_reply", False):
-                value = '{"id":"wrong-card"}'
-        super().reply(status, value, mime)
-
-
 class IntegrityFixture(unittest.TestCase):
-    """Private and board databases with an ended session; cards are added per test."""
+    """A private database with an ended session, bound to the fake team API's team, and an empty demo board database;
+    cards are added per test."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
         self.db, self.board = self.root / "private.sqlite", self.root / "board.sqlite"
+        self.api = self.enterContext(fake_team_api(self.root))
+        self.client = TeamClient(self.api.url, self.api.key_file)
         initialize(self.db)
         initialize(self.board, board=True)
         with connect(self.db) as c:
             c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (str(self.root), time.time()-20, time.time()-10))
+            bind_sharing(c, self.client, FAKE_TEAM)
 
     def card(self, name="c", manual=False):
         with connect(self.db) as c:
@@ -77,9 +62,19 @@ class IntegrityFixture(unittest.TestCase):
         return dict(id=name, text="승인한 최종 문구", quote=QUOTE, source="1")
 
     def approve(self, fields):
+        """Approve one card for the bound team, as the review page does."""
         with connect(self.db) as c:
             c.execute("BEGIN IMMEDIATE")
-            delivery.approve(c, fields.__getitem__)
+            delivery.approve(c, fields.__getitem__, dict(c.execute("SELECT * FROM sharing").fetchone()))
+
+    def deliver(self):
+        return delivery.deliver(self.db, "", "", self.client)
+
+    def review(self):
+        """This folder's review page connected to the fake team API, as `app.py run --team-api …` serves it."""
+        srv = self.enterContext(server(Review, self.db))
+        srv.team_client = self.client
+        return srv
 
     def row(self, table, name="c"):
         with connect(self.db) as c:
@@ -139,77 +134,76 @@ class Integrity(IntegrityFixture):
 
     def test_lost_ack_restart_and_network_without_db_lock(self):
         self.approve(self.card())
-        with server(FaultBoard, self.board) as srv:
-            def write_while_network_pending():
-                with connect(self.db) as c:
-                    c.execute("PRAGMA busy_timeout=100")
-                    c.execute("UPDATE settings SET paused=1")
-            srv.before_reply = write_while_network_pending
-            srv.lose_reply = True
-            delivery.deliver(self.db, srv.board_url, srv.secret)
-            self.assertEqual(self.row("cards")["status"], "queued")
-            self.assertEqual(self.row("outbox")["state"], "pending")
-            frozen = self.row("outbox")["payload"]
-            initialize(self.db)
-            self.due()
-            srv.lose_reply = False
-            delivery.deliver(self.db, srv.board_url, srv.secret)
-            self.assertEqual(self.row("outbox")["payload"], frozen)
-            self.assertEqual(self.row("cards")["status"], "shared")
-            with connect(self.board) as c:
-                self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 1)
-                self.assertEqual(c.execute("SELECT text FROM records").fetchone()[0], json.loads(frozen)["text"])
-            changed = dict(json.loads(frozen), text="changed retry")
-            self.assertEqual(post(srv, "/items/approve", changed, True)[0], 409)
+        def write_while_network_pending():
+            with connect(self.db) as c:
+                c.execute("PRAGMA busy_timeout=100")
+                c.execute("UPDATE settings SET paused=1")
+        self.api.before_reply = write_while_network_pending
+        self.api.lose_reply = True
+        self.deliver()
+        self.assertEqual(self.row("cards")["status"], "queued")
+        self.assertEqual(self.row("outbox")["state"], "pending")
+        frozen = self.row("outbox")["payload"]
+        initialize(self.db)
+        self.due()
+        self.api.lose_reply = False
+        self.deliver()
+        self.assertEqual(self.row("settings", 1)["paused"], 1)
+        self.assertEqual(self.row("outbox")["payload"], frozen)
+        self.assertEqual(self.row("cards")["status"], "shared")
+        # The fake answers 409 to a retry that changes the stored envelope, so 'shared' means the frozen one was resent.
+        self.assertEqual(list(self.api.records), ["c"])
+        self.assertEqual(self.api.records["c"]["packet"], json.loads(frozen))
 
     def test_retry_budget_http_errors_and_manual_retry(self):
         self.approve(self.card())
-        with server(FaultBoard, self.board) as srv, server(Review, self.db) as review:
-            for failure, expected in ((401,"blocked"), (403,"blocked"), (400,"blocked"), (409,"blocked"), (302,"blocked"), (429,"pending")):
-                srv.failure = failure
-                delivery.deliver(self.db, srv.board_url, srv.secret)
-                self.assertEqual(self.row("outbox")["state"], expected)
-                if expected == "blocked":
-                    self.assertEqual(post(review, "/retry-delivery", dict(id="c"))[0], 303)
-                self.due()
-            srv.failure = 503
-            while self.row("outbox")["state"] == "pending":
-                delivery.deliver(self.db, srv.board_url, srv.secret)
-                self.due()
-            self.assertEqual(self.row("outbox")["attempts"], delivery.MAX_ATTEMPTS)
-            frozen = self.row("outbox")["payload"]
-            self.assertFalse(delivery.deliver(self.db, srv.board_url, srv.secret))
-            self.assertEqual(post(review, "/retry-delivery", dict(id="c"))[0], 303)
-            srv.failure = 0
-            delivery.deliver(self.db, srv.board_url, srv.secret)
-            self.assertEqual(self.row("outbox")["payload"], frozen)
-            self.assertEqual(self.row("cards")["status"], "shared")
+        review = self.review()
+        retry = dict(id="c", teamId=FAKE_TEAM)
+        for failure, expected in ((401,"blocked"), (403,"blocked"), (400,"blocked"), (409,"blocked"), (302,"blocked"), (429,"pending")):
+            self.api.failure = failure
+            self.deliver()
+            self.assertEqual(self.row("outbox")["state"], expected)
+            if expected == "blocked":
+                self.assertEqual(post(review, "/retry-delivery", retry)[0], 303)
+            self.due()
+        self.api.failure = 503
+        while self.row("outbox")["state"] == "pending":
+            self.deliver()
+            self.due()
+        self.assertEqual(self.row("outbox")["attempts"], delivery.MAX_ATTEMPTS)
+        frozen = self.row("outbox")["payload"]
+        self.assertFalse(self.deliver())
+        self.assertEqual(post(review, "/retry-delivery", retry)[0], 303)
+        self.api.failure = 0
+        self.deliver()
+        self.assertEqual(self.row("outbox")["payload"], frozen)
+        self.assertEqual(self.row("cards")["status"], "shared")
+        self.assertEqual(self.api.records["c"]["packet"], json.loads(frozen))
 
     def test_bad_ack_and_backoff(self):
         self.approve(self.card())
-        with server(FaultBoard, self.board) as srv:
-            srv.bad_reply = True
-            delivery.deliver(self.db, srv.board_url, srv.secret)
-            self.assertEqual(self.row("outbox")["state"], "pending")
-            self.assertGreater(self.row("outbox")["next_attempt"], time.time())
-            self.assertFalse(delivery.deliver(self.db, srv.board_url, srv.secret))
-            with connect(self.db) as c:
-                c.execute("UPDATE outbox SET attempts=?,next_attempt=0", (delivery.MAX_ATTEMPTS,))
-            delivery.deliver(self.db, srv.board_url, srv.secret)
-            self.assertEqual(self.row("outbox")["state"], "blocked")
+        self.api.bad_reply = True
+        self.deliver()
+        self.assertEqual(self.row("outbox")["state"], "pending")
+        self.assertGreater(self.row("outbox")["next_attempt"], time.time())
+        self.assertFalse(self.deliver())
+        with connect(self.db) as c:
+            c.execute("UPDATE outbox SET attempts=?,next_attempt=0", (delivery.MAX_ATTEMPTS,))
+        self.deliver()
+        self.assertEqual(self.row("outbox")["state"], "blocked")
 
     def test_http_concurrent_approval_manual_recovery_and_boundaries(self):
-        fields = self.card(manual=True)
-        with server(Review, self.db) as srv:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-                results = list(pool.map(lambda _: post(srv, "/approve", fields)[0], range(6)))
-            self.assertEqual(results, [303]*6)
-            self.assertEqual(self.row("jobs")["state"], "done")
-            self.assertEqual(post(srv, "/retry", dict(id="c"))[0], 400)
-            self.assertEqual(self.row("cards")["status"], "queued")
-            markup = get_page(srv)[1]
-            self.assertIn("승인 저장됨", markup)
-            self.assertNotIn('action="/approve"', markup)
+        fields = dict(self.card(manual=True), target_team=FAKE_TEAM)
+        srv = self.review()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(lambda _: post(srv, "/approve", fields)[0], range(6)))
+        self.assertEqual(results, [303]*6)
+        self.assertEqual(self.row("jobs")["state"], "done")
+        self.assertEqual(post(srv, "/retry", dict(id="c", teamId=FAKE_TEAM))[0], 400)
+        self.assertEqual(self.row("cards")["status"], "queued")
+        markup = get_page(srv)[1]
+        self.assertIn("승인 저장됨", markup)
+        self.assertNotIn('action="/approve"', markup)
         with connect(self.db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM outbox").fetchone()[0], 1)
         with patch.object(collector, "call_api", side_effect=AssertionError("empty draft must not call AI")):
@@ -309,9 +303,9 @@ class Integrity(IntegrityFixture):
         with connect(self.db) as c:
             c.execute("UPDATE outbox SET next_attempt=?", (time.time() + 60,))
         def launch():
-            review_port, board_port = free_ports(2)
             return subprocess.Popen([sys.executable, str(APP), "run", "--project", str(self.root),
-                "--state", str(self.root), "--port", str(review_port), "--board-port", str(board_port),
+                "--state", str(self.root), "--port", "0",
+                "--team-api", self.api.url, "--team-token-file", str(self.api.key_file),
                 "--codex-dir", str(self.root / "absent-codex"), "--claude-dir", str(self.root / "absent-claude")],
                 env=child_environment(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
         def ready(child):
@@ -321,12 +315,6 @@ class Integrity(IntegrityFixture):
             if not line:
                 self.fail("CLI exited: " + child.communicate(timeout=3)[1])
             self.assertIn("검토함 http://", line)
-        def board_released():
-            try:
-                with runtime_lock(self.root / "board.lock"):
-                    return True
-            except SystemExit:
-                return False
         child = launch()
         try:
             ready(child)
@@ -335,9 +323,9 @@ class Integrity(IntegrityFixture):
             self.assertNotEqual(second.returncode, 0)
             self.assertIn("이미 실행 중", error)
             self.assertEqual(self.row("cards")["status"], "queued")
+            # A killed process must not leave the state folder locked: the next start below has to succeed.
             child.kill()
             child.communicate(timeout=5)
-            self.assertTrue(wait_until(board_released), "orphan board did not release state")
             self.due()
             child = launch()
             ready(child)
@@ -350,8 +338,7 @@ class Integrity(IntegrityFixture):
         finally:
             child.terminate()
             child.communicate(timeout=5)
-        with connect(self.board) as c:
-            self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 1)
+        self.assertEqual(list(self.api.records), ["c"])
 
 
 if __name__ == "__main__":

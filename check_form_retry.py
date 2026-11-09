@@ -10,7 +10,7 @@ from candidate_review import list_candidates
 from check_integrity import IntegrityFixture
 from collection_settings import configure
 from collection_status import collection_status
-from local_fixtures import PipelineFixture, get_page, post, server
+from local_fixtures import FAKE_TEAM, PipelineFixture, get_page, post, server
 from local_rpc import dispatch
 from review_page import Review
 from storage import connect
@@ -216,10 +216,10 @@ class StandaloneForms(IntegrityFixture):
             self.assertEqual(c.execute('SELECT paused FROM settings').fetchone()[0],0)
             self.assertEqual(c.execute('SELECT count(*) FROM pauses WHERE end IS NULL').fetchone()[0],0)
 
-    def test_local_delivery_preserves_packet_and_rejects_noop(self):
+    def test_team_delivery_retry_preserves_packet_and_rejects_noop(self):
         self.approve(self.card())
-        srv=self.enterContext(server(Review,self.db))
-        fields=dict(csrf=srv.csrf,id='c')
+        srv=self.review()
+        fields=dict(csrf=srv.csrf,id='c',teamId=FAKE_TEAM)
         frozen=self.row('outbox')['payload']
         self.assertEqual(post(srv,'/retry-delivery',fields)[0],400)
         with connect(self.db) as c:

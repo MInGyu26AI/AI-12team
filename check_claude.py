@@ -1,4 +1,4 @@
-"""Rust scanner checks for Claude Code transcripts, through to the local review and board."""
+"""Rust scanner checks for Claude Code transcripts, through to the local review and a (fake, loopback) team server."""
 import json
 import re
 import tempfile
@@ -10,13 +10,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import collection_loop
+from collection_session import bind_sharing
 import collector
 import delivery
 from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line, write_lock
-from demo_board import Board
-from local_fixtures import post, server, work_gate
+from local_fixtures import FAKE_TEAM, fake_team_api, post, server, work_gate
 from review_page import Review
 from storage import initialize
+from team_client import TeamClient
 
 HIDDEN = ("demo@example.com", "TOOL_SECRET", "TOOL_RESULT_SECRET", "PRIVATE_THOUGHT", "COMMENTARY_NOT_EVIDENCE")
 CLAUDE_EXCERPT_FIELDS = {"n", "role", "text", "source", "session_id", "message_id", "timestamp",
@@ -253,7 +254,7 @@ class ClaudeScannerChecks(unittest.TestCase):
                 pass
             process.assert_called_once_with(db)
 
-    def test_claude_job_reaches_board_through_review_approval(self):
+    def test_claude_job_reaches_the_team_through_review_approval(self):
         db = self.db
         self.add_session()
         self.scan()
@@ -261,14 +262,17 @@ class ClaudeScannerChecks(unittest.TestCase):
         with patch.object(collector, "call_api", side_effect=fake_api):
             collector.classify(db, job, work_gate())
             collector.draft(db, job, work_gate())
-        board = self.root / "board.sqlite"
-        initialize(board, board=True)
-        with server(Review, db) as review, server(Board, board) as board_server:
-            approval = dict(id=job["id"] + "-decision", text="Supabase를 사용한다.", quote="DB는 Supabase로 확정했어.")
-            self.assertEqual(post(review, "/approve", approval)[0], 303)
-            delivery.deliver(db, board_server.board_url, board_server.secret)
-        with collector.connect(board) as c:
-            self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 1)
+        api = self.enterContext(fake_team_api(self.root))
+        client = TeamClient(api.url, api.key_file)
+        with collector.connect(db) as c:
+            bind_sharing(c, client, FAKE_TEAM)
+        approval = dict(id=job["id"] + "-decision", text="Supabase를 사용한다.", quote="DB는 Supabase로 확정했어.")
+        with server(Review, db) as review:
+            review.team_client = client
+            self.assertEqual(post(review, "/approve", dict(approval, target_team=FAKE_TEAM))[0], 303)
+        self.assertTrue(delivery.deliver(db, "", "", client))
+        [envelope] = api.records.values()
+        self.assertEqual({k: envelope["packet"][k] for k in approval}, approval)
 
     def test_codex_and_claude_logs_of_one_session_keep_separate_cursors(self):
         session = self.add_session()

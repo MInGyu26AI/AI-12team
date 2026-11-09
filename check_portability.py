@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import queue
 import re
-import socket
 import sqlite3
 import subprocess
 import sys
@@ -20,6 +19,7 @@ from unittest.mock import patch
 import uuid
 
 import collector
+from local_fixtures import fake_team_api
 import runtime
 from storage import connect, initialize, runtime_lock
 
@@ -162,11 +162,10 @@ class PortabilityChecks(unittest.TestCase):
 
     def test_cli_uses_configured_roots_without_api_credentials(self):
         db, codex, claude, index, project = self.fixture()
-        with socket.socket() as a, socket.socket() as b:
-            a.bind(("127.0.0.1", 0)); b.bind(("127.0.0.1", 0))
-            ports = [a.getsockname()[1], b.getsockname()[1]]
+        api = self.enterContext(fake_team_api(self.root))
         child = subprocess.Popen([sys.executable, str(Path(__file__).with_name("app.py")), "run",
-            "--project", str(project), "--state", str(self.root), "--port", str(ports[0]), "--board-port", str(ports[1]),
+            "--project", str(project), "--state", str(self.root), "--port", "0",
+            "--team-api", api.url, "--team-token-file", str(api.key_file),
             "--codex-dir", str(codex), "--codex-sqlite-dir", str(index), "--claude-dir", str(claude),
             "--claude-project-name", "custom-name"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", env=runtime.child_environment())
@@ -211,7 +210,7 @@ class PortabilityChecks(unittest.TestCase):
         for host in ("win32", "linux"):
             code = "import app,sys; sys.platform=sys.argv.pop(1); app.main()"
             state = self.root / host
-            result = subprocess.run([sys.executable, "-c", code, host, "board", "--state", str(state)],
+            result = subprocess.run([sys.executable, "-c", code, host, "run", "--state", str(state)],
                                     capture_output=True, text=True, encoding="utf-8", env=runtime.child_environment(), timeout=5)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("macOS", result.stderr)
