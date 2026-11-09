@@ -1,5 +1,5 @@
 // 웹 ↔ 확장 window.postMessage 식별자와 로컬 수집기 RPC 결과 타입.
-// 메시지는 type:'rpc' / 'rpc-result' 다 (web/src/lib/rpc.ts ↔ extension/entrypoints/web-bridge.content.ts)
+// 메시지는 type:'rpc' / 'rpc-ack'(받자마자) / 'rpc-result' 다 (web/src/lib/rpc.ts ↔ extension/entrypoints/web-bridge.content.ts)
 import type { CollectedMessage } from "./collector";
 import type { Subtopic } from "./types";
 

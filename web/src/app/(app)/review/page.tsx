@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { PERSONAL_COLOR, TAG_COLOR } from "@shared/labels";
 import type { Conflict, RelatedCard } from "@shared/types";
 import { ConflictDialog } from "@/components/conflict-dialog";
+import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { CandidateList } from "@/components/review/candidate-list";
 import { ExcludedMessages, HeldBatches, PrivacyTab } from "@/components/review/privacy-review";
 import { ReviewNotices } from "@/components/review/review-notices";
@@ -90,6 +91,7 @@ export default function ReviewPage() {
         </div>
       </div>
       <ReviewNotices collector={collector} queued={review.queued} />
+      <ExtensionMissingDialog missing={collector.extensionMissing} />
 
       {!collector.checked ? (
         <LoadingState label="검토 후보를 불러오는 중…" />

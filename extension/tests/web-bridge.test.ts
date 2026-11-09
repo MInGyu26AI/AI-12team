@@ -53,7 +53,22 @@ describe('웹 화면 RPC 중계', () => {
     ask('r1');
     await settle();
     expect(toBackground).toHaveBeenCalledWith({ type: 'rpc', method: 'privacy.list', params: { limit: 5 } });
-    expect(replies).toEqual([{ ok: true, result: { cards: [] }, source: BRIDGE_FROM_EXT, type: 'rpc-result', id: 'r1' }]);
+    expect(replies).toEqual([
+      { source: BRIDGE_FROM_EXT, type: 'rpc-ack', id: 'r1' },
+      { ok: true, result: { cards: [] }, source: BRIDGE_FROM_EXT, type: 'rpc-result', id: 'r1' },
+    ]);
+  });
+
+  it('수집기 응답을 기다리기 전에 받았다는 신호(rpc-ack)를 먼저 보낸다', async () => {
+    await useWebUrl(LOCAL_WEB_URL);
+    let answer: (value: unknown) => void = () => {};
+    toBackground.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    ask('slow');
+    await settle();
+    expect(replies).toEqual([{ source: BRIDGE_FROM_EXT, type: 'rpc-ack', id: 'slow' }]);
+    answer({ ok: true, result: {} });
+    await settle();
+    expect(replies.map((r) => (r as { type?: string }).type)).toEqual(['rpc-ack', 'rpc-result']);
   });
 
   it.each([
@@ -79,7 +94,7 @@ describe('웹 화면 RPC 중계', () => {
     await useWebUrl(PRODUCTION_WEB_URL);
     ask('after');
     await settle();
-    expect(replies.map((r) => r.id)).toEqual(['trusted']);
+    expect(replies.map((r) => r.id)).toEqual(['trusted', 'trusted']); // rpc-ack 와 rpc-result
     expect(toBackground).toHaveBeenCalledTimes(1);
   });
 });

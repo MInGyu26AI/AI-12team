@@ -6,6 +6,7 @@ import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
 import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
+import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
 import { useLocalCollector } from "@/lib/local-collector";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ export default function CollectPage() {
         </p>
       </div>
       {collector.error && <p role="alert">{collector.error}</p>}
+      <ExtensionMissingDialog missing={collector.extensionMissing} />
       {connected && <CollectionSettings status={st} onChange={collector.updateSettings} />}
 
       {/* 연결된 AI */}

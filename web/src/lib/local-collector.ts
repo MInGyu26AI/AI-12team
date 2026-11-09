@@ -7,12 +7,13 @@ import { toast } from "sonner";
 import type { ExtSettingsPatch, ExtStatus, PrivacyList } from "@shared/bridge";
 import type { RelatedCard } from "@shared/types";
 import { POLL_MS, USE_MOCK } from "./api";
-import { rpc } from "./rpc";
+import { ExtensionMissing, rpc } from "./rpc";
 
 interface Snapshot {
   status: ExtStatus | null; // 마지막으로 받은 상태 (뒤 요청이 실패해도 남긴다)
   available: boolean; // 마지막 요청이 수집기에 닿았는지
   error: string | null;
+  extensionMissing: boolean; // 마지막 요청을 확장이 받지 않았는지 (설치 안 됨, 또는 팝업 주소가 이 페이지가 아님)
   statusChecked: boolean; // 상태 요청을 한 번이라도 마쳤는지 (성공·실패)
   cards: RelatedCard[];
   cardsChecked: boolean; // 후보 화면이 열린 뒤 candidates.list 를 한 번이라도 마쳤는지
@@ -28,12 +29,13 @@ const NO_CANDIDATES: Pick<Snapshot, "cards" | "cardsChecked" | "privacy" | "priv
   privacy: null,
   privacyError: null,
 };
-const INITIAL: Snapshot = { status: null, available: false, error: null, statusChecked: false, ...NO_CANDIDATES };
+const INITIAL: Snapshot = { status: null, available: false, error: null, extensionMissing: false, statusChecked: false, ...NO_CANDIDATES };
 const MOCK: Snapshot = { ...INITIAL, statusChecked: true, cardsChecked: true };
 
 let snapshot = INITIAL;
 const listeners = new Map<() => void, Need>();
 let timer: ReturnType<typeof setInterval> | null = null;
+let inFlight = 0; // 아직 끝나지 않은 상태 요청 수
 // 가장 최근 요청의 응답만 반영한다 (예: 팀을 바꾸기 전에 보낸 요청의 늦은 응답은 버림)
 let generation = 0;
 
@@ -56,29 +58,48 @@ async function refreshPrivacy(mine: number, teamId: string | undefined) {
 
 /** 지금 상태를 새로 읽는다. 실패는 상태(error)로 남기고 던지지 않는다 */
 export async function refreshCollector(): Promise<void> {
-  const mine = ++generation;
-  const withCandidates = wantsCandidates();
+  inFlight += 1;
+  try {
+    await readOnce(++generation, wantsCandidates());
+  } finally {
+    inFlight -= 1;
+  }
+}
+
+async function readOnce(mine: number, withCandidates: boolean) {
   try {
     if (!withCandidates) {
       const status = await rpc<ExtStatus>("collection.status");
-      if (mine === generation) publish({ status, available: true, error: null, statusChecked: true });
+      if (mine === generation) publish({ status, available: true, error: null, extensionMissing: false, statusChecked: true });
       return;
     }
     const { cards, status } = await rpc<{ cards: RelatedCard[]; status: ExtStatus }>("candidates.list");
     if (mine !== generation) return;
-    publish({ status, cards, available: true, error: null, statusChecked: true, cardsChecked: true });
+    publish({ status, cards, available: true, error: null, extensionMissing: false, statusChecked: true, cardsChecked: true });
     await refreshPrivacy(mine, status.teamId);
   } catch (error) {
     if (mine !== generation) return;
-    publish({ available: false, error: (error as Error).message, statusChecked: true, ...(withCandidates ? { cardsChecked: true } : {}) });
+    publish({
+      available: false,
+      error: (error as Error).message,
+      extensionMissing: error instanceof ExtensionMissing,
+      statusChecked: true,
+      ...(withCandidates ? { cardsChecked: true } : {}),
+    });
   }
+}
+
+// 주기 요청은 앞 요청이 끝난 뒤에만 보낸다. 겹쳐 보내면 늦게 끝나는 요청이 늘 '오래된 응답'으로 버려져
+// 확장이 없을 때 화면이 '확인 중'에 머문다
+function poll() {
+  if (!inFlight) void refreshCollector();
 }
 
 /** 구독 시작 (첫 구독이면 폴링을 시작). 돌려준 함수로 끝낸다 */
 export function watchCollector(listener: () => void, need: Need) {
   const firstForCandidates = need === "candidates" && !wantsCandidates();
   listeners.set(listener, need);
-  if (!timer) timer = setInterval(() => void refreshCollector(), POLL_MS);
+  if (!timer) timer = setInterval(poll, POLL_MS);
   if (listeners.size === 1 || firstForCandidates) void refreshCollector();
   return () => {
     listeners.delete(listener);
@@ -107,8 +128,8 @@ function useSnapshot(need: Need): Snapshot {
 
 /** 상태만 필요한 곳 (헤더의 팀 이름·아바타) */
 export function useCollectorStatus() {
-  const { status, available, statusChecked } = useSnapshot("status");
-  return { status, available, checked: statusChecked };
+  const { status, available, statusChecked, extensionMissing } = useSnapshot("status");
+  return { status, available, checked: statusChecked, extensionMissing };
 }
 
 /** RPC 를 보내고 상태를 새로 읽는다. 실패는 토스트로 알린다 (목업 모드는 안내만) */
@@ -166,6 +187,7 @@ export function useLocalCollector() {
     available: s.available,
     checked: s.cardsChecked,
     error: s.error,
+    extensionMissing: s.extensionMissing,
     cards: s.cards,
     privacy: { list: s.privacy?.teamId === teamId ? s.privacy : null, error: s.privacyError },
     ...ACTIONS,
