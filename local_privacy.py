@@ -157,26 +157,49 @@ def _job_decision(detail: list[dict]) -> tuple[str, str]:
     return ALLOW, 'allowed'
 
 
-def _user_exclusions(db, job: str) -> set[str]:
+def _overrides(c, job: str) -> set[str]:
+    return {r[0] for r in c.execute('SELECT message_id FROM privacy_overrides WHERE job=?', (job,))}
+
+
+def _user_exclusions(db, jobs) -> dict[str, set[str]]:
+    """The messages the user excluded, per job."""
     with closing(sqlite3.connect(db, timeout=10)) as c:
-        return {r[0] for r in c.execute('SELECT message_id FROM privacy_overrides WHERE job=?', (job,))}
+        return {job: _overrides(c, job) for job in jobs}
 
 
-def _context_exclusions(db, job: str) -> set[str]:
-    """Messages of an earlier batch that must not go out as context: the user's exclusions and the ones its
-    outbound check refused (held with a block reason)."""
-    excluded = _user_exclusions(db, job)
+def _refused_by_outbound_check(db, job: str) -> set[str]:
+    """Messages of a batch held because the outbound check refused the request that carried them."""
     with closing(sqlite3.connect(db, timeout=10)) as c:
         row = c.execute('SELECT detail FROM privacy_jobs WHERE job=?', (job,)).fetchone()
-    if row:
-        excluded |= {d['id'] for d in json.loads(row[0]) if d.get('decision') == HOLD and d.get('reason') in BLOCK_REASONS}
-    return excluded
+    if not row:
+        return set()
+    return {d['id'] for d in json.loads(row[0]) if d.get('decision') == HOLD and d.get('reason') in BLOCK_REASONS}
+
+
+def _write_decision(c, job, decision, reason, identity, detail):
+    c.execute('INSERT OR REPLACE INTO privacy_jobs VALUES(?,?,?,?,?,?,?)',
+              (job, POLICY_VERSION, identity, decision, reason, json.dumps(detail, ensure_ascii=False), time.time()))
 
 
 def _blocked_pieces(original: str, result: Result) -> list[str]:
     """Text an outgoing payload must not carry: secrets, personal spans and, unless allowed, the message itself."""
     pieces = secret_values(original) + [s for s in result.spans if len(s) >= 4]
     return pieces if result.decision == ALLOW else pieces + message_fragments(original)
+
+
+def _record_if_unchanged(db, job, seen, decision, reason, identity, detail) -> bool:
+    """Record the batch decision unless the user's exclusions differ from what the review read.
+
+    privacy.exclude writes under the same database write lock (BEGIN IMMEDIATE). Either its exclusion is seen here, or
+    it comes after this decision, when the batch is no longer held and the request is refused. The transaction covers
+    only this comparison and write, never a model call.
+    """
+    with closing(sqlite3.connect(db, timeout=10)) as c, c:
+        c.execute('BEGIN IMMEDIATE')
+        if {j: _overrides(c, j) for j in seen} != seen:
+            return False
+        _write_decision(c, job, decision, reason, identity, detail)
+    return True
 
 
 class Gate:
@@ -234,7 +257,9 @@ class Gate:
         """context_messages come from context_job; what the user or the outbound check excluded there stays local."""
         identity = self._identity()
         topic = context.get('projectTopic') if isinstance(context.get('projectTopic'), str) else ''
-        excluded = _user_exclusions(db, job)
+        # Read once; the decision is only recorded if the user changed none of these meanwhile (_record_if_unchanged).
+        seen = _user_exclusions(db, [job] + ([context_job] if context_job else []))
+        excluded = seen[job]
         detail, allowed, fragments = [], [], []
         for m in messages:
             original = str(m.get('text', ''))
@@ -246,7 +271,7 @@ class Gate:
                 allowed.append(dict(m, text=result.sanitized, masked=result.sanitized != original or bool(m.get('masked')),
                                     privacy=result.reason))
             fragments += _blocked_pieces(original, result)
-        context_excluded = _context_exclusions(db, context_job) if context_job else set()
+        context_excluded = (seen[context_job] | _refused_by_outbound_check(db, context_job)) if context_job else set()
         context_allowed = []
         for m in context_messages:
             original = str(m.get('text', ''))
@@ -260,13 +285,15 @@ class Gate:
         context_allowed = [m for m in context_allowed if not blocked_reason(m['text'], fragments)]
         clean_context = {k: apply_rules(v)[0] if isinstance(v, str) else v for k, v in context.items()}
         decision, reason = _job_decision(detail)
-        self.record(db, job, decision, reason, identity, detail)
+        if not _record_if_unchanged(db, job, seen, decision, reason, identity, detail):
+            # The user excluded a message while this review ran: send nothing; the batch stays held as the request left it
+            # ('exclude_requested'), so the next run reviews it again with the exclusion.
+            return JobReview(HOLD, 'exclude_requested', identity, [], [], clean_context, fragments, detail)
         return JobReview(decision, reason, identity, allowed, context_allowed, clean_context, fragments, detail)
 
     def record(self, db, job, decision, reason, identity, detail):
         with closing(sqlite3.connect(db, timeout=10)) as c, c:
-            c.execute('INSERT OR REPLACE INTO privacy_jobs VALUES(?,?,?,?,?,?,?)',
-                      (job, POLICY_VERSION, identity, decision, reason, json.dumps(detail, ensure_ascii=False), time.time()))
+            _write_decision(c, job, decision, reason, identity, detail)
 
     def forget_holds(self, c, messages: list[dict], identity: str | None) -> None:
         """Drop the cached answers of the model that judged these messages (privacy_jobs.model), so a recheck asks again.

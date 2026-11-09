@@ -136,6 +136,37 @@ class FailClosed(PrivacyFixture):
             classify_queued(restarted)
         self.assertEqual(len(self.requests), 1)
 
+    def test_exclusion_during_a_rereview_holds_until_the_next_run(self):
+        doubt = '그 사람 얘기는 나중에 따로 하자'
+        gate = Gate(Scripted(mode='down'))
+        self.pipeline.privacy = gate
+        configure(self.pipeline, dict(turnsPerBatch=2))
+        turn_intake.append(self.pipeline, [self.message('a', 'API 명세는 내일 올릴게'), self.message('b', doubt)], True)
+        self.run_offline()
+        job = dispatch(self.pipeline, 'privacy.list', {})['items'][0]['id']
+        with connect(self.db) as c:  # the runtime hold is due for its automatic recheck
+            c.execute('UPDATE privacy_jobs SET decided=decided-?', (local_privacy.RECHECK_SECONDS + 1,))
+        pipeline, accepted = self.pipeline, []
+
+        class UserExcludesMidRun(Scripted):
+            def classify(self, text):
+                if doubt in text and not accepted:  # the user excludes b while the local model is judging it
+                    accepted.append(dispatch(pipeline, 'privacy.exclude', dict(id=job, teamId='a', messageId='b')))
+                return dict(label='work', personal=[])
+
+        gate.classifier = UserExcludesMidRun()
+        self.run_offline()
+        self.assertEqual(accepted, [dict(queued=True)])
+        self.assertEqual(self.requests, [], 'the decision made before the exclusion must not be sent')
+        with connect(self.db) as c:
+            self.assertEqual(tuple(c.execute('SELECT decision,reason FROM privacy_jobs').fetchone()), ('hold', 'exclude_requested'))
+        self.run_offline()  # the next run honours the exclusion and records and sends as usual
+        self.assertEqual(len(self.requests), 1)
+        self.assertFalse(leaked(self.requests, doubt))
+        self.assertTrue(any('API 명세는 내일 올릴게' in s for s in strings(self.requests[0]['body'])))
+        with connect(self.db) as c:
+            self.assertEqual(c.execute('SELECT decision FROM privacy_jobs').fetchone()[0], 'allow')
+
     def test_recheck_request_stays_held_until_the_worker_decides(self):
         gate = Gate(Scripted(mode='down'))
         self.pipeline.privacy = gate
