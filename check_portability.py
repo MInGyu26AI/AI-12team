@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import socket
 import sqlite3
 import subprocess
@@ -216,8 +217,8 @@ class PortabilityChecks(unittest.TestCase):
             self.assertIn("macOS", result.stderr)
             self.assertFalse(state.exists())
         source = (Path(__file__).parent / "src" / "main.rs").read_text(encoding="utf-8")
-        self.assertIn('// "windows",', source)
-        self.assertIn('// "linux",', source)
+        entries = re.search(r"ENABLED_OS: &\[&str\] = &\[(.*?)\];", source, re.S).group(1)
+        self.assertEqual(re.findall(r'^\s*"(\w+)"', entries, re.M), ["macos"])
 
 
 if __name__ == "__main__":
