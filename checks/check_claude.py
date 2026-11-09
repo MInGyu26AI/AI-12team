@@ -12,12 +12,13 @@ from unittest.mock import patch
 
 import collection_loop
 from collection_session import bind_sharing
-import collector
+import scanner_runner
+import standalone_classifier
 import delivery
 from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line, write_lock
 from local_fixtures import FAKE_TEAM, fake_team_api, post, server, work_gate
 from review_page import Review
-from storage import initialize
+from storage import connect, initialize
 from team_client import TeamClient
 
 HIDDEN = ("demo@example.com", "TOOL_SECRET", "TOOL_RESULT_SECRET", "PRIVATE_THOUGHT", "COMMENTARY_NOT_EVIDENCE")
@@ -42,7 +43,7 @@ class ClaudeScannerChecks(unittest.TestCase):
         self.codex = self.root / "codex"  # absent unless a check creates it
 
     def execute(self, statement, params=()):
-        with collector.connect(self.db) as c:
+        with connect(self.db) as c:
             return c.execute(statement, params).fetchall()
 
     def rows(self):
@@ -56,7 +57,7 @@ class ClaudeScannerChecks(unittest.TestCase):
         return rows[0]["pos"] if rows else None
 
     def scan(self):
-        collector.scan(self.db, self.codex, self.claude)
+        scanner_runner.scan(self.db, self.codex, self.claude)
 
     def event(self, session, kind, ident, parent, content, at, **extra):
         message = dict(role=kind, content=content)
@@ -229,7 +230,7 @@ class ClaudeScannerChecks(unittest.TestCase):
 
     def test_locked_database_ends_the_scan_within_its_time_limit(self):
         # Every transcript has a turn to store, so waiting out the lock once per transcript would pass
-        # collector.scan's limit.
+        # scanner_runner.scan's limit.
         sessions = {self.add_session() for _ in range(4)}
         with write_lock(self.db), self.assertRaises(ValueError):
             self.scan()
@@ -240,7 +241,7 @@ class ClaudeScannerChecks(unittest.TestCase):
     def test_codex_failure_does_not_block_claude_input_or_processing(self):
         db, missing_codex, claude = self.db, self.codex, self.claude
         missing_codex.mkdir()
-        with collector.connect(missing_codex / "state_5.sqlite") as c:
+        with connect(missing_codex / "state_5.sqlite") as c:
             c.execute("CREATE TABLE unexpected(x)")
         session = self.add_session()
         with self.assertRaises(ValueError, msg="broken Codex source was not reported"):
@@ -260,12 +261,12 @@ class ClaudeScannerChecks(unittest.TestCase):
         self.add_session()
         self.scan()
         [job] = self.rows()
-        with patch.object(collector, "call_api", side_effect=fake_api):
-            collector.classify(db, job, work_gate())
-            collector.draft(db, job, work_gate())
+        with patch.object(standalone_classifier, "call_api", side_effect=fake_api):
+            standalone_classifier.classify(db, job, work_gate())
+            standalone_classifier.draft(db, job, work_gate())
         api = self.enterContext(fake_team_api(self.root))
         client = TeamClient(api.url, api.key_file)
-        with collector.connect(db) as c:
+        with connect(db) as c:
             bind_sharing(c, client, FAKE_TEAM)
         approval = dict(id=job["id"] + "-decision", text="Supabase를 사용한다.", quote="DB는 Supabase로 확정했어.")
         with server(Review, db) as review:
@@ -292,7 +293,7 @@ class ClaudeScannerChecks(unittest.TestCase):
             codex_event("response_item", dict(type="message", role="user", content=prompt), 182),
             codex_event("event_msg", dict(type="task_complete", turn_id="codex-turn"), 190),
         ]))
-        with collector.connect(self.codex / "state_5.sqlite") as c:
+        with connect(self.codex / "state_5.sqlite") as c:
             c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,"
                       "source TEXT)")
             c.execute("INSERT INTO threads VALUES(?,?,?,?,0,'cli')",
@@ -312,7 +313,7 @@ class ClaudeScannerChecks(unittest.TestCase):
     def advance_first_job(self, job, state):
         """Moves the first job as far as `state` the way the review app would; returns the tables then."""
         card = job["id"] + "-decision"
-        with collector.connect(self.db) as c:
+        with connect(self.db) as c:
             if state != "new":
                 c.execute("UPDATE jobs SET state='done'")
                 c.execute("INSERT INTO cards(id,job,kind,adopted,draft,quote,role,status) "
@@ -329,7 +330,7 @@ class ClaudeScannerChecks(unittest.TestCase):
         jobs = self.rows()
         self.assertEqual(len(jobs), 2, "late Claude block lost on duplicate response id")
         self.assertEqual(jobs[1]["id"], job_id(f"claude-code/{session}/one-response/continuation/a2"))
-        with collector.connect(self.db) as c:
+        with connect(self.db) as c:
             for table in ("cards", "outbox"):
                 self.assertEqual([tuple(r) for r in c.execute(f"SELECT * FROM {table}")], before[table])
             first_now = c.execute("SELECT * FROM jobs WHERE id=?", (first["id"],)).fetchone()
@@ -358,8 +359,8 @@ class ClaudeScannerChecks(unittest.TestCase):
         self.assert_supplement_keeps_first_job(session, first, before)
         supplement = self.rows()[1]
         # Even a mistaken model adoption score cannot turn an AI-only supplement into human approval.
-        with patch.object(collector, "call_api", return_value=decision_answers(0.99)):
-            collector.classify(self.db, supplement, work_gate())
+        with patch.object(standalone_classifier, "call_api", return_value=decision_answers(0.99)):
+            standalone_classifier.classify(self.db, supplement, work_gate())
         self.assertEqual(self.execute("SELECT adopted FROM cards WHERE job=?", (supplement["id"],))[0]["adopted"], 0)
         self.write_block(session, "a3", "a2", "assistant", "THIRD_BLOCK", 4)
         self.scan()

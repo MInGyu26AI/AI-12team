@@ -4,7 +4,8 @@ import time
 
 import batch_classification
 from collection_session import active, config
-from collector import process, scan
+from scanner_runner import scan
+from standalone_classifier import process
 from delivery import deliver
 from diagnostics import failure
 import retention

@@ -7,7 +7,7 @@ import urllib.parse
 
 from collection_settings import cache_profile
 from collection_session import active, bind_sharing, set_paused
-from collector import FAILED_PREFIX
+from standalone_classifier import FAILED_PREFIX
 from delivery import approve, reset_blocked
 from diagnostics import failure
 import local_rpc

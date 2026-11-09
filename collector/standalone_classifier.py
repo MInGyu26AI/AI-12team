@@ -1,18 +1,17 @@
-"""Rust scans Codex/Claude Code logs; Python runs the legacy (non-integrated) classify-and-draft pipeline."""
+"""Classify and draft scanned jobs with OpenAI for the team-connected mode without --integrated.
+
+The integrated mode classifies through ai/ instead (batch_classification); the Rust scan itself is scanner_runner."""
 import http.client
 import json
 import os
-import subprocess
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 from ai.syncup_ai.llm import DEFAULT_CHAT_MODEL, DEFAULT_DECISIONS_MODEL
 from card_contract import MAX_TEXT
 from collection_session import active, config
 import local_privacy
 from outbound_guard import PrivacyBlocked, assert_clean
-from runtime import child_environment, collector_binary, require_platform
 from storage import connect
 
 KINDS = ("decision", "research", "task")
@@ -50,24 +49,6 @@ def call_api(db, endpoint, body):
             return json.load(r)
     except urllib.error.HTTPError as e:
         raise ValueError(f"OpenAI {endpoint} HTTP {e.code}") from None
-
-
-def scan(db, codex, claude=None, codex_sqlite=None, claude_project=None):
-    require_platform()
-    if not active(config(db)):
-        return
-    binary = collector_binary()
-    command = [str(binary), str(Path(db).resolve()), str(Path(codex).resolve())]
-    command.extend([str(Path(claude).resolve()) if claude is not None else "",
-                    str(Path(codex_sqlite or codex).resolve()), claude_project or ""])
-    # The scanner has no API credential and only emits a generic error status, so its output is not read.
-    result = subprocess.run(
-        command,
-        env=child_environment(),
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
-    )
-    if result.returncode:
-        raise ValueError("Rust 수집 실패 · 기록 형식과 DB 접근을 확인해 주세요.")
 
 
 def private_evidence(db, job, gate):

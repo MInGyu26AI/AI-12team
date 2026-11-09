@@ -12,10 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import collector
+import scanner_runner
+import standalone_classifier
 from local_fixtures import work_gate
 from runtime import child_environment, collector_binary
-from storage import initialize
+from storage import connect, initialize
 
 SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
 PROMPT = "DB는 Supabase로 확정했어. 이메일 demo@example.com"
@@ -30,7 +31,7 @@ def job_id(key):
 
 
 def run_scanner(*args):
-    """Runs the built scanner directly, past the check in collector.scan() that collection is running."""
+    """Runs the built scanner directly, past the check in scanner_runner.scan() that collection is running."""
     return subprocess.run([str(collector_binary()), *map(str, args)], env=child_environment(), capture_output=True)
 
 
@@ -51,7 +52,7 @@ def split_last_line(text):
 def decision_answers(probability):
     """A classification answer: a decision adopted with `probability`, every other question unlikely."""
     return {"answers": [{"type": "predicate", "name": k, "probability": probability if k in ("decision", "adopted") else 0.01}
-                        for k in collector.QUESTIONS]}
+                        for k in standalone_classifier.QUESTIONS]}
 
 
 def fake_api(_db, endpoint, _body):
@@ -75,12 +76,12 @@ class CodexScannerChecks(unittest.TestCase):
         db = self.db = self.root / "private.sqlite"
         initialize(db)
         self.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.project, self.start, self.start + 600))
-        with collector.connect(self.codex / "state_5.sqlite") as c:
+        with connect(self.codex / "state_5.sqlite") as c:
             c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,"
                       "source TEXT DEFAULT 'cli')")
 
     def execute(self, statement, params=()):
-        with collector.connect(self.db) as c:
+        with connect(self.db) as c:
             return c.execute(statement, params).fetchall()
 
     def event(self, kind, payload, offset):
@@ -92,7 +93,7 @@ class CodexScannerChecks(unittest.TestCase):
         cwd = cwd or self.project
         file = location or self.sessions / (chat + ".jsonl")
         file.write_text(self.event("session_meta", {"id": chat, "cwd": cwd, "source": meta_source}, 10), encoding="utf-8")
-        with collector.connect(self.codex / "state_5.sqlite") as c:
+        with connect(self.codex / "state_5.sqlite") as c:
             c.execute("INSERT INTO threads VALUES(?,?,?,?,0,?)",
                       (chat, str(file), int((self.start + created) * 1000), cwd, json.dumps(source)))
         return file
@@ -117,7 +118,7 @@ class CodexScannerChecks(unittest.TestCase):
             f.write(text)
 
     def scan(self):
-        collector.scan(self.db, self.codex)
+        scanner_runner.scan(self.db, self.codex)
 
     def jobs(self):
         return [dict(r) for r in self.execute("SELECT * FROM jobs ORDER BY rowid")]
@@ -238,7 +239,7 @@ class CodexScannerChecks(unittest.TestCase):
         self.assertEqual(self.job_ids(), {job_id("shrunk/first"), job_id("valid/first")})
 
     def test_locked_database_ends_the_scan_within_its_time_limit(self):
-        # Every thread has a turn to store, so waiting out the lock once per thread would pass collector.scan's limit.
+        # Every thread has a turn to store, so waiting out the lock once per thread would pass scanner_runner.scan's limit.
         chats = [f"chat-{i}" for i in range(4)]
         for chat in chats:
             self.append(self.add_chat(chat), self.turn("first"))
@@ -252,9 +253,9 @@ class CodexScannerChecks(unittest.TestCase):
         self.append(self.add_chat("valid"), self.turn("first"))
         self.scan()
         [job] = self.jobs()
-        with patch.object(collector, "call_api", side_effect=fake_api):
-            collector.classify(self.db, job, work_gate())
-            collector.draft(self.db, job, work_gate())
+        with patch.object(standalone_classifier, "call_api", side_effect=fake_api):
+            standalone_classifier.classify(self.db, job, work_gate())
+            standalone_classifier.draft(self.db, job, work_gate())
         [card] = self.execute("SELECT * FROM cards WHERE job=?", (job["id"],))
         self.assertEqual((card["status"], card["adopted"]), ("ready", 1))
         self.assertIn(card["quote"], json.loads(job["evidence"])[0]["text"])

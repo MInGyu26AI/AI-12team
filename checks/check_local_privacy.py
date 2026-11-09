@@ -14,7 +14,7 @@ import urllib.error
 
 from batch_classification import classify_queued
 from candidate_review import list_candidates, update_candidate
-import collector
+import standalone_classifier
 from collection_settings import configure
 from collection_status import collection_status
 from local_fixtures import (FAKE_AUTH, HEALTH, HIDDEN, KEEP, MIXED, SECRETS, PrivacyFixture, Scripted, leaked, offline,
@@ -206,7 +206,7 @@ class LegacyCollector(unittest.TestCase):
         requests = []
         draft = lambda body: responses(dict(cards=[dict(kind='decision', text='DB = SQLite', n=1, quote='SQLite 사용을 결정했다.')]))
         with patch.dict('os.environ', OPENAI_API_KEY=FAKE_AUTH), offline(requests, draft):
-            collector.process(self.db, gate=gate)
+            standalone_classifier.process(self.db, gate=gate)
         self.assertEqual([r['url'].rsplit('/', 1)[-1] for r in requests], ['responses'])
         self.assertFalse(leaked(requests, 'SyntheticOnlyAbCdEf' * 3))
         self.assertFalse(leaked(requests, '허리 통증'))
@@ -217,7 +217,7 @@ class LegacyCollector(unittest.TestCase):
         self.job('n', 'new', [dict(n=1, role='user', text='API 명세는 내일 올릴게')])
         requests = []
         with patch.dict('os.environ', OPENAI_API_KEY=FAKE_AUTH), offline(requests):
-            collector.process(self.db, gate=Gate(Scripted(mode='down')))
+            standalone_classifier.process(self.db, gate=Gate(Scripted(mode='down')))
         self.assertEqual(requests, [])
         with connect(self.db) as c:
             self.assertEqual(c.execute('SELECT state FROM jobs').fetchone()[0], 'new')

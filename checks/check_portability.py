@@ -19,7 +19,7 @@ import unittest
 from unittest.mock import patch
 import uuid
 
-import collector
+import scanner_runner
 from local_fixtures import fake_team_api
 import runtime
 from storage import connect, initialize, runtime_lock
@@ -148,8 +148,8 @@ class PortabilityChecks(unittest.TestCase):
 
     def test_relocated_roots_separate_index_and_named_claude_real_scanner(self):
         db, codex, claude, index, project = self.fixture()
-        collector.scan(db, codex, claude, index, "custom-name")
-        collector.scan(db, codex, claude, index, "custom-name")
+        scanner_runner.scan(db, codex, claude, index, "custom-name")
+        scanner_runner.scan(db, codex, claude, index, "custom-name")
         with connect(db) as c:
             rows = c.execute("SELECT evidence FROM jobs").fetchall()
             self.assertEqual(len(rows), 2)
@@ -157,7 +157,7 @@ class PortabilityChecks(unittest.TestCase):
         with sqlite3.connect(index / "state_13.sqlite") as c:
             c.execute("CREATE TABLE unknown(value TEXT)")
         with self.assertRaises(ValueError):
-            collector.scan(db, codex, None, index)
+            scanner_runner.scan(db, codex, None, index)
         with connect(db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 2)
 
@@ -195,14 +195,14 @@ class PortabilityChecks(unittest.TestCase):
         log.write_text(log.read_text(encoding="utf-8").replace(str(project), str(alias)), encoding="utf-8")
         with sqlite3.connect(index / "state_12.sqlite") as c:
             c.execute("UPDATE threads SET cwd=?", (str(alias),))
-        collector.scan(db, codex, None, index)
+        scanner_runner.scan(db, codex, None, index)
         with connect(db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 1)
         outside = self.root / "outside.jsonl"
         outside.write_bytes(log.read_bytes().replace(b'"main"', b'"outside"'))
         with sqlite3.connect(index / "state_12.sqlite") as c:
             c.execute("INSERT INTO threads SELECT 'outside',?,created_at_ms,cwd,0,source FROM threads", (str(outside),))
-        collector.scan(db, codex, None, index)
+        scanner_runner.scan(db, codex, None, index)
         with connect(db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 1)
 

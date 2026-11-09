@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from collection_session import bind_sharing
-import collector
+import standalone_classifier
 import delivery
 from local_fixtures import FAKE_TEAM, fake_team_api, first_line, get_page, post, server, wait_until, work_gate
 from review_page import Review
@@ -117,7 +117,7 @@ class Integrity(IntegrityFixture):
                 broken.read.side_effect = error
                 success.read.return_value = json.dumps(result).encode()
                 with patch.dict(os.environ, OPENAI_API_KEY="fixture-only"), patch("urllib.request.urlopen", side_effect=[broken, success]) as api:
-                    collector.process(self.db, gate=work_gate())
+                    standalone_classifier.process(self.db, gate=work_gate())
                 self.assertEqual(api.call_count, 2)
                 self.assertEqual(self.row("jobs", failed)["state"], "failed_draft")
                 self.assertEqual(self.row("jobs", failed)["detail"], type(error).__name__)
@@ -126,8 +126,8 @@ class Integrity(IntegrityFixture):
                 self.assertEqual(self.row("cards", later)["status"], "ready")
                 with server(Review, self.db) as srv:
                     self.assertEqual(post(srv, "/retry", dict(id=failed))[0], 303)
-                with patch.object(collector, "call_api", return_value=result):
-                    collector.process(self.db, gate=work_gate())
+                with patch.object(standalone_classifier, "call_api", return_value=result):
+                    standalone_classifier.process(self.db, gate=work_gate())
                 self.assertEqual(self.row("cards", failed)["status"], "ready")
 
     def test_lost_ack_restart_and_network_without_db_lock(self):
@@ -207,8 +207,8 @@ class Integrity(IntegrityFixture):
         self.assertNotIn('action="/approve"', markup)
         with connect(self.db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM outbox").fetchone()[0], 1)
-        with patch.object(collector, "call_api", side_effect=AssertionError("empty draft must not call AI")):
-            collector.draft(self.db, self.row("jobs"), work_gate())
+        with patch.object(standalone_classifier, "call_api", side_effect=AssertionError("empty draft must not call AI")):
+            standalone_classifier.draft(self.db, self.row("jobs"), work_gate())
 
     def test_approval_without_destination_is_never_sent(self):
         """An approval with no recorded destination (made in the former local demo mode) stays in the folder: the
@@ -227,11 +227,11 @@ class Integrity(IntegrityFixture):
         self.assertEqual(self.api.records, {})
 
     def test_ended_session_refuses_the_legacy_api_call(self):
-        """collector.call_api checks the collection window before the key or any network access."""
+        """standalone_classifier.call_api checks the collection window before the key or any network access."""
         with (patch.dict(os.environ, OPENAI_API_KEY="fixture-only"),
               patch("urllib.request.urlopen", side_effect=AssertionError("unexpected network access")) as api):
             with self.assertRaisesRegex(ValueError, "수집 시간이 종료"):
-                collector.call_api(self.db, "decisions", {})
+                standalone_classifier.call_api(self.db, "decisions", {})
         self.assertEqual(api.call_count, 0)
 
     def test_batch_draft_rollback(self):
@@ -242,8 +242,8 @@ class Integrity(IntegrityFixture):
             c.execute("UPDATE jobs SET state='draft'")
         drafts = [dict(kind="decision",text="ok",n=1,quote=QUOTE), dict(kind="task",text="bad",n=999,quote="missing")]
         response = dict(output=[dict(content=[dict(type="output_text",text=json.dumps(dict(cards=drafts)))])])
-        with patch.object(collector, "call_api", return_value=response), self.assertRaises(ValueError):
-            collector.draft(self.db, self.row("jobs"), work_gate())
+        with patch.object(standalone_classifier, "call_api", return_value=response), self.assertRaises(ValueError):
+            standalone_classifier.draft(self.db, self.row("jobs"), work_gate())
         with connect(self.db) as c:
             self.assertTrue(all(r[0] is None and r[1] == "drafting" for r in c.execute("SELECT draft,status FROM cards")))
 
