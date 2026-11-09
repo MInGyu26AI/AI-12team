@@ -31,6 +31,11 @@ export default defineContentScript({
     // ── 자동 수집: "새로" 완료된 메시지만. 대화를 열 때 이미 있던 메시지는 기준선으로 보고 보내지 않는다 ──
     const baseline = new Set<string>();
     let baselinePath: string | null = null;
+    // 수집기가 꺼져 있으면 화면이 바뀔 때마다 다시 보내 보되(보내지 못한 메시지를 잃지 않게) 같은 오류 안내는 30초에 한 번만 띄운다.
+    // 다른 오류는 바로 띄우고, 전송이 성공하면 다시 처음부터 센다.
+    const ERROR_TOAST_EVERY_MS = 30_000;
+    let lastErrorToast = 0;
+    let lastErrorText = '';
 
     const autoSend = async () => {
       const { messages } = site.extract();
@@ -44,8 +49,14 @@ export default defineContentScript({
       const fresh = messages.filter((m) => !baseline.has(m.id));
       if (fresh.length) {
         const result = await request({ type: 'collect', trigger: 'auto', messages: fresh });
-        if (result.ok) fresh.forEach(m => baseline.add(m.id));
-        else showToast(result.error, 'error');
+        if (result.ok) {
+          fresh.forEach(m => baseline.add(m.id));
+          lastErrorText = '';
+        } else if (result.error !== lastErrorText || Date.now() - lastErrorToast >= ERROR_TOAST_EVERY_MS) {
+          lastErrorText = result.error;
+          lastErrorToast = Date.now();
+          showToast(result.error, 'error');
+        }
       }
     };
 

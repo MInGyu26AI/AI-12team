@@ -1,13 +1,26 @@
 import { NATIVE_HOST } from '@shared/collector';
 import type { ExtStatus } from '@shared/bridge';
 import type { RelatedCard } from '@shared/types';
+import { isShareable } from '@shared/labels';
 import { settingsItem, pendingItem, collectStateItem, webUrlOf } from '@/lib/settings';
 import { LOCAL_WEB_URL } from '@/lib/config';
 import { selectionMessage } from '@/lib/selection';
 
+// 로컬 수집기에 닿지 못한 실패(연결)와 수집기가 요청을 거절한 실패를 구분한다. 상태 새로 고침이 성공하면 연결 실패와
+// 새로 고침 자신의 실패를 지우고, 수집·지금 분류·설정 저장이 거절된 오류는 그 요청이 다시 성공할 때까지 팝업에 남긴다.
+class CollectorUnreachable extends Error {}
+const errorText = (error: unknown) => (error instanceof Error ? error.message : '로컬 연결 오류');
 async function rpc(method: string, params: unknown = {}) {
-  const response = await browser.runtime.sendNativeMessage(NATIVE_HOST, { version: 1, method, params });
-  if (!response?.ok) throw new Error(response?.error ?? '로컬 수집기 연결 실패');
+  let response;
+  try {
+    response = await browser.runtime.sendNativeMessage(NATIVE_HOST, { version: 1, method, params });
+  } catch (error) {
+    throw new CollectorUnreachable(errorText(error));
+  }
+  if (!response) throw new CollectorUnreachable('로컬 수집기 연결 실패');
+  // native_host.py 는 로컬 수집기에 연결하지 못하면 이 문구로 답한다
+  if (!response.ok && String(response.error ?? '').startsWith('로컬 수집기 연결 실패')) throw new CollectorUnreachable(response.error);
+  if (!response.ok) throw new Error(response.error ?? '로컬 수집기 요청 실패');
   return response.result;
 }
 async function refresh() {
@@ -15,24 +28,33 @@ async function refresh() {
   const previous = await settingsItem.getValue();
   await settingsItem.setValue({ ...previous, ...result.status });
   await pendingItem.setValue(result.cards);
-  await browser.action.setBadgeText({ text: result.cards.length ? String(result.cards.length) : '' });
+  const state = await collectStateItem.getValue();
+  if (state.lastError && (state.op === 'refresh' || state.unreachable !== false)) await collectStateItem.setValue({ lastError: null });
+  const shareable = result.cards.filter(isShareable).length; // 팝업과 같은 기준('해당 없음' 제외)
+  await browser.action.setBadgeText({ text: shareable ? String(shareable) : '' });
   return result;
 }
-async function collect(messages: unknown[], flush: boolean) {
-  const result = await rpc('turns.append', { messages, flush });
-  await refresh();
-  return { ok: true, newMessages: result.newMessages, newCards: 0 };
-}
-const fail = async (error: unknown) => {
-  const message = error instanceof Error ? error.message : '로컬 연결 오류';
-  await collectStateItem.setValue({ ...await collectStateItem.getValue(), lastError: message });
+const fail = async (error: unknown, op: 'refresh' | 'request' = 'request') => {
+  const message = errorText(error);
+  await collectStateItem.setValue({ lastError: message, unreachable: error instanceof CollectorUnreachable, op });
   return { ok: false, error: message };
 };
+const failRefresh = (error: unknown) => fail(error, 'refresh');
+// 요청 자체가 성공하면 이전 오류를 지우고, 뒤따르는 새로 고침의 실패는 기록만 한다 (요청 결과는 성공 그대로)
+const succeeded = async () => {
+  await collectStateItem.setValue({ lastError: null });
+  await refresh().catch(failRefresh);
+};
+async function collect(messages: unknown[], flush: boolean) {
+  const result = await rpc('turns.append', { messages, flush });
+  await succeeded();
+  return { ok: true, newMessages: result.newMessages, newCards: 0 };
+}
 
 export default defineBackground(() => {
-  void refresh().catch(fail);
+  void refresh().catch(failRefresh);
   browser.alarms.create('refresh', { periodInMinutes: 0.5 });
-  browser.alarms.onAlarm.addListener(() => { void refresh().catch(fail); });
+  browser.alarms.onAlarm.addListener(() => { void refresh().catch(failRefresh); });
   browser.runtime.onMessage.addListener(async (message, sender) => {
     try {
       const settings = await settingsItem.getValue();
@@ -43,14 +65,19 @@ export default defineBackground(() => {
       if (message.type === 'collect' && chat) return await collect(message.messages, message.trigger !== 'auto');
       if (!own && !web) throw new Error('허용되지 않은 연결 화면');
       if (message.type === 'rpc') {
-        const result = await rpc(message.method, message.params);
-        return { ok: true, result };
+        // 웹 화면 요청의 실패는 웹 화면이 직접 알린다. 팝업의 연결 오류 표시는 확장 자신의 호출 결과만 따른다
+        try {
+          return { ok: true, result: await rpc(message.method, message.params) };
+        } catch (error) {
+          return { ok: false, error: errorText(error) };
+        }
       }
-      if (message.type === 'flush') { await rpc('collection.flush'); return { ok: true, newCards: 0 }; }
-      if (message.type === 'updateSettings') { await rpc('collection.configure', message.patch); await refresh(); return { ok: true }; }
+      if (message.type === 'flush') { await rpc('collection.flush'); await succeeded(); return { ok: true, newCards: 0 }; }
+      // 설정 저장 뒤 새로 고침이 실패하면 저장 화면이 알 수 있도록 실패로 돌려준다 (처음 설정 화면은 팝업 오류를 보여 주지 않는다)
+      if (message.type === 'updateSettings') { await rpc('collection.configure', message.patch); await collectStateItem.setValue({ lastError: null }); await refresh(); return { ok: true }; }
       if (message.type === 'refresh') return { ok: true, result: await refresh() };
       throw new Error('지원하지 않는 요청');
-    } catch (error) { return fail(error); }
+    } catch (error) { return fail(error, message?.type === 'refresh' ? 'refresh' : 'request'); }
   });
   browser.runtime.onInstalled.addListener(() => {
     browser.contextMenus.create({ id: 'syncup-send-selection', title: '싱크업에 선택한 내용 보내기', contexts: ['selection'], documentUrlPatterns: ['https://chatgpt.com/*','https://chat.openai.com/*'] });

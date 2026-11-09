@@ -5,11 +5,10 @@ import type { CollectedMessage } from '@shared/collector';
 export type BgRequest =
   | { type: 'collect'; trigger: 'auto' | 'manual' | 'selection'; messages: CollectedMessage[] }
   | { type: 'flush' } // 지금 쌓인 대화까지 분류 (팝업 "지금 분류하기")
-  | { type: 'removePending'; ids: string[] }
   | { type: 'updateSettings'; patch: ExtSettingsPatch };
 
 export type CollectResult =
-  | { ok: true; newMessages: number; newCards: number; bufferedTurns?: number; turnsPerBatch?: number }
+  | { ok: true; newMessages: number; newCards: number }
   | { ok: false; error: string };
 
 // 팝업 → 콘텐츠 스크립트: 지금 이 탭에서 대화를 읽을 수 있는지

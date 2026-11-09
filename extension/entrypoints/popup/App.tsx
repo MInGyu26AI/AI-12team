@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import { countTurns } from '@shared/batch';
 import { isShareable } from '@shared/labels';
 import { SUBTOPICS, type Subtopic } from '@shared/types';
 import { LOCAL_WEB_URL, PRODUCTION_WEB_URL, bridgeSupported, normalizeWebUrl } from '@/lib/config';
 import { READ_FAIL_GUIDE, type TabPingResult } from '@/lib/messages';
 import {
-  bufferItem,
   collectStateItem,
   endsAtOf,
   isConfigured,
@@ -35,7 +33,6 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [state, setState] = useState<CollectState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
-  const [bufferedTurns, setBufferedTurns] = useState(0);
   const [flushing, setFlushing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<TabStatus>({ kind: 'checking' });
@@ -46,12 +43,10 @@ export default function App() {
     settingsItem.getValue().then(setSettings);
     collectStateItem.getValue().then(setState);
     pendingItem.getValue().then(countShareable);
-    bufferItem.getValue().then((b) => setBufferedTurns(countTurns(b)));
     const un = [
       settingsItem.watch(setSettings),
       collectStateItem.watch(setState),
       pendingItem.watch(countShareable),
-      bufferItem.watch((b) => setBufferedTurns(countTurns(b))),
     ];
     checkTab().then(setTab);
     browser.runtime.sendMessage({ type: 'refresh' }).catch(() => {});
@@ -79,10 +74,10 @@ export default function App() {
     const result = await browser.runtime.sendMessage({ type: 'updateSettings', patch });
     if (!result?.ok) alert(result?.error ?? '설정 저장 실패');
   };
-  const toggle = () =>
-    // 종료 시각이 지난 뒤 다시 켜면 종료 시각을 지운다
-    save({ autoCollect: !settings.autoCollect });
+  // 종료 시각이 지난 뒤에는 종료 시각을 먼저 갱신해야 다시 수집된다(아래 안내문)
+  const toggle = () => save({ autoCollect: !settings.autoCollect });
   const turns = turnsOf(settings);
+  const bufferedTurns = settings.bufferedTurns ?? 0;
   const end = endsAtOf(settings);
   const flush = async () => {
     setFlushing(true);
@@ -153,9 +148,6 @@ export default function App() {
       </section>
 
       <section className="space-y-1 rounded-lg bg-gray-50 p-3">
-        <p>
-          ChatGPT 대화 메시지 <b>{state.collectedCount}개</b> 수집됨
-        </p>
         <div className="flex items-center justify-between gap-2">
           <p>
             다음 분류까지 대화 <b>{bufferedTurns}</b>/{turns}회
@@ -172,8 +164,8 @@ export default function App() {
           검토 대기 카드 <b className="text-tag-decision">{pendingCount}개</b>
         </p>
         <p className="text-xs text-gray-500">
-          마지막 수집: {state.lastCollectedAt ? new Date(state.lastCollectedAt).toLocaleString('ko-KR') : '아직 없음'}
-          {state.lastClassifier && ` · ${state.lastClassifier === 'native' ? '로컬 수집기' : '목업 분류기'}`}
+          마지막 수집: {settings.lastCollectedAt ? new Date(settings.lastCollectedAt).toLocaleString('ko-KR') : '아직 없음'}
+          {settings.lastClassifier && ` · ${settings.lastClassifier === 'native' ? '로컬 수집기' : '목업 분류기'}`}
         </p>
       </section>
 
