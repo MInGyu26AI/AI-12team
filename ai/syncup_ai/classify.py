@@ -56,7 +56,7 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
     """AI 에 보낼 사용자 메시지와 번호별 발화 정보 [{source, masked, role, context}]."""
     user = context.get("userName", "")
     names = context.get("knownNames") or []
-    enabled = context.get("enabledSubtopics") or list(SUBTOPICS)
+    enabled = context.get("enabledSubtopics") or list(SUBTOPICS)  # 비어 있으면 모두 켬 (로컬 수집기 기본값이 [])
     topics = context.get("existingTopicKeys") or []
     decisions = context.get("existingDecisions") or []
 

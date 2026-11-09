@@ -70,7 +70,8 @@ def _label_questions(unit: str, subtopics: list[str]) -> list[dict]:
 def relabel(cards: list[dict], conversation: str, decider: Decider, enabled: list[str] | None = None) -> list[dict]:
     """관련 카드들의 라벨을 Decisions 답으로 덮어쓴 '원시 카드'(normalize 전 모양) 목록. 실패하면 예외."""
     criteria = (config.PROMPTS / "decisions_criteria.md").read_text(encoding="utf-8")
-    subtopics = [s for s in SUBTOPICS if not enabled or s in enabled]
+    # 꺼 둔 소주제 내용은 기타로 가야 하므로 기타는 꺼 두었어도 고를 수 있게 둔다 (schema 도 기타로 바꾼다)
+    subtopics = [s for s in SUBTOPICS if not enabled or s in enabled or s == "기타"]
     units, questions = [], []
     for k, c in enumerate(cards, start=1):
         if c.get("relevance") == "related":
