@@ -19,6 +19,7 @@ from team_client import bind_sharing
 RPC_LIMIT = 4 * 1024 * 1024  # native_host.RPC_LIMIT is the same request limit on the Chrome side
 BAD_INPUT = "입력값·인용 근거·대상 팀을 확인해 주세요. 팀을 바꿨다면 검토함을 새로고침한 뒤 승인하세요."
 STORAGE_FAILED = "로컬 저장을 확인하지 못했습니다. 같은 카드로 다시 시도해 주세요."
+TEAM_UNREACHABLE = "팀 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."
 JSON = "application/json"
 
 
@@ -143,7 +144,12 @@ class Review(SecureHandler):
         action = FORM_ACTIONS.get(self.path)
         if action is None:
             return 404, "찾을 수 없습니다."
-        profile = self.team_client.me() if self.team_client and self.path in ('/switch-team', '/approve') else None
+        profile = None
+        if self.team_client and self.path in ('/switch-team', '/approve'):
+            try:
+                profile = self.team_client.me()
+            except (OSError, http.client.HTTPException):
+                return 503, TEAM_UNREACHABLE
         with connect(self.server.db) as c:
             c.execute("BEGIN IMMEDIATE")
             if retry and self.team_client:

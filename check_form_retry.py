@@ -3,6 +3,7 @@ import concurrent.futures
 from html.parser import HTMLParser
 import time
 import unittest
+from unittest.mock import patch
 
 from batch_classification import classify_queued
 from candidate_review import list_candidates
@@ -149,6 +150,15 @@ class IntegrationForms(PipelineFixture):
             self.assertEqual(post(srv,'/retry',list(valid.items())+[(field,'other')])[0],400)
             self.assertEqual(post(srv,'/retry',dict(valid,**{field:''}))[0],400)
         self.assertEqual(self.snapshot(),before)
+
+    def test_team_outage_on_approval_is_reported_as_team_connection(self):
+        card=self.candidate()
+        srv=self.review()
+        with patch.object(self.pipeline.client,'me',side_effect=OSError('offline')):
+            status,body=post(srv,'/approve',dict(id=card,text='승인',quote='SQLite로 결정했다.',target_team='a'))
+        self.assertEqual(status,503)
+        self.assertIn('팀 연결을 확인하지 못했습니다',body.decode())
+        self.assertEqual(self.snapshot()['outbox'],[])
 
     def test_legacy_team_delivery_without_pipeline_uses_destination_scope(self):
         card=self.blocked()
