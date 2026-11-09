@@ -35,7 +35,6 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'check_watch_paths.py'], '수집 루프 경로(표준·호환·비통합)'),
     ('local', [PY, 'check_response_disconnect.py'], '응답 유실 시 RPC 오류 중복 방지'),
     ('local', [PY, 'check_integrity.py'], '로컬 앱 회귀(격리 SQLite·루프백 HTTP·자식 프로세스)'),
-    ('local', [PY, 'selfcheck.py'], '분류 기본 동작 (외부 API 없음)'),
     ('local', ['node', 'check_local_bridge.cjs'], '웹 ↔ 로컬 수집기 연결(쿠키·출처·RPC)'),
     ('local', ['node', 'check_mask_cases.cjs'], '가림 공용 사례: TypeScript 사본'),
     ('local', ['npm', '--prefix', 'web', 'test', '--silent'], '웹 단위 시험 (공유 폴러·승인함·/api/local 실패 응답)'),

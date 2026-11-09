@@ -237,6 +237,14 @@ class Integrity(IntegrityFixture):
             finally:
                 connection.close()
 
+    def test_ended_session_refuses_the_legacy_api_call(self):
+        """collector.call_api checks the collection window before the key or any network access."""
+        with (patch.dict(os.environ, OPENAI_API_KEY="fixture-only"),
+              patch("urllib.request.urlopen", side_effect=AssertionError("unexpected network access")) as api):
+            with self.assertRaisesRegex(ValueError, "수집 시간이 종료"):
+                collector.call_api(self.db, "decisions", {})
+        self.assertEqual(api.call_count, 0)
+
     def test_batch_draft_rollback(self):
         self.card()
         with connect(self.db) as c:
