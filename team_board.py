@@ -2,7 +2,7 @@
 from card_contract import LABELS, board_card
 from team_access import AccessError
 
-ITEMS_LIMIT = 200  # newest shared cards per GET /items; the local team board says '(최대 200장)' (app.py)
+ITEMS_LIMIT = 200  # newest shared cards per GET /items
 
 
 def shared_items(c, team_id):
