@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, EyeOff, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { PrivacyExcluded, PrivacyHold, PrivacyMessage } from "@shared/bridge";
+import { SITE_LABEL } from "@shared/labels";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -214,7 +215,7 @@ export function ExcludedMessages({ items, total }: { items: PrivacyExcluded[]; t
                 <EyeOff className="size-4 text-muted-foreground" aria-hidden />
                 <Badge variant="outline">{reasonLabel(e.reason)}</Badge>
                 <span className="text-muted-foreground">
-                  {[e.role ? ROLE[e.role] : null, e.site, time(e.decidedAt) + " 판정"].filter(Boolean).join(" · ")}
+                  {[e.role ? ROLE[e.role] : null, e.site && (SITE_LABEL[e.site] ?? e.site), time(e.decidedAt) + " 판정"].filter(Boolean).join(" · ")}
                 </span>
               </div>
               <p className="text-sm">이 발화는 분석에서 제외됐어요.</p>

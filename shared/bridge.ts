@@ -6,14 +6,19 @@ import type { Subtopic } from "./types";
 export const BRIDGE_FROM_WEB = "syncup-web";
 export const BRIDGE_FROM_EXT = "syncup-ext";
 
+// 수집기에 쌓인 발화의 출처: turns.append 사이트와 코딩 도구.
+// claude-code 는 스캐너가 붙이고, codex 는 출처가 없는 스캐너 발화에 turn_intake 가 붙이는 기본값이다
+export type MessageSite = CollectedMessage["site"] | "codex" | "claude-code";
+
 // 분류를 마친 수집 묶음 한 개 (collection.status 의 recent)
 export interface BatchRecord {
   id: string;
   at: string; // ISO
-  site: CollectedMessage["site"]; // 묶음 첫 발화의 출처
+  site: MessageSite; // 묶음 첫 발화의 출처
   turns: number; // 대화 횟수 (질문 + 답변 = 1턴)
-  cardIds: string[]; // 이 묶음에서 나온 검토 대기 카드 (공유 후보만)
-  trigger: "auto" | "flush" | "manual" | "selection";
+  cardIds: string[]; // 이 묶음에서 나온 공유 후보 카드 (이미 승인한 카드 포함)
+  // 묶음을 대기열에 넣은 요청: flush = 남은 대화까지 보내기(collection.flush, flush 인 turns.append), manual = intake.retry
+  trigger: "auto" | "flush" | "manual";
 }
 
 export interface ExtStatus {
@@ -27,7 +32,7 @@ export interface ExtStatus {
   autoCollect: boolean; // false = 수집 일시정지
   turnsPerBatch: number;
   bufferedTurns: number; // 아직 분류에 안 보낸 대화 수
-  endsAt: string | null; // 수집 종료 시각 (ISO)
+  endsAt: string; // 수집 종료 시각 (ISO)
   lastCollectedAt: string | null;
   lastClassifier: "native" | null;
   teamName: string;
@@ -61,7 +66,7 @@ export interface PrivacyExcluded {
   reason: string | null;
   decidedAt: number;
   role: "user" | "assistant" | null;
-  site: string | null;
+  site: MessageSite | null;
   collectedAt: string | null;
   text: string;
 }
@@ -73,12 +78,12 @@ export interface PrivacyList {
   excludedCount: number;
 }
 
-// collection.configure 가 받는 수집 설정 (integration.py configure 의 허용 필드)
+// collection.configure 가 받는 수집 설정 (collection_settings.CONFIGURABLE)
 export interface ExtSettingsPatch {
   teamId?: string;
   projectTopic?: string;
   enabledSubtopics?: Subtopic[];
   autoCollect?: boolean;
   turnsPerBatch?: number;
-  endsAt?: string | null;
+  endsAt?: string;
 }

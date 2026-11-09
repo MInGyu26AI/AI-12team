@@ -1,5 +1,6 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
+import type { MessageSite } from "./bridge";
 import type { Card, Judgement, RelatedCard, Resolution, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
@@ -9,11 +10,14 @@ export const TAG_LABEL: Record<Tag, string> = {
   none: "제안",
 };
 
+// 개인·제안 배지 색. 문자열로 따로 둬서 isShareable 만 쓰는 확장 번들에 TAG_COLOR 표가 남지 않게 한다
+export const PERSONAL_COLOR = "bg-tag-personal-soft text-tag-personal border-transparent";
+
 export const TAG_COLOR: Record<Tag, string> = {
   decision: "bg-tag-decision-soft text-tag-decision border-tag-decision/20",
   todo: "bg-tag-todo-soft text-tag-todo border-tag-todo/20",
   research: "bg-tag-research-soft text-tag-research border-tag-research/20",
-  none: "bg-tag-personal-soft text-tag-personal border-transparent",
+  none: PERSONAL_COLOR,
 };
 
 // 승인함 카드 테두리 (피그마 4번: 결정 남색 · 할 일 주황 · 조사 초록)
@@ -23,7 +27,15 @@ export const TAG_BORDER: Record<Tag, string> = {
   research: "border-tag-research/70",
   none: "border-border",
 };
-export const PERSONAL_COLOR = TAG_COLOR.none;
+
+// 발화 출처 (최근 수집 묶음·분석에서 제외된 발화)
+export const SITE_LABEL: Record<MessageSite, string> = {
+  chatgpt: "ChatGPT",
+  manual: "붙여넣기",
+  "chatgpt-export": "ChatGPT 내보내기",
+  codex: "Codex",
+  "claude-code": "Claude Code",
+};
 
 // 충돌 판정 배지 (변경도 경고로 보여 주되 색으로 구분)
 export const JUDGEMENT_COLOR: Record<Judgement, string> = {

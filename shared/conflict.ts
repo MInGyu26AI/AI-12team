@@ -1,5 +1,6 @@
-// 목업 모드 전용 충돌 판정 (web/src/lib/api/mock.ts). 실제 판정은 팀 서버가 하은 님 AI(Decisions → chat → 규칙)로 한다.
-// ai/syncup_ai/conflict.py 의 rule_judge·find_candidates 를 본뜬 근사이고, 두 구현을 같은 사례로 검사하지는 않는다.
+// 목업 모드 전용 충돌 판정 (web/src/lib/api/mock.ts). 실제 팀 서버(conflict_checks.py)는 하은 님 AI(Decisions → chat)로만
+// 판정하고 규칙 판정은 쓰지 않는다. ai/syncup_ai/conflict.py 의 rule_judge 를 본뜬 근사로, 후보 고르기(같은 topic_key 최근 3개)와
+// 충돌 id 형식은 Python 과 다르고 두 구현을 같은 사례로 검사하지도 않는다.
 import type { Conflict, Judgement, RelatedCard } from "./types";
 
 const CONFLICT_TOP_K = 3; // 목업 후보 제한. 실제 서버의 AI 호출당 비교 수와 별개.

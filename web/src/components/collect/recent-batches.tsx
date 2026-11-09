@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { BatchRecord } from "@shared/bridge";
 import { fmtMDHM } from "@shared/format";
+import { SITE_LABEL } from "@shared/labels";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -22,10 +23,9 @@ export function RecentBatches({ batches, pendingIds, emptyText }: {
           {batches.slice(0, 6).map((b) => (
             <li key={b.id} className="flex flex-wrap items-center gap-3 py-4">
               <div className="min-w-0">
-                <p className="font-medium">{b.site} 대화 수집</p>
+                <p className="font-medium">{SITE_LABEL[b.site] ?? b.site} 대화 수집</p>
                 <p className="text-sm text-muted-foreground">
                   대화 {b.turns}회 · {fmtMDHM(new Date(b.at))}
-                  {b.trigger === "selection" && " · 선택한 내용"}
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2">

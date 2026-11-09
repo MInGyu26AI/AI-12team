@@ -33,7 +33,7 @@ export default function CollectPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
           <h2 className="font-semibold">연결된 AI</h2>
           {connected ? (
-            <span className="rounded-full bg-ok-soft px-3 py-1 text-xs font-semibold text-ok">브라우저 확장 v{st.version} 연결됨</span>
+            <span className="rounded-full bg-ok-soft px-3 py-1 text-xs font-semibold text-ok">로컬 수집기 연결됨</span>
           ) : collector.checked ? (
             <Link href="/install" className="rounded-full bg-warn-soft px-3 py-1 text-xs font-semibold text-warn">
               브라우저 확장 설치 필요 →
@@ -125,7 +125,7 @@ export default function CollectPage() {
           disabled={!connected}
           onChange={(paused) => collector.updateSettings({ autoCollect: !paused })}
         />
-        {connected && st.endsAt && (
+        {connected && (
           <p className="text-sm text-muted-foreground">
             수집 종료 시각 {fmtMDHM(new Date(st.endsAt))} — 남은 대화는 보관하고 수집과 AI 요청을 멈춰요.
           </p>
