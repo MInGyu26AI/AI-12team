@@ -8,6 +8,12 @@ import { Switch } from "@/components/switch";
 import { useExtensionBridge } from "@/lib/use-extension-bridge";
 import { cn } from "@/lib/utils";
 
+// <input type="datetime-local"> 값 (로컬 시각)
+const toLocalInput = (iso: string) => {
+  const d = new Date(iso), p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 // 피그마 3번: 대화 자동 수집 (브라우저 확장 상태·수집 기준·최근 수집)
 export default function CollectPage() {
   const ext = useExtensionBridge();
@@ -26,8 +32,8 @@ export default function CollectPage() {
       {ext.error && <p role="alert">{ext.error}</p>}
       {connected && <section className="space-y-3 rounded-xl border bg-card p-6">
         <label className="block">승인 대상 팀<select aria-label="승인 대상 팀" value={st.teamId ?? ''} onChange={e => ext.updateSettings({ teamId: e.target.value })} className="ml-3 rounded border p-2">{st.teams?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-        <label className="block">프로젝트 주제<input aria-label="프로젝트 주제" defaultValue={st.projectTopic ?? ''} onBlur={e => ext.updateSettings({ projectTopic: e.target.value })} className="ml-3 rounded border p-2" /></label>
-        <label className="block">수집 종료 시각<input aria-label="수집 종료 시각" type="datetime-local" onChange={e => e.target.value && ext.updateSettings({ endsAt: new Date(e.target.value).toISOString() })} className="ml-3 rounded border p-2" /></label>
+        <label className="block">프로젝트 주제<input aria-label="프로젝트 주제" key={st.projectTopic ?? ''} defaultValue={st.projectTopic ?? ''} onBlur={e => ext.updateSettings({ projectTopic: e.target.value })} className="ml-3 rounded border p-2" /></label>
+        <label className="block">수집 종료 시각<input aria-label="수집 종료 시각" type="datetime-local" key={st.endsAt ? toLocalInput(st.endsAt) : ''} defaultValue={st.endsAt ? toLocalInput(st.endsAt) : ''} onBlur={e => e.target.value && e.target.value !== e.target.defaultValue && ext.updateSettings({ endsAt: new Date(e.target.value).toISOString() })} className="ml-3 rounded border p-2" /></label>
         <p className="text-sm text-muted-foreground">Codex·Claude Code는 선택한 프로젝트에서 완료된 새 발화를 모읍니다. 이미 승인한 카드의 대상 팀은 변경되지 않습니다.</p>
       </section>}
 

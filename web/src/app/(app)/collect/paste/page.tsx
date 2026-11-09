@@ -15,7 +15,8 @@ import { rpc } from "@/lib/rpc";
 import { useLocalCandidates } from "@/lib/local-candidates";
 import { knownNamesOf, useTeam } from "@/lib/team";
 
-// 확장 없이 쓰는 백업 입력: 대화 붙여넣기 · ChatGPT 내보내기 파일 (이 브라우저 안에서만 분류)
+// 확장 없이 쓰는 백업 입력: 대화 붙여넣기 · ChatGPT 내보내기 파일
+// 실제 모드는 로컬 수집기로 보내 개인정보 검사와 외부 AI 분류를 거친다. 목업 모드만 이 브라우저 안에서 분류한다
 export default function PastePage() {
   const router = useRouter();
   const [team] = useTeam();
