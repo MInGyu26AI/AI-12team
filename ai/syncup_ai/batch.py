@@ -1,8 +1,8 @@
 """대화 횟수 기준으로 묶어 보내기 (이용흐름도: 10턴마다, 질문+답변 = 1턴).
 
 수집기는 새 발화를 쌓아 두다가 `take_ready_batches` 로 꽉 찬 묶음만 분류에 보낸다.
-일시중지·종료 시각·수동 보내기 때는 flush=True 로 남은 것까지 보낸다.
-TODO(조정 예정): 턴 수 외에 시간(예: 마지막 발화 후 N분)·문자 수 기준을 추가할지.
+수동 보내기 때는 flush=True 로 남은 것까지 보낸다. 일시중지·종료 때 남은 발화는 보내지 않고 로컬에 둔다.
+turnId 가 있는 발화(코딩 도구 로그)는 같은 turnId 끼리 한 턴이고, complete=True 인 사용자 발화는 답을 기다리지 않는다.
 """
 from __future__ import annotations
 
@@ -11,15 +11,22 @@ from .config import CONTEXT_TURNS, TURNS_PER_BATCH
 Message = dict  # shared/collector.ts CollectedMessage
 
 
+def _continues(turn: list[Message], m: Message) -> bool:
+    """m 이 이 턴에 이어지는 발화인가: 같은 대화이고, 같은 turnId 이거나 (turnId 가 없으면) AI 답변."""
+    first = turn[0]
+    if first.get("conversationId") != m.get("conversationId"):
+        return False
+    if m.get("turnId"):
+        return first.get("turnId") == m["turnId"]
+    return m.get("role") == "assistant"
+
+
 def group_turns(messages: list[Message]) -> list[list[Message]]:
     """사용자 발화 하나 + 뒤따르는 AI 답변들 = 1턴. 대화(conversationId)가 바뀌면 새 턴."""
     turns: list[list[Message]] = []
     for m in messages:
-        last = turns[-1] if turns else None
-        same_conv = last is not None and last[0].get("conversationId") == m.get("conversationId")
-        same_turn = last is not None and m.get('turnId') and last[0].get('turnId') == m['turnId']
-        if last is not None and same_conv and (same_turn or (not m.get('turnId') and m.get("role") == "assistant")):
-            last.append(m)
+        if turns and _continues(turns[-1], m):
+            turns[-1].append(m)
         else:
             turns.append([m])
     return turns

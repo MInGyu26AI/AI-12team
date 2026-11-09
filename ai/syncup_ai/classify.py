@@ -1,18 +1,18 @@
 """발화 묶음 → 후보 카드 (docs/classification.md 4장 출력 형식).
 
-입력은 shared/collector.ts NativeClassifyRequest, 출력은 NativeClassifyResponse 와 같은 모양.
+입력은 shared/collector.ts NativeClassifyRequest 모양(+ 선택 필드 contextMessages), 출력은 NativeClassifyResponse 와 같은 모양.
 순서: 형식형 민감정보 가림(코드) → 길이 자르기 → AI 분류 → 출력 정리(schema.normalize_card)
 """
 from __future__ import annotations
 
-import json
 import sys
+from collections import Counter
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from . import config
 from .decide import relabel
-from .llm import LLM, Decider, DecisionsResponseError
+from .llm import LLM, Decider, DecisionsResponseError, describe_failure
 from .mask import mask, mask_text
 from .evidence import locate_evidence
 from .schema import SUBTOPICS, normalize_card
@@ -72,7 +72,8 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
         "# 발화",
     ]
     info: list[dict] = []
-    for i, (m, is_ctx) in enumerate([(m, True) for m in (context_messages or [])] + [(m, False) for m in messages], start=1):
+    numbered = [(m, True) for m in context_messages or []] + [(m, False) for m in messages]
+    for i, (m, is_ctx) in enumerate(numbered, start=1):
         text, masked = _prepare(m)
         who = "AI" if m.get("role") == "assistant" else "사용자"
         tag = " [참고용]" if is_ctx else ""
@@ -96,12 +97,20 @@ def classify_indexed(request: dict, llm: LLM, decider: Decider | None = None) ->
     if not messages:
         return []
     prompt, info = build_user_prompt(context, messages, request.get("contextMessages"))
-    reply = llm.chat_json(_system_prompt(), prompt)
+    raw_cards = _numbered_cards(llm.chat_json(_system_prompt(), prompt), info)
+    enabled = context.get("enabledSubtopics") or None
+    if decider is not None:
+        raw_cards = _relabel_or_keep(raw_cards, prompt, decider, enabled)
+    out = _finish_cards(raw_cards, info, list(context.get("existingTopicKeys") or []), enabled)
+    n_ctx = sum(1 for m in info if m["context"])
+    return [(idx - 1 - n_ctx, c) for idx, c in out]
 
+
+def _numbered_cards(reply: dict, info: list[dict]) -> list[dict]:
+    """번호(msg)가 이번에 분류할 발화를 가리키는 카드만, 그 번호를 _msg 로 붙여서."""
     raw_cards = reply.get("cards")
     if not isinstance(raw_cards, list):
         raise ValueError("AI 응답에 cards 배열이 없음")
-
     valid: list[dict] = []
     for raw in raw_cards:
         if not isinstance(raw, dict):
@@ -113,45 +122,55 @@ def classify_indexed(request: dict, llm: LLM, decider: Decider | None = None) ->
         if not 1 <= idx <= len(info) or info[idx - 1]["context"]:
             continue  # 없는 번호 / 참고용 발화
         valid.append({**raw, "_msg": idx})
+    return valid
 
-    enabled = context.get("enabledSubtopics") or None
-    if decider is not None:
-        try:
-            valid = relabel(valid, prompt, decider, enabled)
-        except DecisionsResponseError:
-            raise
-        except Exception as e:  # Decisions 실패 → chat 모델 라벨 그대로
-            print(f"[syncup_ai] Decisions 라벨 실패, chat 라벨 사용: {type(e).__name__}", file=sys.stderr)
 
-    topics = list(context.get("existingTopicKeys") or [])
-    ai_cards_per_msg: dict[int, int] = {}
+def _relabel_or_keep(cards: list[dict], prompt: str, decider: Decider, enabled: list[str] | None) -> list[dict]:
+    """Decisions 라벨. 응답 검증 오류는 올리고, 다른 실패는 chat 라벨을 그대로 쓴다."""
+    try:
+        return relabel(cards, prompt, decider, enabled)
+    except DecisionsResponseError:
+        raise
+    except Exception as e:
+        print(f"[syncup_ai] Decisions 라벨 실패, chat 라벨 사용: {describe_failure(e)}", file=sys.stderr)
+        return cards
+
+
+def _finish_cards(raw_cards: list[dict], info: list[dict], topics: list[str],
+                  enabled: list[str] | None) -> list[tuple[int, dict]]:
+    """출력 형식으로 정리하고 화자 규칙을 적용한 (발화 번호, 카드) 목록. 발화 순서를 지킨다."""
+    ai_cards_per_msg: Counter = Counter()
     out: list[tuple[int, dict]] = []
-    for raw in valid:
+    for raw in raw_cards:
         idx = raw["_msg"]
         meta = info[idx - 1]
-        card = normalize_card(raw, source=meta["source"], pre_masked=meta["masked"], existing_topics=topics, enabled_subtopics=enabled)
+        card = normalize_card(raw, source=meta["source"], pre_masked=meta["masked"], existing_topics=topics,
+                              enabled_subtopics=enabled)
         if card is None:
             continue
         if card["relevance"] == "related":
-            location = locate_evidence(card["sentence"], meta["text"], raw)
-            card["evidence"] = {"messageId": meta["messageId"], "role": meta["role"],
-                                "roleGuessed": meta["roleGuessed"], "quote": card["sentence"], **location}
-            card["classificationMethod"] = raw.get("_labeled_by", "chat")
-            if meta["roleGuessed"]:
-                card["confidence"] = min(card["confidence"], 0.59)
+            _attach_evidence(card, raw, meta)
         if meta["role"] == "assistant" and card["relevance"] == "related":
             if card["tag"] in ("decision", "todo"):
                 card["tag"], card["owner"], card["due"], card["is_change"] = "none", None, None, False  # AI 말은 제안
-            ai_cards_per_msg[idx] = ai_cards_per_msg.get(idx, 0) + 1
+            ai_cards_per_msg[idx] += 1
             if ai_cards_per_msg[idx] > config.MAX_CARDS_PER_AI_MESSAGE:
                 continue
         if card["relevance"] == "related" and card["topic_key"] and card["topic_key"] not in topics:
             topics.append(card["topic_key"])  # 같은 묶음 안 다음 카드는 기존 주제로 봄
         out.append((idx, card))
-
     out.sort(key=lambda x: x[0])  # 발화 순서 유지 (같은 발화 안에서는 모델 순서)
-    n_ctx = sum(1 for m in info if m["context"])
-    return [(idx - 1 - n_ctx, c) for idx, c in out]
+    return out
+
+
+def _attach_evidence(card: dict, raw: dict, meta: dict) -> None:
+    """관련 카드에 근거 위치와 분류 방법을 붙인다. 화자를 추정한 발화의 카드는 확인 필요로 낮춘다."""
+    location = locate_evidence(card["sentence"], meta["text"], raw)
+    card["evidence"] = {"messageId": meta["messageId"], "role": meta["role"],
+                        "roleGuessed": meta["roleGuessed"], "quote": card["sentence"], **location}
+    card["classificationMethod"] = raw.get("_labeled_by", "chat")
+    if meta["roleGuessed"]:
+        card["confidence"] = min(card["confidence"], config.BELOW_LOW_CONFIDENCE)
 
 
 def classify(request: dict, llm: LLM, decider: Decider | None = None) -> list[dict]:
@@ -164,10 +183,3 @@ def handle_request(request: dict, llm: LLM, decider: Decider | None = None) -> d
         return {"ok": True, "cards": classify(request, llm, decider)}
     except Exception as e:  # 실패한 발화는 수집기가 보존하고 재시도한다.
         return {"ok": False, "error": f"분류 실패: {e}"}
-
-
-if __name__ == "__main__":  # 프롬프트 확인용: python -m syncup_ai.classify < request.json
-    import sys
-
-    req = json.load(sys.stdin)
-    print(build_user_prompt(req.get("context") or {}, req.get("messages") or [], req.get("contextMessages"))[0])

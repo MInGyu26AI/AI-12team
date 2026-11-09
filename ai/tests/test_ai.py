@@ -1,29 +1,19 @@
 """외부 AI 없이 도는 테스트 (가짜 LLM 이 정해진 JSON 을 돌려줌).  python3 -m unittest -v"""
+import contextlib
+import io
 import json
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 from syncup_ai import batch, conflict
 from syncup_ai.classify import classify, handle_request
-from syncup_ai.llm import parse_json_reply
-from syncup_ai.schema import validate_output
-
-
-class FakeLLM:
-    def __init__(self, reply):
-        self.reply, self.prompts = reply, []
-
-    def chat_json(self, system, user):
-        self.prompts.append(user)
-        return self.reply if isinstance(self.reply, dict) else parse_json_reply(self.reply)
-
-
-def msg(i, text, role="user", conv="c1"):
-    return {"id": f"m{i}", "site": "chatgpt", "role": role, "text": text, "conversationId": conv,
-            "conversationTitle": "t", "url": "", "collectedAt": "2026-11-06T12:10:00Z"}
-
-
-CTX = {"teamName": "싱크업", "projectTopic": "팀 AI 메모리", "userName": "김단비",
-       "knownNames": ["김동균", "이서준"], "enabledSubtopics": None, "existingTopicKeys": ["MVP 범위", "서비스명"]}
+from syncup_ai.llm import DecisionsResponseError, parse_json_reply
+from syncup_ai.mask import mask
+from syncup_ai.schema import normalize_card, validate_output
+from tests.fakes import CTX, FakeDecider, FakeLLM, dec, default_answer, msg
 
 
 class ClassifyTest(unittest.TestCase):
@@ -69,15 +59,15 @@ class ClassifyTest(unittest.TestCase):
         for c in cards:
             self.assertEqual(validate_output(c), [])
 
-    def test_ai_speaker_cannot_decide_and_context_ignored(self):
-        cards, llm = self.run_cls(
+    def test_card_for_message_number_out_of_range_is_dropped(self):
+        cards, _ = self.run_cls(
             [msg(2, "React로 만드세요.", role="assistant")],
-            [{"msg": 1, "relevance": "related", "sentence": "React로 만드세요.", "tag": "decision", "subtopic": "기타", "topic_key": "x", "content": "x"},
-             {"msg": 2, "relevance": "related", "sentence": "React로 만드세요.", "tag": "decision", "subtopic": "작업·결과물",
-              "topic_key": "프레임워크", "content": "프레임워크 = React", "owner": "AI", "confidence": 0.8}],
-            )
-        # msg 1 은 참고용 발화가 아니지만 여기선 발화가 하나라 msg 2 는 범위 밖 → 버려짐
-        self.assertEqual(len(cards), 1)
+            [{"msg": 1, "relevance": "related", "sentence": "React로 만드세요.", "tag": "decision", "subtopic": "기타",
+              "topic_key": "x", "content": "x"},
+             {"msg": 2, "relevance": "related", "sentence": "React로 만드세요.", "tag": "decision"}])
+        self.assertEqual(len(cards), 1)  # 발화가 하나라 msg 2 는 없는 번호
+
+    def test_context_message_is_shown_but_ai_speaker_cannot_decide(self):
         req = {"context": CTX, "messages": [msg(2, "React로 만드세요.", role="assistant")], "contextMessages": [msg(1, "뭐로 만들까?")]}
         llm = FakeLLM({"cards": [
             {"msg": 1, "relevance": "related", "sentence": "뭐로 만들까?", "tag": "none", "content": "질문"},
@@ -121,10 +111,11 @@ class BatchTest(unittest.TestCase):
         turns = batch.group_turns([msg(1, "q"), msg(2, "a", role="assistant", conv="c2")])
         self.assertEqual(len(turns), 2)
 
-
-def dec(id_, topic, content, is_change=False):
-    return {"id": id_, "relevance": "related", "tag": "decision", "topic_key": topic, "content": content,
-            "sentence": content, "is_change": is_change}
+    def test_turn_id_groups_and_complete_user_message_is_ready(self):
+        a, b, c = ({**msg(i, "x"), "turnId": t, "complete": True} for i, t in ((1, "t1"), (2, "t1"), (3, "t2")))
+        self.assertEqual([len(t) for t in batch.group_turns([a, b, c])], [2, 1])  # 사용자 발화끼리도 같은 turnId 면 한 턴
+        batches, left = batch.take_ready_batches([a, b, c], turns_per_batch=2)
+        self.assertEqual((len(batches), left), (1, []))  # complete 인 마지막 사용자 발화는 답을 기다리지 않음
 
 
 class ConflictTest(unittest.TestCase):
@@ -141,6 +132,12 @@ class ConflictTest(unittest.TestCase):
         self.assertEqual({j["id"]: j["judgement"] for j in judged}, {"a": "변경", "c": "충돌"})  # c 는 규칙으로 채움 (결정자 모름 → 충돌)
         by_old = {c["cardA"]["id"]: c for c in conflicts}
         self.assertEqual(by_old["a"]["reason"], "행사 이후 → MVP 포함")
+
+    def test_chat_reason_missing_uses_text_for_its_own_judgement(self):
+        old, new = dec("a", "타깃", "타깃 = 대학생"), dec("b", "타깃", "타깃은 대학생")
+        llm = FakeLLM({"results": [{"id": "a", "judgement": "같음", "confidence": .9}]})
+        judged, _ = conflict.check_new_decision(new, [old], llm)
+        self.assertEqual(judged[0]["reason"], "기존 결정 '타깃 = 대학생'과(와) 같은 내용")  # 규칙의 '다른 내용' 문구가 아니다
 
     def test_non_decision_skipped_and_batch_compares_new_cards(self):
         todo = {**dec("t", "타깃", "x"), "tag": "todo"}
@@ -161,31 +158,20 @@ class OwnerRuleTest(unittest.TestCase):
         self.assertEqual(conflict.rule_judge(team, old)["judgement"], "변경")
 
 
-class FakeDecider:
-    def __init__(self, answers):
-        self.answers, self.calls = answers, []
-
-    def decide(self, text, questions):
-        self.calls.append((text, questions))
-        return {q["name"]: self.answers(q) for q in questions if self.answers(q) is not None}
-
-
 class DecisionsTest(unittest.TestCase):
     def test_relabel_overrides_labels_and_confidence(self):
         llm = FakeLLM({"cards": [
             {"msg": 1, "relevance": "related", "sentence": "FastAPI 기준으로 코드 짜 줘.", "tag": "none", "content": "코드 요청"},
             {"msg": 1, "relevance": "related", "sentence": "오늘 피곤하다", "tag": "research", "subtopic": "기타", "topic_key": "컨디션", "content": "피곤"},
         ]})
-
-        def answers(q):
-            n = q["name"]
-            if n == "u1_rel": return {"type": "choice", "name": n, "choice": "related", "confidence": 0.95}
-            if n == "u1_tag": return {"type": "choice", "name": n, "choice": "decision", "confidence": 0.55}
-            if n == "u1_sub": return {"type": "choice", "name": n, "choice": "작업·결과물", "confidence": 0.9}
-            if n == "u1_chg": return {"type": "predicate", "name": n, "probability": 0.1}
-            if n == "u2_rel": return {"type": "choice", "name": n, "choice": "personal", "probabilities": [{"value": "personal", "probability": 0.8}]}
-            return None
-        d = FakeDecider(answers)
+        answers = {
+            "u1_rel": {"type": "choice", "name": "u1_rel", "choice": "related", "confidence": 0.95},
+            "u1_tag": {"type": "choice", "name": "u1_tag", "choice": "decision", "confidence": 0.55},
+            "u1_sub": {"type": "choice", "name": "u1_sub", "choice": "작업·결과물", "confidence": 0.9},
+            "u1_chg": {"type": "predicate", "name": "u1_chg", "probability": 0.1},
+            "u2_rel": {"type": "choice", "name": "u2_rel", "choice": "personal", "probabilities": [{"value": "personal", "probability": 0.8}]},
+        }
+        d = FakeDecider(lambda q: answers.get(q["name"]))
         cards = classify({"context": CTX, "messages": [msg(1, "FastAPI 기준으로 코드 짜 줘. 오늘 피곤하다")]}, llm, d)
         a, b = cards
         self.assertEqual((a["tag"], a["subtopic"], a["is_change"], a["confidence"]), ("decision", "작업·결과물", False, 0.55))
@@ -201,13 +187,35 @@ class DecisionsTest(unittest.TestCase):
         [card] = classify({"context": CTX, "messages": [msg(1, "오늘 피곤하다")]}, llm, d)
         self.assertEqual((card["relevance"], card["confidence"]), ("personal", 0.0))  # 0 이 0.5 로 바뀌면 안 된다
 
+    def test_missing_answer_or_confidence_fails_instead_of_keeping_chat_label(self):
+        llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": "타깃은 대학생으로 가자.", "tag": "decision",
+                                  "subtopic": "주제·목표", "topic_key": "타깃", "content": "타깃 = 대학생", "owner": "김단비"}]})
+        request = {"context": CTX, "messages": [msg(1, "타깃은 대학생으로 가자.")]}
+
+        class Partial:  # 표시(_tag) 답만 빠진 응답
+            def decide(self, text, questions):
+                return {q["name"]: default_answer(q) for q in questions if not q["name"].endswith("_tag")}
+
+        personal_without_confidence = FakeDecider(
+            lambda q: {"type": "choice", "name": q["name"], "choice": "personal"} if q["name"] == "u1_rel" else None)
+        tag_without_choice = FakeDecider(
+            lambda q: {"type": "choice", "name": q["name"], "confidence": 0.9} if q["name"] == "u1_tag" else None)
+        related_without_confidence = FakeDecider(
+            lambda q: {"type": "choice", "name": q["name"], "choice": "related"} if q["name"] == "u1_rel" else None)
+        for decider in (Partial(), personal_without_confidence, tag_without_choice, related_without_confidence):
+            with self.subTest(decider=type(decider).__name__), self.assertRaises(DecisionsResponseError):
+                classify(request, llm, decider)
+
     def test_decider_failure_keeps_chat_labels(self):
         class Boom:
             def decide(self, *a): raise RuntimeError("403")
         llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": "타깃은 대학생으로 가자.", "tag": "decision",
                                   "subtopic": "주제·목표", "topic_key": "타깃", "content": "타깃 = 대학생", "owner": "김단비", "confidence": 0.9}]})
-        cards = classify({"context": CTX, "messages": [msg(1, "타깃은 대학생으로 가자.")]}, llm, Boom())
+        log = io.StringIO()
+        with contextlib.redirect_stderr(log):
+            cards = classify({"context": CTX, "messages": [msg(1, "타깃은 대학생으로 가자.")]}, llm, Boom())
         self.assertEqual((cards[0]["tag"], cards[0]["confidence"]), ("decision", 0.9))
+        self.assertEqual(log.getvalue(), "[syncup_ai] Decisions 라벨 실패, chat 라벨 사용: RuntimeError\n")
 
     def test_conflict_judged_by_decider(self):
         old = {**dec("a", "타깃", "타깃 = 대학생"), "owner": "박지민"}
@@ -226,8 +234,6 @@ LEAK = ("AbCdEf0123", "QRSTuvwx", "ghp_", "WXYZ", "Xy3_kL9", "mN6oP")
 class MaskTest(unittest.TestCase):
     def test_shared_cases(self):
         """shared/mask-cases.json — TypeScript(shared/classify.ts)도 같은 파일로 검사"""
-        from pathlib import Path
-        from syncup_ai.mask import mask
         cases = json.loads((Path(__file__).resolve().parents[2] / "shared/mask-cases.json").read_text(encoding="utf-8"))["cases"]
         for c in cases:
             with self.subTest(c["name"]):
@@ -248,12 +254,24 @@ class MaskTest(unittest.TestCase):
         llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": text, "subtopic": "작업·결과물",
                                   "tag": "decision", "topic_key": "서버 인증", "content": f"인증 = Bearer {SECRETS[2]}",
                                   "owner": "김단비"}]})
-        d = FakeDecider(lambda q: None)
+        d = FakeDecider()
         cards = classify({"context": ctx, "messages": [msg(1, text)]}, llm, d)
         self.assertNoLeak(llm.prompts[0])  # 발화 + 기존 결정까지
         self.assertNoLeak(d.calls[0][0])   # Decisions 로 가는 본문
         self.assertNoLeak(json.dumps(cards, ensure_ascii=False))  # 모델이 원문을 되돌려 줘도 카드에 안 남음
         self.assertTrue(cards[0]["masked"])
+
+    def test_card_masks_value_exposed_by_the_first_pass(self):
+        # 첫 가림이 주민번호를 바꾼 뒤에야 바로 붙은 토큰의 경계가 생긴다. normalize_card 는 문장을 두 번 가려 이것도 지운다.
+        raw = {"relevance": "related", "sentence": f"900101-1234567{SECRETS[1]} 로 푸시하자", "tag": "decision",
+               "subtopic": "작업·결과물", "topic_key": "배포", "content": "배포 = 푸시", "owner": "김단비"}
+        card = normalize_card(raw, source="ChatGPT", pre_masked=False, existing_topics=[])
+        self.assertEqual((card["sentence"], card["masked"]), ("[주민번호][액세스토큰] 로 푸시하자", True))
+
+    def test_token_choice_order_differs_between_quoted_and_plain_values(self):
+        # 가림 규칙 고정: 따옴표 값은 비밀번호를, 따옴표 없는 값은 API키를 먼저 본다 (mask.py 의 두 함수)
+        self.assertEqual(mask("api_key_password='v a l'")[0], "api_key_password='[비밀번호]'")
+        self.assertEqual(mask("api_key_password=secretvalue")[0], "api_key_password=[API키]")
 
     def test_conflict_requests(self):
         old = {**dec("a", "서버 인증", f"인증 = {SECRETS[0]}"), "owner": "김동균"}
@@ -269,9 +287,6 @@ class MaskTest(unittest.TestCase):
 
 class CliTest(unittest.TestCase):
     def test_classify_without_key_returns_ok_false(self):
-        import os
-        import subprocess
-        import sys
         env = {k: v for k, v in os.environ.items() if not k.startswith("AI_")}
         env.update(AI_BASE_URL="", AI_API_KEY="", AI_MODEL="", AI_DECISIONS_MODEL="", OPENAI_API_KEY="")
         p = subprocess.run([sys.executable, "-m", "syncup_ai", "classify"], input=json.dumps({"context": CTX, "messages": [msg(1, "x")]}),
