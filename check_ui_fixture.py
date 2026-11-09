@@ -47,7 +47,7 @@ def main(marker):
             print('가상 UI 검사 준비됨 · 연결 파일 경로만 기록, 실제 대화·외부 AI 사용 없음',flush=True)
             while True:
                 classify_queued(pipeline)
-                delivery.deliver(test.db,'','',test.client)
+                delivery.deliver(test.db,test.client)
                 time.sleep(1)
     finally:
         test.doCleanups()

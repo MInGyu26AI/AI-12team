@@ -106,8 +106,6 @@ def _approve_form(r, evidence, view):
         speaker = "사용자" if r["role"] == "user" else "AI"
         html += (f'<label>{speaker} 근거 · 공유할 범위<textarea name="quote" maxlength="{MAX_TEXT}" required>'
                  f'{esc(r["quote"])}</textarea></label>')
-    if not view.client:
-        return html + '<button>이 카드 한 장 승인</button></form>'
     team = view.team
     return html + (f'<input type="hidden" name="target_team" value="{esc(team.target or "")}">'
                    f'<button {"disabled" if not team.name else ""}>{esc(team.name or "팀 선택 필요")} · 이 카드 한 장 승인</button></form>')
@@ -144,7 +142,8 @@ def render_review_page(server, client, pipeline):
         binding = c.execute('SELECT * FROM sharing WHERE id=1').fetchone()
     retry_team = binding['team_id'] if binding else ''
     state = session_state(cfg)
-    body = (f'<nav><b>싱크업</b><a href="{server.board_url}">팀 보드 열기 ↗</a></nav>'
+    board_link = '<a href="/team-board">팀 보드 열기 ↗</a>' if client else ''
+    body = (f'<nav><b>싱크업</b>{board_link}</nav>'
             f'<header><h1>개인 검토함</h1><span class="state">{STATE_LABELS[state]}</span></header>')
     team = TeamChoice()
     if client:

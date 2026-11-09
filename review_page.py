@@ -8,7 +8,7 @@ import urllib.parse
 from collection_settings import cache_profile
 from collection_session import active, bind_sharing, set_paused
 from collector import FAILED_PREFIX
-from delivery import CURRENT_DESTINATION, DEMO_BOARD_DESTINATION, approve, reset_blocked
+from delivery import approve, reset_blocked
 from diagnostics import failure
 import local_rpc
 from review_render import render_review_page, render_team_board
@@ -19,6 +19,8 @@ from team_client import TEAM_UNREACHABLE_ERRORS
 BAD_INPUT = "입력값·인용 근거·대상 팀을 확인해 주세요. 팀을 바꿨다면 검토함을 새로고침한 뒤 승인하세요."
 STORAGE_FAILED = "로컬 저장을 확인하지 못했습니다. 같은 카드로 다시 시도해 주세요."
 TEAM_UNREACHABLE = "팀 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."
+# Approving, retrying a delivery and switching teams all need the team server (app.py always connects one).
+NEEDS_TEAM = '팀 서버 연결이 필요합니다.'
 JSON = "application/json"
 
 
@@ -49,27 +51,27 @@ def _retry_job(review, c, get, profile):
 
 
 def _retry_delivery(review, c, get, profile):
-    scope = CURRENT_DESTINATION if review.team_client else DEMO_BOARD_DESTINATION
-    if not reset_blocked(c, get("id"), scope):
+    if not review.team_client:
+        return 400, NEEDS_TEAM
+    if not reset_blocked(c, get("id")):
         raise ValueError('재시도할 전송이 없습니다.')
 
 
 def _switch_team(review, c, get, profile):
     if not review.team_client:
-        return 400, '팀 서버 연결이 필요합니다.'
+        return 400, NEEDS_TEAM
     bind_sharing(c, review.team_client, get('team_id'), profile)
     if review.pipeline:
         cache_profile(c, profile)
 
 
 def _approve(review, c, get, profile):
-    destination = None
-    if review.team_client:
-        binding = c.execute('SELECT * FROM sharing WHERE id=1').fetchone()
-        if get('target_team') != binding['team_id'] or binding['team_id'] not in {t['id'] for t in profile['teams']}:
-            raise ValueError('팀 선택이나 권한이 변경되었습니다.')
-        destination = dict(binding)
-    approve(c, get, destination)
+    if not review.team_client:
+        return 400, NEEDS_TEAM
+    binding = c.execute('SELECT * FROM sharing WHERE id=1').fetchone()
+    if get('target_team') != binding['team_id'] or binding['team_id'] not in {t['id'] for t in profile['teams']}:
+        raise ValueError('팀 선택이나 권한이 변경되었습니다.')
+    approve(c, get, dict(binding))
 
 
 # Each runs in one BEGIN IMMEDIATE transaction; it returns None (303 back to the page) or (status, text).

@@ -10,11 +10,11 @@ LABELS = {'decision': '결정', 'todo': '할 일', 'research': '조사'}
 # The local cards table names the todo tag 'task'.
 KIND_OF_TAG = {'decision': 'decision', 'todo': 'task', 'research': 'research'}
 KIND_LABELS = {KIND_OF_TAG[tag]: label for tag, label in LABELS.items()}
-# Legacy (version 1) decisions whose adoption was not confirmed; storage.py's board CHECK repeats it.
+# Legacy (version 1) decisions whose adoption was not confirmed.
 UNADOPTED_LABEL = '결정 · 채택 미확인'
 TAG_OF_LABEL = {label: tag for tag, label in LABELS.items()} | {UNADOPTED_LABEL: 'decision'}
 PUBLIC_FIELDS = set(RELATED_FIELDS) | {'classificationMethod'}
-# Version 1 approval packet (the loopback demo board stores exactly these).
+# Version 1 approval packet: exactly these fields; version 2 adds 'version' and 'card'.
 PACKET_FIELDS = ('id', 'label', 'text', 'quote', 'speaker')
 
 

@@ -270,7 +270,7 @@ class ClaudeScannerChecks(unittest.TestCase):
         with server(Review, db) as review:
             review.team_client = client
             self.assertEqual(post(review, "/approve", dict(approval, target_team=FAKE_TEAM))[0], 303)
-        self.assertTrue(delivery.deliver(db, "", "", client))
+        self.assertTrue(delivery.deliver(db, client))
         [envelope] = api.records.values()
         self.assertEqual({k: envelope["packet"][k] for k in approval}, approval)
 

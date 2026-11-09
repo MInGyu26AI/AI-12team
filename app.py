@@ -1,8 +1,8 @@
 """Local review service entry point.
 
-`app.py run`: the private review page (review_page), collection and delivery workers (collection_loop), and with
---integrated the extension's /rpc over the turn pipeline. Without a team server it also starts `app.py board`,
-the loopback demo board (demo_board).
+`app.py run --team-api … --team-token-file …`: the private review page (review_page) and the collection and delivery
+workers (collection_loop) of one state folder connected to a team server, and with --integrated the extension's /rpc
+over the turn pipeline. It does not start without a team server connection.
 """
 import argparse
 import http.server
@@ -11,32 +11,29 @@ import os
 from pathlib import Path
 import secrets
 import signal
-import subprocess
-import sys
 import threading
 import time
 
 from collection_loop import send_approved, watch
 from collection_session import bind_sharing
-from demo_board import Board
 from diagnostics import failure
 from review_page import Review
-from runtime import child_environment, require_platform, storage_paths
+from runtime import require_platform, storage_paths
 from storage import connect, initialize, runtime_lock
 from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, TeamClient
 from turn_pipeline import TurnPipeline
 
 MAX_MINUTES = 1440
+NEEDS_TEAM = '팀 서버 연결이 필요합니다. --team-api와 --team-token-file을 지정하세요 (팀_서버_사용법.md 참고).'
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["run", "board"])
+    parser.add_argument("mode", choices=["run"])
     parser.add_argument("--project", type=Path)
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--minutes", type=int, default=120)
     parser.add_argument("--port", type=int, default=8876)
-    parser.add_argument("--board-port", type=int, default=8877)
     parser.add_argument("--codex-dir", type=Path)
     parser.add_argument("--codex-sqlite-dir", type=Path)
     parser.add_argument("--claude-dir", type=Path)
@@ -46,17 +43,14 @@ def parse_args():
     parser.add_argument('--team-id', help='최초 또는 시작 시 선택할 팀 ID')
     parser.add_argument('--integrated', action='store_true', help='통합 분류와 확장 프로그램 연결 활성화')
     args = parser.parse_args()
-    if args.integrated and not args.team_api:
-        parser.error('--integrated는 인증된 팀 서버 연결이 필요합니다.')
-    if bool(args.team_api) != bool(args.team_token_file):
+    if not args.team_api:
+        raise SystemExit(NEEDS_TEAM)
+    if not args.team_token_file:
         parser.error('--team-api와 --team-token-file을 함께 지정하세요.')
-    if args.team_id and not args.team_api:
-        parser.error('--team-id는 --team-api와 함께 사용하세요.')
-    if args.mode == "run":
-        try:
-            args.codex_dir, args.codex_sqlite_dir, args.claude_dir, args.claude_project_name = storage_paths(args)
-        except (ValueError, OSError):
-            parser.error("대화 저장 위치 설정을 확인하세요. 필요하면 --codex-sqlite-dir로 DB 폴더를 직접 지정하세요.")
+    try:
+        args.codex_dir, args.codex_sqlite_dir, args.claude_dir, args.claude_project_name = storage_paths(args)
+    except (ValueError, OSError):
+        parser.error("대화 저장 위치 설정을 확인하세요. 필요하면 --codex-sqlite-dir로 DB 폴더를 직접 지정하세요.")
     return parser, args
 
 
@@ -69,28 +63,8 @@ def main():
     signal.signal(signal.SIGTERM, terminate)
     os.umask(0o077)
     args.state.mkdir(parents=True, exist_ok=True)
-    with runtime_lock(args.state / (args.mode + ".lock")):
-        if args.mode == "board":
-            serve_board(args)
-        else:
-            serve_review(args, parser)
-
-
-def serve_board(args):
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", args.board_port), Board)
-    srv.db = args.state / "board.sqlite"
-    srv.secret = sys.stdin.readline().strip()
-    if not srv.secret:
-        raise SystemExit("검토함에서 시작해 주세요.")
-    initialize(srv.db, board=True)
-
-    # The parent keeps this pipe open; its death must not leave a locked orphan board.
-    def parent_exit():
-        sys.stdin.read()
-        os._exit(0)
-    threading.Thread(target=parent_exit, daemon=True).start()
-    print("ready", flush=True)
-    srv.serve_forever()
+    with runtime_lock(args.state / "run.lock"):
+        serve_review(args, parser)
 
 
 def _open_review_server(args, parser):
@@ -107,7 +81,6 @@ def _open_review_server(args, parser):
         if not s:
             c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (project, time.time(), time.time() + args.minutes * 60))
     srv.csrf = secrets.token_urlsafe(32)
-    srv.secret = secrets.token_urlsafe(32)
     srv.team_client = None
     srv.pipeline = None
     return srv
@@ -151,9 +124,9 @@ def start_workers(srv, args):
     threading.Thread(target=send_approved, args=(srv,), daemon=True).start()
 
 
-def _serve_with_team(srv, args, parser):
+def serve_review(args, parser):
+    srv = _open_review_server(args, parser)
     profile = _connect_team(srv, args, parser)
-    srv.board_url = '/team-board'
     if args.integrated:
         _start_pipeline(srv, args, profile)
     start_workers(srv, args)
@@ -162,36 +135,6 @@ def _serve_with_team(srv, args, parser):
         srv.serve_forever()
     finally:
         srv.server_close()
-
-
-def _serve_with_demo_board(srv, args, parser):
-    with connect(srv.db) as c:
-        if c.execute('SELECT 1 FROM sharing').fetchone():
-            parser.error('이 상태 폴더는 팀 서버에 연결되어 있습니다. 기존 팀 연결 설정을 지정하세요.')
-    srv.board_url = f"http://127.0.0.1:{args.board_port}/"
-    child = subprocess.Popen([sys.executable, __file__, "board", "--state", str(args.state), "--board-port", str(args.board_port)],
-                             env=child_environment(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8")
-    try:
-        child.stdin.write(srv.secret + "\n")
-        child.stdin.flush()
-        if child.stdout.readline().strip() != "ready":
-            raise SystemExit("팀 보드를 시작할 수 없습니다.")
-        start_workers(srv, args)
-        print(f"검토함 http://127.0.0.1:{args.port}/ · 보드 {srv.board_url}", flush=True)
-        srv.serve_forever()
-    finally:
-        child.terminate()
-        child.wait()
-        child.stdin.close()
-        child.stdout.close()
-
-
-def serve_review(args, parser):
-    srv = _open_review_server(args, parser)
-    if args.team_api:
-        _serve_with_team(srv, args, parser)
-    else:
-        _serve_with_demo_board(srv, args, parser)
 
 
 if __name__ == "__main__":

@@ -1,23 +1,17 @@
-"""Persist approval before HTTP; retry only the frozen request."""
+"""Persist approval before HTTP; retry only the frozen request, and only to the team server it was approved for."""
 import http.client
 import json
 import time
 import urllib.error
-import urllib.request
 
 from card_contract import PUBLIC_FIELDS, card_label, validate_packet
 from diagnostics import failure
-from secure_http import NoRedirect
 from storage import connect
 
 MAX_ATTEMPTS = 5
-# The loopback demo board answers with {"id": ...}; anything longer is refused.
-ACK_LIMIT = 16 * 1024
 # Outbox rows whose recorded destination is the current sharing binding (same team, user and server).
 CURRENT_DESTINATION = """id IN (SELECT d.id FROM outbox_destinations d JOIN sharing s
     ON s.team_id=d.team_id AND s.user_id=d.user_id AND s.api_url=d.api_url)"""
-# Outbox rows approved for the loopback demo board, which records no destination.
-DEMO_BOARD_DESTINATION = "id NOT IN (SELECT id FROM outbox_destinations)"
 
 
 def _approved_evidence(r, get):
@@ -86,50 +80,34 @@ def approve(c, get, destination=None):
         AND NOT EXISTS (SELECT 1 FROM cards WHERE job=? AND status IN ('drafting','manual'))""", (r["job"], r["job"]))
 
 
-def reset_blocked(c, identifier, scope):
-    """Requeue one blocked approval unchanged with a fresh retry budget; scope is one of the destination conditions above.
+def reset_blocked(c, identifier):
+    """Requeue one blocked approval for the current sharing binding unchanged, with a fresh retry budget.
 
     Returns whether a row was requeued.
     """
     updated = c.execute("UPDATE outbox SET state='pending',attempts=0,next_attempt=0,detail='' WHERE id=? AND state='blocked' AND "
-                        + scope, (identifier,))
+                        + CURRENT_DESTINATION, (identifier,))
     return updated.rowcount == 1
 
 
-def _blocked_detail(c, row, destination, team_client):
-    """Why this approval must not be sent automatically, or None."""
-    if destination is None:
-        changed = team_client is not None or c.execute('SELECT 1 FROM sharing').fetchone()
-    else:
-        changed = (team_client is None or destination['api_url'] != team_client.api_url
-                   or destination['user_id'] != team_client.user_id)
-    if changed:
+def _blocked_detail(row, destination, team_client):
+    """Why this approval must not be sent automatically, or None.
+
+    An approval without a recorded destination was made before its state folder had a team server (the former local
+    demo mode); it is never sent.
+    """
+    if (destination is None or team_client is None or destination['api_url'] != team_client.api_url
+            or destination['user_id'] != team_client.user_id):
         return '승인 당시 연결과 다릅니다. 자동 전송하지 않았습니다.'
     if row["attempts"] >= MAX_ATTEMPTS:
         return '자동 재시도 횟수 초과'
     return None
 
 
-def _post_to_demo_board(board_url, secret, row):
-    request = urllib.request.Request(board_url + "items/approve", row["payload"].encode(),
-        {"Authorization": "Bearer " + secret, "Content-Type": "application/json"})
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    with opener.open(request, timeout=8) as response:
-        raw = response.read(ACK_LIMIT + 1)
-        if len(raw) > ACK_LIMIT:
-            raise ValueError("승인 응답이 너무 큽니다")
-        ack = json.loads(raw)
-        if response.status != 200 or not isinstance(ack, dict) or ack.get("id") != row["id"]:
-            raise ValueError("승인 응답 불일치")
-
-
-def _send(board_url, secret, team_client, row, destination):
+def _send(team_client, row, destination):
     """('', False) when delivered, otherwise (detail, whether the failure is worth retrying)."""
     try:
-        if destination is not None:
-            team_client.publish(destination, row['payload'], row['created'])
-        else:
-            _post_to_demo_board(board_url, secret, row)
+        team_client.publish(destination, row['payload'], row['created'])
     except urllib.error.HTTPError as error:
         failure('publish', error, row['id'])
         error.close()
@@ -140,8 +118,8 @@ def _send(board_url, secret, team_client, row, destination):
     return "", False
 
 
-def deliver(db, board_url, secret, team_client=None):
-    """Send the next due approval once. Returns False when nothing was due."""
+def deliver(db, team_client):
+    """Send the next due approval once with team_client (None: block it). Returns False when nothing was due."""
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         row = c.execute("SELECT * FROM outbox WHERE state='pending' AND next_attempt<=? ORDER BY created LIMIT 1",
@@ -149,7 +127,7 @@ def deliver(db, board_url, secret, team_client=None):
         if not row:
             return False
         destination = c.execute('SELECT * FROM outbox_destinations WHERE id=?', (row['id'],)).fetchone()
-        blocked = _blocked_detail(c, row, destination, team_client)
+        blocked = _blocked_detail(row, destination, team_client)
         if blocked:
             c.execute("UPDATE outbox SET state='blocked',detail=? WHERE id=?", (blocked, row['id']))
             return True
@@ -157,7 +135,7 @@ def deliver(db, board_url, secret, team_client=None):
         delay = 2 ** attempt
         # Persist the attempt before I/O so a crash cannot reset the retry budget.
         c.execute("UPDATE outbox SET attempts=?,next_attempt=? WHERE id=?", (attempt, time.time() + delay, row["id"]))
-    detail, transient = _send(board_url, secret, team_client, row, destination)
+    detail, transient = _send(team_client, row, destination)
     with connect(db) as c:
         if detail:
             state = "pending" if transient and attempt < MAX_ATTEMPTS else "blocked"

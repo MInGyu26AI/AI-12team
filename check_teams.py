@@ -257,7 +257,7 @@ class TeamIsolation(unittest.TestCase):
             delivery.approve(c, fields.__getitem__, destination)
 
     def deliver(self, client=None):
-        return delivery.deliver(self.db, '/team-board', '', client or self.client)
+        return delivery.deliver(self.db, client or self.client)
 
     def due(self):
         with connect(self.db) as c:
@@ -269,8 +269,7 @@ class TeamIsolation(unittest.TestCase):
 
     def review(self):
         srv = self.enterContext(running_server(Review))
-        srv.db, srv.csrf, srv.secret, srv.team_client = self.db, 'synthetic-csrf', '', self.client
-        srv.board_url = '/team-board'
+        srv.db, srv.csrf, srv.team_client = self.db, 'synthetic-csrf', self.client
         return srv
 
     def form(self, srv, path, **fields):
@@ -495,7 +494,7 @@ class TeamIsolation(unittest.TestCase):
         self.assertEqual(self.api.received,[])
         with connect(self.db) as c:
             c.execute("UPDATE outbox SET state='pending'")
-        delivery.deliver(self.db,'http://127.0.0.1:1/','legacy-secret')
+        delivery.deliver(self.db,None)
         self.assertEqual(self.row()['state'],'blocked')
 
     def test_v1_migration_preserves_local_approval_without_remote_promotion(self):
@@ -513,7 +512,7 @@ class TeamIsolation(unittest.TestCase):
             self.assertEqual(c.execute('SELECT payload FROM outbox').fetchone()[0],packet)
             self.assertEqual(c.execute('SELECT count(*) FROM outbox_destinations').fetchone()[0],0)
             bind_sharing(c,self.client,self.teams['A'])
-        delivery.deliver(legacy,'/team-board','',self.client)
+        delivery.deliver(legacy,self.client)
         with connect(legacy) as c:
             self.assertEqual(c.execute('SELECT state FROM outbox').fetchone()[0],'blocked')
         backups=list(self.state.glob('legacy.sqlite.v1-*.bak.sqlite'))

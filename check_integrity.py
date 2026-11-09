@@ -16,8 +16,7 @@ from unittest.mock import MagicMock, patch
 from collection_session import bind_sharing
 import collector
 import delivery
-from demo_board import Board
-from local_fixtures import FAKE_TEAM, fake_team_api, first_line, get_page, post, public_card, server, wait_until, work_gate
+from local_fixtures import FAKE_TEAM, fake_team_api, first_line, get_page, post, server, wait_until, work_gate
 from review_page import Review
 from runtime import child_environment
 from storage import connect, initialize, runtime_lock
@@ -37,18 +36,16 @@ CREATE TABLE cards(id TEXT PRIMARY KEY,job TEXT,kind TEXT,adopted INTEGER,draft 
 
 
 class IntegrityFixture(unittest.TestCase):
-    """A private database with an ended session, bound to the fake team API's team, and an empty demo board database;
-    cards are added per test."""
+    """A private database with an ended session, bound to the fake team API's team; cards are added per test."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
-        self.db, self.board = self.root / "private.sqlite", self.root / "board.sqlite"
+        self.db = self.root / "private.sqlite"
         self.api = self.enterContext(fake_team_api(self.root))
         self.client = TeamClient(self.api.url, self.api.key_file)
         initialize(self.db)
-        initialize(self.board, board=True)
         with connect(self.db) as c:
             c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (str(self.root), time.time()-20, time.time()-10))
             bind_sharing(c, self.client, FAKE_TEAM)
@@ -68,7 +65,7 @@ class IntegrityFixture(unittest.TestCase):
             delivery.approve(c, fields.__getitem__, dict(c.execute("SELECT * FROM sharing").fetchone()))
 
     def deliver(self):
-        return delivery.deliver(self.db, "", "", self.client)
+        return delivery.deliver(self.db, self.client)
 
     def review(self):
         """This folder's review page connected to the fake team API, as `app.py run --team-api …` serves it."""
@@ -194,6 +191,9 @@ class Integrity(IntegrityFixture):
 
     def test_http_concurrent_approval_manual_recovery_and_boundaries(self):
         fields = dict(self.card(manual=True), target_team=FAKE_TEAM)
+        with server(Review, self.db) as unconnected:
+            self.assertEqual(post(unconnected, "/approve", fields)[0], 400)
+        self.assertEqual(self.row("cards")["status"], "manual")
         srv = self.review()
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
             results = list(pool.map(lambda _: post(srv, "/approve", fields)[0], range(6)))
@@ -208,28 +208,22 @@ class Integrity(IntegrityFixture):
             self.assertEqual(c.execute("SELECT count(*) FROM outbox").fetchone()[0], 1)
         with patch.object(collector, "call_api", side_effect=AssertionError("empty draft must not call AI")):
             collector.draft(self.db, self.row("jobs"), work_gate())
-        with server(Board, self.board) as srv:
-            for payload in (None, [], {}, dict(id="x",label="unknown",text="x",quote="x",speaker="AI")):
-                self.assertEqual(post(srv, "/items/approve", payload, True)[0], 400)
 
-    def test_demo_board_refuses_team_packets(self):
-        packet = dict(id="x", label="결정", text="DB = SQLite", quote="SQLite로 결정했다.", speaker="사용자", version=2, card=public_card())
-        with server(Board, self.board) as srv:
-            self.assertEqual(post(srv, "/items/approve", packet, True)[0], 400)
-        with connect(self.board) as c:
-            self.assertEqual(c.execute("SELECT count(*) FROM records").fetchone()[0], 0)
-
-    def test_demo_board_checks_host_and_path_before_the_secret(self):
-        with server(Board, self.board) as srv:
-            connection = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
-            try:
-                connection.putrequest("POST", "/elsewhere")
-                connection.putheader("Authorization", b"Bearer \xe9")
-                connection.putheader("Content-Length", "0")
-                connection.endheaders()
-                self.assertEqual(connection.getresponse().status, 403)
-            finally:
-                connection.close()
+    def test_approval_without_destination_is_never_sent(self):
+        """An approval with no recorded destination (made in the former local demo mode) stays in the folder: the
+        delivery worker blocks it and the retry form cannot requeue it."""
+        self.card()
+        packet = dict(id="c", label="결정", text="original draft", quote=QUOTE, speaker="사용자")
+        with connect(self.db) as c:
+            c.execute("UPDATE cards SET status='queued' WHERE id='c'")
+            c.execute("INSERT INTO outbox(id,payload,state,created) VALUES('c',?,'pending',?)",
+                      (json.dumps(packet, ensure_ascii=False), time.time()))
+        self.assertTrue(self.deliver())
+        self.assertEqual(self.row("outbox")["state"], "blocked")
+        self.assertEqual(post(self.review(), "/retry-delivery", dict(id="c", teamId=FAKE_TEAM))[0], 400)
+        self.assertEqual(self.row("outbox")["state"], "blocked")
+        self.assertFalse(self.deliver())
+        self.assertEqual(self.api.records, {})
 
     def test_ended_session_refuses_the_legacy_api_call(self):
         """collector.call_api checks the collection window before the key or any network access."""
@@ -296,6 +290,15 @@ class Integrity(IntegrityFixture):
                 self.fail("second owner acquired lock")
         with runtime_lock(path):
             pass
+
+    def test_cli_without_team_server_refuses_before_starting(self):
+        state = self.root / "new-state"
+        result = subprocess.run([sys.executable, str(APP), "run", "--project", str(self.root), "--state", str(state)],
+                                env=child_environment(), capture_output=True, text=True, encoding="utf-8", timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("팀 서버 연결이 필요합니다", result.stderr)
+        self.assertIn("팀_서버_사용법.md", result.stderr)
+        self.assertFalse(state.exists())
 
     def test_cli_restart_and_single_owner(self):
         fields = self.card()

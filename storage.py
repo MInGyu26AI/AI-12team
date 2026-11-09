@@ -45,7 +45,7 @@ def runtime_lock(path):
             release()
 
 
-# Text limits (1200) and board labels repeat card_contract.MAX_TEXT, KIND_LABELS and UNADOPTED_LABEL.
+# Text limits (1200) repeat card_contract.MAX_TEXT.
 PRIVATE_SCHEMA = {
     "settings": """id INTEGER PRIMARY KEY CHECK(id=1), project TEXT NOT NULL,
         start REAL NOT NULL CHECK(start>=0), end REAL NOT NULL CHECK(end>=start),
@@ -74,13 +74,6 @@ PRIVATE_SCHEMA = {
         next_attempt REAL NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '',
         created REAL NOT NULL""",
 }
-BOARD_SCHEMA = {
-    "records": """id TEXT PRIMARY KEY NOT NULL CHECK(length(id) BETWEEN 1 AND 1200),
-        label TEXT NOT NULL CHECK(label IN ('결정','결정 · 채택 미확인','조사','할 일')),
-        text TEXT NOT NULL CHECK(length(trim(text)) BETWEEN 1 AND 1200),
-        quote TEXT NOT NULL CHECK(length(trim(quote)) BETWEEN 1 AND 1200),
-        speaker TEXT NOT NULL CHECK(speaker IN ('사용자','AI'))""",
-}
 
 
 def backup_before_migration(db, tag):
@@ -94,10 +87,8 @@ def backup_before_migration(db, tag):
         source.backup(dest)
 
 
-def initialize(db, board=False):
-    created = initialize_v1(db, board)
-    if board:
-        return
+def initialize(db):
+    created = initialize_v1(db)
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("PRAGMA user_version").fetchone()[0] == 2:
@@ -118,36 +109,35 @@ def initialize(db, board=False):
         c.execute("PRAGMA user_version=2")
 
 
-def initialize_v1(db, board=False):
+def initialize_v1(db):
     """Create the version 1 schema, or convert unversioned tables to it. True when it created an empty database."""
-    schema = BOARD_SCHEMA if board else PRIVATE_SCHEMA
     with connect(db) as c:
         c.execute("BEGIN IMMEDIATE")
         version = c.execute("PRAGMA user_version").fetchone()[0]
-        if version == 1 or (version == 2 and not board):
+        if version in (1, 2):
             return False
         if version != 0:
             raise ValueError("지원하지 않는 DB 버전입니다.")
         tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        legacy = set(schema) - ({"outbox"} if not board else set())
+        legacy = set(PRIVATE_SCHEMA) - {"outbox"}
         if tables and tables != legacy:
             raise ValueError("기존 DB 구성을 확인해 주세요. 자동 변경하지 않았습니다.")
         if tables:
             backup_before_migration(db, "v0")
-            for name in schema:
+            for name in PRIVATE_SCHEMA:
                 if name in tables:
                     c.execute(f"ALTER TABLE {name} RENAME TO {name}_legacy")
-        for name, columns in schema.items():
+        for name, columns in PRIVATE_SCHEMA.items():
             c.execute(f"CREATE TABLE {name} ({columns})")
             if name in tables:
                 c.execute(f"INSERT INTO {name} SELECT * FROM {name}_legacy ORDER BY rowid")
-        for name in reversed(list(schema)):
+        for name in reversed(list(PRIVATE_SCHEMA)):
             if name in tables:
                 c.execute(f"DROP TABLE {name}_legacy")
-        if not board:
-            c.execute("""CREATE TRIGGER frozen_payload BEFORE UPDATE OF id,payload,created ON outbox
+        # The trigger text keeps its earlier indentation, so new databases store the same SQL as before.
+        c.execute("""CREATE TRIGGER frozen_payload BEFORE UPDATE OF id,payload,created ON outbox
                 BEGIN SELECT RAISE(ABORT,'approved payload is immutable'); END""")
-            c.execute("""CREATE TRIGGER frozen_card BEFORE UPDATE ON cards
+        c.execute("""CREATE TRIGGER frozen_card BEFORE UPDATE ON cards
                 WHEN OLD.status IN ('queued','shared') AND
                   (NEW.id IS NOT OLD.id OR NEW.job IS NOT OLD.job OR NEW.kind IS NOT OLD.kind
                    OR NEW.adopted IS NOT OLD.adopted OR NEW.draft IS NOT OLD.draft

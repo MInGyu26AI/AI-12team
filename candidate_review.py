@@ -5,7 +5,7 @@ from ai.syncup_ai.evidence import locate_evidence, render_evidence
 from ai.syncup_ai.mask import has_mask_token, mask
 from card_contract import PUBLIC_FIELDS, validate_card
 from collection_session import bound_team
-from delivery import CURRENT_DESTINATION, approve, reset_blocked
+from delivery import approve, reset_blocked
 from storage import connect
 
 EDITABLE = {'content', 'sentence', 'owner', 'due', 'reason', 'topic_key', 'subtopic', 'confirmedRole'}
@@ -128,6 +128,6 @@ def retry_delivery(pipeline, params):
     with pipeline.write() as c:
         if 'teamId' in params and params['teamId'] != bound_team(c):
             raise ValueError('대상 팀이 변경되었습니다.')
-        if not reset_blocked(c, params['id'], CURRENT_DESTINATION):
+        if not reset_blocked(c, params['id']):
             raise ValueError('현재 팀에 재시도할 전송이 없습니다.')
     return dict(queued=True)

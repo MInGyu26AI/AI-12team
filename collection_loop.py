@@ -19,7 +19,7 @@ DELIVERY_SECONDS = 1
 def send_approved(srv):
     while True:
         try:
-            deliver(srv.db, srv.board_url, srv.secret, srv.team_client)
+            deliver(srv.db, srv.team_client)
         except Exception as error:
             failure('delivery', error)
         time.sleep(DELIVERY_SECONDS)

@@ -33,7 +33,7 @@ from storage import connect, initialize
 import turn_intake
 from turn_pipeline import TurnPipeline
 
-# Seconds a child process may take to print its first line (the review service or the board is listening).
+# Seconds a child process may take to print its first line (the review service is listening).
 READY_TIMEOUT = 8
 # Synthetic privacy inputs: a work line that must survive, secrets and contacts that must not, personal text.
 KEEP = 'SQLite 사용을 결정했다. PRIVACY_CANARY_KEEP 날짜 2026-11-08'
@@ -263,10 +263,9 @@ def leaked(requests, value):
 
 @contextmanager
 def server(handler, db):
-    """handler on a loopback port with fixture secrets; the review page links to it as its board."""
+    """handler on a loopback port with the fixture csrf token, no team client and no pipeline (checks set them)."""
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    srv.db, srv.secret, srv.csrf = db, "fixture-only", "fixture-csrf"
-    srv.board_url = f"http://127.0.0.1:{srv.server_port}/"
+    srv.db, srv.csrf = db, "fixture-csrf"
     srv.team_client = srv.pipeline = None
     with _serving(srv):
         yield srv
@@ -374,13 +373,11 @@ def _send(srv, method, path, body=None, headers=None):
         connection.close()
 
 
-def post(srv, path, fields, board=False, origin=None):
-    """(status, body). A form post (with the fixture csrf unless fields name one), or a board approval with board=True.
+def post(srv, path, fields, origin=None):
+    """(status, body) of a form post, with the fixture csrf unless fields name one.
 
     fields may be a list of pairs to repeat a field.
     """
-    if board:
-        return _send(srv, "POST", path, json.dumps(fields).encode(), {"Authorization": "Bearer " + srv.secret})
     pairs = list(fields.items()) if isinstance(fields, dict) else list(fields)
     if not any(name == 'csrf' for name, _ in pairs):
         pairs.insert(0, ('csrf', srv.csrf))

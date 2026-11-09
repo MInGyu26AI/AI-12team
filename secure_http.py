@@ -1,6 +1,5 @@
-"""Strict HTTP for SyncUp. Server side: the handler base of the local review page, the demo board and the team API
-(strict response headers, an exact Host check, bounded request bodies). Client side: an opener handler that refuses
-redirects."""
+"""Strict HTTP for SyncUp. Server side: the handler base of the local review page and the team API (strict response
+headers, an exact Host check, bounded request bodies). Client side: an opener handler that refuses redirects."""
 import http.server
 import urllib.request
 
@@ -12,7 +11,7 @@ CONTENT_SECURITY_POLICY = ("default-src 'none'; style-src 'unsafe-inline'; scrip
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Refuse every redirect: the team API, the demo board and the local RPC endpoint never send one."""
+    """Refuse every redirect: the team API and the local RPC endpoint never send one."""
 
     def redirect_request(self, *args, **kwargs):
         return None
