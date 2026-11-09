@@ -17,7 +17,7 @@ HELD_BATCHES = '''SELECT p.job,p.reason,p.decided,p.detail,x.messages FROM priva
 DECIDED_BATCHES = '''SELECT p.job,p.decided,p.detail,x.messages FROM privacy_jobs p JOIN job_context x ON x.job=p.job
     WHERE x.team_id=? ORDER BY p.decided DESC, p.job'''
 # Params: job id, team id.
-HELD_BATCH = '''SELECT p.detail,x.messages FROM privacy_jobs p JOIN job_context x ON x.job=p.job JOIN jobs j ON j.id=p.job
+HELD_BATCH = '''SELECT p.detail,p.model,x.messages FROM privacy_jobs p JOIN job_context x ON x.job=p.job JOIN jobs j ON j.id=p.job
     WHERE p.job=? AND x.team_id=? AND j.state='new' AND p.decision='hold' '''
 
 
@@ -82,7 +82,7 @@ def request_review(pipeline, method, params):
             _record_exclusions(c, params['id'], params, json.loads(row['detail']))
             reason = 'exclude_requested'
         else:
-            pipeline.privacy.forget_holds(c, json.loads(row['messages']))
+            pipeline.privacy.forget_holds(c, json.loads(row['messages']), row['model'])
             reason = 'recheck_requested'
         # Still held (nothing is sent from here) until the next run writes a new decision; the screen shows it as pending.
         c.execute('UPDATE privacy_jobs SET reason=?,decided=? WHERE job=?', (reason, time.time(), params['id']))

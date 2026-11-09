@@ -254,9 +254,11 @@ class Gate:
             c.execute('INSERT OR REPLACE INTO privacy_jobs VALUES(?,?,?,?,?,?,?)',
                       (job, POLICY_VERSION, identity, decision, reason, json.dumps(detail, ensure_ascii=False), time.time()))
 
-    def forget_holds(self, c, messages: list[dict]) -> None:
-        """Drop cached model answers for these messages so a recheck asks the model again."""
-        identity = self.last_state.get('model')
+    def forget_holds(self, c, messages: list[dict], identity: str | None) -> None:
+        """Drop the cached answers of the model that judged these messages (privacy_jobs.model), so a recheck asks again.
+
+        The identity comes from the stored decision, not from this process: after a restart no model has been asked yet.
+        """
         if not identity:
             return
         for m in messages:

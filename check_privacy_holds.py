@@ -101,6 +101,20 @@ class FailClosed(PrivacyFixture):
         self.assertEqual(dispatch(self.pipeline, 'privacy.list', {})['items'], [])
         self.assertEqual(collection_status(self.pipeline)['counts']['privacyExcluded'], 1)
 
+    def test_recheck_after_restart_asks_the_model_again(self):
+        unclear = 'API 명세 일정은 다시 정하자'
+        self.pipeline.privacy = Gate(Scripted({unclear: dict(label='bogus')}))  # malformed: cached as invalid, held
+        turn_intake.append(self.pipeline, [self.message('m', unclear)], True)
+        self.run_offline()
+        job = dispatch(self.pipeline, 'privacy.list', {})['items'][0]['id']
+        restarted = TurnPipeline(self.db, Client())
+        restarted.llm_factory, restarted.decider_factory = self.pipeline.llm_factory, (lambda: None)
+        restarted.privacy = Gate(Scripted())  # the model now answers work; this process has not asked it anything yet
+        dispatch(restarted, 'privacy.recheck', dict(id=job, teamId='a'))
+        with offline(self.requests):
+            classify_queued(restarted)
+        self.assertEqual(len(self.requests), 1)
+
     def test_recheck_request_stays_held_until_the_worker_decides(self):
         gate = Gate(Scripted(mode='down'))
         self.pipeline.privacy = gate
