@@ -1,5 +1,7 @@
 """Synthetic boundary checks: no API key or external requests."""
+import contextlib
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +14,14 @@ from syncup_ai import classify, conflict
 from syncup_ai.llm import DecisionsClient, LLMError, RetryableLLMError, choice_q, predicate_q
 from tests.fakes import CTX, FakeLLM, dec, msg
 from tests.loopback import Reply, loopback_server
+
+TARGET = '타깃은 대학생으로 가자.'
+
+
+def chat_decision():
+    """TARGET 발화를 결정 카드 한 장으로 분류하는 가짜 chat 모델."""
+    return FakeLLM({'cards': [dict(msg=1, relevance='related', sentence=TARGET, tag='decision',
+                   subtopic='주제·목표', topic_key='타깃', content='타깃 = 대학생', owner='김단비', confidence=.9)]})
 
 
 class DecisionsValidationTest(unittest.TestCase):
@@ -130,15 +140,24 @@ class DecisionsValidationTest(unittest.TestCase):
         chat.chat_json.assert_not_called()
 
     def test_classification_does_not_hide_malformed_response(self):
-        text = '타깃은 대학생으로 가자.'
-        llm = FakeLLM({'cards': [dict(msg=1, relevance='related', sentence=text, tag='decision',
-                   subtopic='주제·목표', topic_key='타깃', content='타깃 = 대학생', owner='김단비', confidence=.9)]})
         for response in ({'answers': []}, {'answers': [dict(type='refusal', name='u1_rel')]}):
             with patch('syncup_ai.llm._post', return_value=response) as post:
-                result = classify.handle_request({'context': CTX, 'messages': [msg(1, text)]}, llm, self.client)
+                result = classify.handle_request({'context': CTX, 'messages': [msg(1, TARGET)]},
+                                                 chat_decision(), self.client)
             self.assertFalse(result['ok'])
             self.assertNotIn('cards', result)
             self.assertEqual(post.call_count, 1)
+
+    def test_classification_http_failure_logs_only_error_type_and_status(self):
+        # 오류 본문이 키와 요청 원문을 그대로 돌려줘도, 로그 줄에는 예외 종류와 HTTP 상태만 남는다
+        reply = Reply(403, f'{{"error": "bad key synthetic-key for {TARGET}"}}'.encode())
+        log = io.StringIO()
+        with loopback_server(reply) as origin, contextlib.redirect_stderr(log):
+            self.client.base_url = origin
+            cards = classify.classify({'context': CTX, 'messages': [msg(1, TARGET)]}, chat_decision(), self.client)
+        self.assertEqual(log.getvalue(), '[syncup_ai] Decisions 라벨 실패, chat 라벨 사용: LLMError HTTP 403\n')
+        self.assertEqual((cards[0]['tag'], cards[0]['classificationMethod']), ('decision', 'chat'))
+        self.assertEqual(len(reply.requests), 1)
 
     def test_real_http_and_cli_keep_invalid_responses_failed(self):
         reply = Reply()
