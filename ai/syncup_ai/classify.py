@@ -18,7 +18,9 @@ from .evidence import locate_evidence
 from .schema import SUBTOPICS, normalize_card
 
 KST = ZoneInfo("Asia/Seoul")
-SITE_LABEL = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "codex": "Codex", "claude-code": "Claude Code"}
+# 발화 site → 카드 출처 이름. manual·chatgpt-export 는 웹 백업 입력(대화 붙여넣기·내보내기 파일)이다.
+SITE_LABEL = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "codex": "Codex", "claude-code": "Claude Code",
+              "manual": "직접 입력", "chatgpt-export": "ChatGPT 내보내기"}
 
 
 def _system_prompt() -> str:
@@ -54,7 +56,7 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
     """AI 에 보낼 사용자 메시지와 번호별 발화 정보 [{source, masked, role, context}]."""
     user = context.get("userName", "")
     names = context.get("knownNames") or []
-    enabled = context.get("enabledSubtopics") or list(SUBTOPICS)
+    enabled = context.get("enabledSubtopics") or list(SUBTOPICS)  # 비어 있으면 모두 켬 (로컬 수집기 기본값이 [])
     topics = context.get("existingTopicKeys") or []
     decisions = context.get("existingDecisions") or []
 

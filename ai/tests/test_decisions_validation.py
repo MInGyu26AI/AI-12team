@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 from syncup_ai import classify, conflict
 from syncup_ai.llm import DecisionsClient, LLMError, RetryableLLMError, choice_q, predicate_q
+from syncup_ai.schema import SUBTOPICS
 from tests.fakes import CTX, FakeLLM, dec, msg
 from tests.loopback import Reply, loopback_server
 
@@ -147,6 +148,22 @@ class DecisionsValidationTest(unittest.TestCase):
             self.assertFalse(result['ok'])
             self.assertNotIn('cards', result)
             self.assertEqual(post.call_count, 1)
+
+    def test_subtopic_choices_keep_other_and_empty_list_means_all_on(self):
+        # 역할·일정만 켜 둠(주제·목표·기타는 끔): 주제·목표 발화는 켜 둔 역할·일정이 아니라 기타로 가야 한다.
+        # 실제 클라이언트는 선택지에 없는 답을 거절하므로, 기타가 선택지에 없으면 분류가 실패한다.
+        def answer_other(url, key, body):
+            return {'answers': [dict(type='predicate', name=q['name'], probability=0.0) if q['type'] == 'predicate'
+                                else dict(type='choice', name=q['name'], confidence=.9,
+                                          choice='기타' if q['name'] == 'u1_sub' else q['choices'][0]['value'])
+                                for q in body['questions']]}
+        for enabled, offered in ((['역할·일정'], ['역할·일정', '기타']), ([], list(SUBTOPICS))):  # [] 은 모두 켬
+            request = {'context': {**CTX, 'enabledSubtopics': enabled}, 'messages': [msg(1, TARGET)]}
+            with self.subTest(enabled=enabled), patch('syncup_ai.llm._post', side_effect=answer_other) as post:
+                cards = classify.classify(request, chat_decision(), self.client)
+                choices = next(q['choices'] for q in post.call_args.args[2]['questions'] if q['name'] == 'u1_sub')
+                self.assertEqual([c['value'] for c in choices], offered)
+                self.assertEqual((cards[0]['subtopic'], cards[0]['classificationMethod']), ('기타', 'decisions'))
 
     def test_classification_http_failure_logs_only_error_type_and_status(self):
         # 오류 본문이 키와 요청 원문을 그대로 돌려줘도, 로그 줄에는 예외 종류와 HTTP 상태만 남는다

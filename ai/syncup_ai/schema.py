@@ -102,7 +102,8 @@ def _related_card(raw: dict, sentence: str, source: str, confidence: float, mode
     reason = _str_or_none(raw.get("reason"))
     if reason:
         reason = mask(reason)[0]
-    # 이 카드 문장에 가림 표시가 있으면 true (발화 다른 부분만 가린 경우는 false). 가림 결과는 모두 MASK_TOKENS 중 하나다.
+    # 이 카드 문장에 가림 표시가 있으면 true (발화 다른 부분만 가린 경우는 false). mask() 가 넣는 표시는 모두
+    # MASK_TOKENS 에 있지만, 로컬 개인정보 게이트가 넣는 [비밀키]는 없어서 여기서 잡히지 않는다.
     masked = model_masked or has_mask_token(sentence + content)
 
     labels = _board_labels(raw, content, existing_topics, enabled_subtopics)
