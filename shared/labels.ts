@@ -9,11 +9,14 @@ export const TAG_LABEL: Record<Tag, string> = {
   none: "제안",
 };
 
+// 개인·제안 배지 색. 문자열로 따로 둬서 isShareable 만 쓰는 확장 번들에 TAG_COLOR 표가 남지 않게 한다
+export const PERSONAL_COLOR = "bg-tag-personal-soft text-tag-personal border-transparent";
+
 export const TAG_COLOR: Record<Tag, string> = {
   decision: "bg-tag-decision-soft text-tag-decision border-tag-decision/20",
   todo: "bg-tag-todo-soft text-tag-todo border-tag-todo/20",
   research: "bg-tag-research-soft text-tag-research border-tag-research/20",
-  none: "bg-tag-personal-soft text-tag-personal border-transparent",
+  none: PERSONAL_COLOR,
 };
 
 // 승인함 카드 테두리 (피그마 4번: 결정 남색 · 할 일 주황 · 조사 초록)
@@ -23,7 +26,6 @@ export const TAG_BORDER: Record<Tag, string> = {
   research: "border-tag-research/70",
   none: "border-border",
 };
-export const PERSONAL_COLOR = TAG_COLOR.none;
 
 // 충돌 판정 배지 (변경도 경고로 보여 주되 색으로 구분)
 export const JUDGEMENT_COLOR: Record<Judgement, string> = {
