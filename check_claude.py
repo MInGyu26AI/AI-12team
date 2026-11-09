@@ -9,12 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import app
+import collection_loop
 import collector
 import delivery
-from check_integrity import post, server
-from check_local_privacy import work_gate
 from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line, write_lock
+from demo_board import Board
+from local_fixtures import post, server, work_gate
+from review_page import Review
+from storage import initialize
 
 HIDDEN = ("demo@example.com", "TOOL_SECRET", "TOOL_RESULT_SECRET", "PRIVATE_THOUGHT", "COMMENTARY_NOT_EVIDENCE")
 CLAUDE_EXCERPT_FIELDS = {"n", "role", "text", "source", "session_id", "message_id", "timestamp",
@@ -33,7 +35,7 @@ class ClaudeScannerChecks(unittest.TestCase):
         self.claude = self.root / "claude"
         self.folder = self.claude / "projects" / re.sub("[^a-zA-Z0-9]", "-", self.project)
         self.folder.mkdir(parents=True)
-        collector.initialize(db)
+        initialize(db)
         self.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.project, self.start, self.start + 600))
         self.codex = self.root / "codex"  # absent unless a check creates it
 
@@ -242,10 +244,11 @@ class ClaudeScannerChecks(unittest.TestCase):
         with self.assertRaises(ValueError, msg="broken Codex source was not reported"):
             self.scan()
         self.assertEqual(self.job_sessions(), [session])
-        with (patch.object(app,"scan",side_effect=ValueError("source unavailable")), patch.object(app,"process") as process,
-              patch.object(app.time,"sleep",side_effect=RuntimeError("stop test loop"))):
+        with (patch.object(collection_loop, "scan", side_effect=ValueError("source unavailable")),
+              patch.object(collection_loop, "process") as process,
+              patch.object(collection_loop.time, "sleep", side_effect=RuntimeError("stop test loop"))):
             try:
-                app.watch(db,missing_codex,claude)
+                collection_loop.watch(db, missing_codex, claude)
             except RuntimeError:
                 pass
             process.assert_called_once_with(db)
@@ -259,8 +262,8 @@ class ClaudeScannerChecks(unittest.TestCase):
             collector.classify(db, job, work_gate())
             collector.draft(db, job, work_gate())
         board = self.root / "board.sqlite"
-        collector.initialize(board,board=True)
-        with server(app.Review,db) as review, server(app.Board,board) as board_server:
+        initialize(board, board=True)
+        with server(Review, db) as review, server(Board, board) as board_server:
             approval = dict(id=job["id"] + "-decision", text="Supabase를 사용한다.", quote="DB는 Supabase로 확정했어.")
             self.assertEqual(post(review, "/approve", approval)[0], 303)
             delivery.deliver(db, board_server.board_url, board_server.secret)

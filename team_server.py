@@ -9,11 +9,11 @@ import uuid
 
 import psycopg
 
-from app import LocalHandler
 from conflict_checks import retry_check
 from conflict_resolution import resolve
 from conflict_scheduler import schedule
 from diagnostics import failure
+from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
 from team_board import board, conflict_events, conflicts, done_todos, mark_todo, shared_item, shared_items
 from team_publish import publish
@@ -47,7 +47,7 @@ class TeamServer(http.server.ThreadingHTTPServer):
         super().shutdown()
 
 
-class TeamHandler(LocalHandler):
+class TeamHandler(SecureHandler):
     timeout = 10
 
     def do_GET(self):

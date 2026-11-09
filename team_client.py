@@ -10,10 +10,12 @@ import urllib.parse
 import urllib.request
 import uuid
 
-from delivery import NoRedirect, validate_packet
+from card_contract import validate_packet
+from delivery import NoRedirect
 
 
 NETWORK_ERRORS = (urllib.error.URLError, http.client.HTTPException, OSError, ValueError)
+RESPONSE_LIMIT = 4 * 1024 * 1024
 
 
 class TeamClient:
@@ -47,8 +49,8 @@ class TeamClient:
             error.close()
             raise
         with response:
-            raw = response.read(4 * 1024 * 1024 + 1)
-            if response.status != 200 or len(raw) > 4 * 1024 * 1024:
+            raw = response.read(RESPONSE_LIMIT + 1)
+            if response.status != 200 or len(raw) > RESPONSE_LIMIT:
                 raise ValueError('팀 API 응답 오류')
             result = json.loads(raw)
             if not isinstance(result, dict):

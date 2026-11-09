@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements-team.txt
 # Explicit source allowlist excludes local DBs, credentials, tests and reports.
 COPY cloud_server.py team_server.py team_access.py team_board.py team_publish.py ./
 COPY conflict_checks.py conflict_resolution.py conflict_scheduler.py ./
-COPY app.py collector.py delivery.py diagnostics.py storage.py runtime.py team_client.py card_contract.py local_privacy.py retention.py ./
+COPY secure_http.py diagnostics.py card_contract.py ./
 COPY ai/syncup_ai/*.py ./ai/syncup_ai/
 COPY ai/prompts/*.md ./ai/prompts/
 USER 65534:65534

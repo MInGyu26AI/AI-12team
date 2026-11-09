@@ -4,8 +4,8 @@ import time
 
 from psycopg.types.json import Jsonb
 
+from card_contract import validate_packet
 from conflict_checks import enqueue
-from delivery import validate_packet
 from team_access import AccessError
 
 ENVELOPE = {'packet', 'approved_by', 'approved_at'}

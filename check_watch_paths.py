@@ -1,16 +1,15 @@
-"""app.watch collection paths, one loop iteration each, on a temp SQLite: no network, no Rust scanner.
+"""collection_loop.watch paths, one loop iteration each, on a temp SQLite: no network, no Rust scanner.
 
-Integrated: standard path (capture_local_jobs, then Pipeline.process) and then the legacy-compat drain
+Integrated: standard path (capture_scanned_jobs, then classify_queued) and then the legacy-compat drain
 process(db, drafts_only=True, gate=pipeline.privacy). Non-integrated: process(db) only.
 """
 import tempfile
-import time
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
-import app
-from storage import connect, initialize
+import collection_loop
+from local_fixtures import private_db
+from storage import connect
 
 
 class _StopLoop(Exception):
@@ -18,39 +17,36 @@ class _StopLoop(Exception):
 
 
 class FakePipeline:
-    def __init__(self, calls, capture_error=None, process_error=None):
-        self.calls = calls
+    """watch only hands the pipeline to the stage functions and gives its privacy gate to the legacy drain."""
+    def __init__(self):
         self.privacy = object()  # bare object: equality in call assertions means identity
-        self.capture_error = capture_error
-        self.process_error = process_error
-
-    def capture_local_jobs(self):
-        self.calls.append('capture_local_jobs')
-        if self.capture_error:
-            raise self.capture_error
-
-    def process(self):
-        self.calls.append('pipeline.process')
-        if self.process_error:
-            raise self.process_error
 
 
 class WatchPaths(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
-        self.db = Path(self.temp.name) / 'private.sqlite'; initialize(self.db)
-        with connect(self.db) as c:
-            c.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.temp.name, time.time() - 10, time.time() + 600))
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.db = private_db(temp.name, bound=False)
         self.calls = []
 
-    def run_once(self, pipeline=None, scan_error=None):
+    def recorder(self, name, error=None):
+        def call(*args, **kwargs):
+            self.calls.append(name)
+            if error:
+                raise error
+        return call
+
+    def run_once(self, pipeline=None, scan_error=None, capture_error=None, classify_error=None):
         """Runs one watch iteration and returns the patched collector process."""
-        def collector_process(*args, **kwargs):
-            self.calls.append('process')
-        with patch('app.scan', side_effect=scan_error), patch('app.process', side_effect=collector_process) as process, \
-             patch('app.retention.sweep'), patch('app.time.sleep', side_effect=_StopLoop):
+        with patch('collection_loop.scan', side_effect=scan_error), \
+             patch('collection_loop.process', side_effect=self.recorder('process')) as process, \
+             patch('collection_loop.turn_intake.capture_scanned_jobs',
+                   side_effect=self.recorder('capture_scanned_jobs', capture_error)), \
+             patch('collection_loop.batch_classification.classify_queued',
+                   side_effect=self.recorder('classify_queued', classify_error)), \
+             patch('collection_loop.retention.sweep'), patch('collection_loop.time.sleep', side_effect=_StopLoop):
             with self.assertRaises(_StopLoop):
-                app.watch(self.db, None, pipeline=pipeline)
+                collection_loop.watch(self.db, None, pipeline=pipeline)
         return process
 
     def status(self):
@@ -58,9 +54,9 @@ class WatchPaths(unittest.TestCase):
             return c.execute('SELECT status FROM settings').fetchone()[0]
 
     def test_integrated_runs_standard_path_then_legacy_drain(self):
-        pipeline = FakePipeline(self.calls)
+        pipeline = FakePipeline()
         process = self.run_once(pipeline)
-        self.assertEqual(self.calls, ['capture_local_jobs', 'pipeline.process', 'process'])
+        self.assertEqual(self.calls, ['capture_scanned_jobs', 'classify_queued', 'process'])
         process.assert_called_once_with(self.db, drafts_only=True, gate=pipeline.privacy)
         self.assertEqual(self.status(), '')
 
@@ -70,26 +66,25 @@ class WatchPaths(unittest.TestCase):
         self.assertEqual(self.status(), '')
 
     def test_capture_failure_status_is_written_and_processing_continues(self):
-        pipeline = FakePipeline(self.calls, capture_error=ValueError('PRIVATE_INPUT'))
+        pipeline = FakePipeline()
         with self.assertLogs('syncup', level='WARNING') as logs:
-            process = self.run_once(pipeline)
+            process = self.run_once(pipeline, capture_error=ValueError('PRIVATE_INPUT'))
         self.assertIn('local_intake', logs.output[0])
-        self.assertEqual(self.calls, ['capture_local_jobs', 'pipeline.process', 'process'])
+        self.assertEqual(self.calls, ['capture_scanned_jobs', 'classify_queued', 'process'])
         process.assert_called_once_with(self.db, drafts_only=True, gate=pipeline.privacy)
         self.assertEqual(self.status(), '로컬 발췌 변환 실패 · 원본 작업 보존')
 
     def test_scan_failure_status_is_kept_unless_capture_fails(self):
         with self.assertLogs('syncup', level='WARNING'):
-            self.run_once(FakePipeline(self.calls), scan_error=OSError('source'))
+            self.run_once(FakePipeline(), scan_error=OSError('source'))
         self.assertEqual(self.status(), '대화 기록 확인 실패 · OSError')
         with self.assertLogs('syncup', level='WARNING'):
-            self.run_once(FakePipeline(self.calls, capture_error=ValueError('input')), scan_error=OSError('source'))
+            self.run_once(FakePipeline(), scan_error=OSError('source'), capture_error=ValueError('input'))
         self.assertEqual(self.status(), '로컬 발췌 변환 실패 · 원본 작업 보존')
 
     def test_pipeline_process_error_reaches_worker_handler(self):
-        pipeline = FakePipeline(self.calls, process_error=RuntimeError('boom'))
         with self.assertLogs('syncup', level='WARNING') as logs:
-            process = self.run_once(pipeline)
+            process = self.run_once(FakePipeline(), classify_error=RuntimeError('boom'))
         process.assert_not_called()
         self.assertIn('collection_worker', logs.output[-1])
         self.assertEqual(self.status(), '대화 처리 실패 · RuntimeError')

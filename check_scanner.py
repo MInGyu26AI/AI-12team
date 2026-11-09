@@ -12,8 +12,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import collector
-from check_local_privacy import work_gate
+from local_fixtures import work_gate
 from runtime import child_environment, collector_binary
+from storage import initialize
 
 SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
 PROMPT = "DB는 Supabase로 확정했어. 이메일 demo@example.com"
@@ -71,7 +72,7 @@ class CodexScannerChecks(unittest.TestCase):
         self.sessions = self.codex / "sessions"
         self.sessions.mkdir(parents=True)
         db = self.db = self.root / "private.sqlite"
-        collector.initialize(db)
+        initialize(db)
         self.execute("INSERT INTO settings VALUES(1,?,?,?,0,'')", (self.project, self.start, self.start + 600))
         with collector.connect(self.codex / "state_5.sqlite") as c:
             c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,"

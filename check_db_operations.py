@@ -9,11 +9,11 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from check_integration_store import IntegrationStore
+from check_pipeline_schema import PipelineSchema
 from check_team_integration import TeamIntegration
 from check_teams import own_tests, team_api_process
 from delivery import approve
-from integration_store import initialize_integration
+from pipeline_schema import ensure_pipeline_schema
 from storage import connect
 from team_access import verify_database
 from team_client import TeamClient
@@ -40,20 +40,20 @@ def sqlite_rows(c):
     return {n: sorted([tuple(r) for r in c.execute('SELECT * FROM "'+n+'"')], key=repr) for n in names}
 
 
-class LocalUpgrade(IntegrationStore):
+class LocalUpgrade(PipelineSchema):
     def test_populated_14_to_17_and_backup_restore(self):
         with connect(self.db) as c:
             approve(c, dict(id='c',text='DB = SQLite',quote='SQLite로 결정했다.').__getitem__,dict(c.execute('SELECT * FROM sharing').fetchone()))
-        with patch('integration_store.local_privacy.initialize'):
-            initialize_integration(self.db)
+        with patch('pipeline_schema.local_privacy.initialize'):
+            ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             before = sqlite_rows(c)
         self.assertEqual(len(before),14)
         backup = self.db.with_name('before-upgrade.sqlite')
         with connect(self.db) as c, connect(backup) as b:
             c.backup(b)
-        initialize_integration(self.db)
-        initialize_integration(self.db)
+        ensure_pipeline_schema(self.db)
+        ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             after = sqlite_rows(c)
             self.assertEqual(len(after),17)
@@ -65,7 +65,7 @@ class LocalUpgrade(IntegrationStore):
             b.backup(c)
         with connect(restored) as c:
             self.assertEqual(sqlite_rows(c),before)
-        initialize_integration(restored)
+        ensure_pipeline_schema(restored)
         with connect(restored) as c:
             self.assertEqual(sqlite_rows(c),after)
 

@@ -10,8 +10,9 @@ from unittest.mock import patch
 import check_team_integration
 from check_teams import ObservedTeamHandler, ROOT, request, running_server
 from native_host import request as native_request
+from review_page import Review
 from storage import connect
-import app
+from turn_pipeline import TurnPipeline
 
 
 class ServerRecovery(check_team_integration.TeamIntegration):
@@ -48,7 +49,7 @@ class ServerRecovery(check_team_integration.TeamIntegration):
         self.assert_late_worker_loses_lease()
 
     def test_legacy_approval_and_switch_network_outside_local_lock(self):
-        srv = self.enterContext(running_server(app.Review))
+        srv = self.enterContext(running_server(Review))
         srv.db, srv.csrf, srv.team_client = self.db, 'csrf', self.client
         original = self.client.me
         def probe():
@@ -60,8 +61,7 @@ class ServerRecovery(check_team_integration.TeamIntegration):
             self.assertEqual(request(srv,'POST','/approve',data=dict(csrf='csrf',id='missing',target_team=self.teams['B']),form=True)[0],400)
 
     def test_actual_app_restarts_during_team_outage(self):
-        from integration import Pipeline
-        Pipeline(self.db,self.client,self.client.me())
+        TurnPipeline(self.db,self.client,self.client.me())
         empty = self.state/'empty'; empty.mkdir()
         connection = self.state/'connection.json'
         command = [sys.executable, str(ROOT/'app.py'), 'run', '--integrated', '--port','0',

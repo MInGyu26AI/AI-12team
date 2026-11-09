@@ -1,7 +1,8 @@
 """Local retention: clear settled raw text and drop old migration backups.
 
 Policy confirmed 2026-11-08:
-- Raw conversation text and local privacy-check caches: 7 days after a batch is fully settled.
+- Raw conversation text: 7 days after a batch is fully settled.
+- Local privacy-model answer cache: 7 days after it was written, whatever the batch state (it is keyed by text hash).
 - Migration backups (<db>.*.bak.sqlite next to the database): 7 days after they were written.
 
 A batch is settled when it was processed (`jobs.state='done'`) and every card from it is shared or dismissed,
@@ -21,6 +22,7 @@ from storage import connect
 RAW_DAYS = 7
 BACKUP_DAYS = 7
 PURGED = '[보존기간 만료]'
+PURGED_JSON = json.dumps(PURGED, ensure_ascii=False)
 DAY = 86400
 
 UNSETTLED_CARD = '''SELECT 1 FROM cards c LEFT JOIN candidate_details d ON d.id=c.id LEFT JOIN outbox o ON o.id=c.id
@@ -39,21 +41,21 @@ def initialize(c) -> None:
                  settled REAL NOT NULL, purged REAL)''')
 
 
-def _blank(messages):
-    return [dict(m, text='', purged=True) if isinstance(m, dict) else m for m in messages]
+def _blank(message):
+    return dict(message, text='', purged=True)
 
 
 def _purge_job(c, job: str, tables: set[str]) -> None:
-    c.execute('UPDATE jobs SET evidence=? WHERE id=?',
-              (json.dumps([dict(e, text='') for e in json.loads(c.execute('SELECT evidence FROM jobs WHERE id=?', (job,)).fetchone()[0])],
-                          ensure_ascii=False), job))
+    evidence = json.loads(c.execute('SELECT evidence FROM jobs WHERE id=?', (job,)).fetchone()[0])
+    c.execute('UPDATE jobs SET evidence=? WHERE id=?', (json.dumps([dict(e, text='') for e in evidence], ensure_ascii=False), job))
     if 'intake' in tables:
         for row in c.execute('SELECT id,message FROM intake WHERE job=?', (job,)).fetchall():
-            c.execute('UPDATE intake SET message=? WHERE id=?', (json.dumps(_blank([json.loads(row[1])])[0], ensure_ascii=False), row[0]))
+            c.execute('UPDATE intake SET message=? WHERE id=?', (json.dumps(_blank(json.loads(row[1])), ensure_ascii=False), row[0]))
     if 'job_context' in tables:
         row = c.execute('SELECT messages FROM job_context WHERE job=?', (job,)).fetchone()
         if row:
-            c.execute('UPDATE job_context SET messages=? WHERE job=?', (json.dumps(_blank(json.loads(row[0])), ensure_ascii=False), job))
+            messages = [_blank(m) for m in json.loads(row[0])]
+            c.execute('UPDATE job_context SET messages=? WHERE job=?', (json.dumps(messages, ensure_ascii=False), job))
     if 'privacy_jobs' in tables:
         row = c.execute('SELECT detail FROM privacy_jobs WHERE job=?', (job,)).fetchone()
         if row:
@@ -96,13 +98,15 @@ def sweep(db, now: float | None = None) -> dict:
             result['purgedJobs'] += 1
         if {'intake_issues', 'intake_resolutions'} <= tables:
             stale = c.execute('''UPDATE intake_issues SET message=? WHERE message!=? AND id IN
-                (SELECT issue_id FROM intake_resolutions WHERE resolved<=?)''', (json.dumps(PURGED, ensure_ascii=False),
-                                                                                  json.dumps(PURGED, ensure_ascii=False), now - RAW_DAYS * DAY))
+                (SELECT issue_id FROM intake_resolutions WHERE resolved<=?)''', (PURGED_JSON, PURGED_JSON, now - RAW_DAYS * DAY))
             result['purgedIssues'] = stale.rowcount
         if 'privacy_results' in tables:
             result['cacheDeleted'] = c.execute('DELETE FROM privacy_results WHERE decided<=?', (now - RAW_DAYS * DAY,)).rowcount
-        if c.execute('PRAGMA foreign_key_check').fetchall():
-            raise ValueError('보존 정리 중 참조 오류: 변경을 취소했습니다.')
+    _drop_old_backups(db, now, result)
+    return result
+
+
+def _drop_old_backups(db, now, result):
     path = Path(db)
     errors = set()
     for backup in path.parent.glob(path.name + '.*.bak.sqlite'):
@@ -117,4 +121,3 @@ def sweep(db, now: float | None = None) -> dict:
             errors.add(type(error).__name__)
     if errors:
         print(f"retention: 오래된 백업 {result['backupErrors']}개를 지우지 못했습니다 ({', '.join(sorted(errors))})", file=sys.stderr)
-    return result

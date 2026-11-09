@@ -27,10 +27,10 @@ import psycopg
 from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
 
-import app
 from conflict_checks import process_checks
 import delivery
 from prepare_native import prepare
+from review_page import Review
 from storage import connect, initialize, initialize_v1
 from team_access import authorized, verify_database
 from team_client import TeamClient, bind_sharing
@@ -267,7 +267,7 @@ class TeamIsolation(unittest.TestCase):
             return dict(c.execute(f'SELECT * FROM {table} WHERE id=?', (identifier,)).fetchone())
 
     def review(self):
-        srv = self.enterContext(running_server(app.Review))
+        srv = self.enterContext(running_server(Review))
         srv.db, srv.csrf, srv.secret, srv.team_client = self.db, 'synthetic-csrf', '', self.client
         srv.board_url = '/team-board'
         return srv

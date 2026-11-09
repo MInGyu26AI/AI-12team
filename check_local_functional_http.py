@@ -4,19 +4,19 @@ import secrets
 import time
 import unittest
 
-from check_pipeline import AI
-from check_local_privacy import work_gate
+from batch_classification import classify_queued
 from check_teams import TeamIsolation, own_tests, request
-from integration import Pipeline
+from local_fixtures import AI, work_gate
 from native_host import request as native_request
 from storage import connect
+from turn_pipeline import TurnPipeline
 
 
 class FunctionalHTTP(TeamIsolation):
     def test_recovery_approval_and_second_member(self):
         with connect(self.db) as c:
             c.execute('UPDATE settings SET end=?', (time.time()+600,))
-        pipeline=Pipeline(self.db,self.client)
+        pipeline=TurnPipeline(self.db,self.client)
         pipeline.llm_factory=lambda:AI(); pipeline.decider_factory=lambda:None; pipeline.privacy=work_gate()
         srv = self.review()
         srv.pipeline = pipeline
@@ -40,7 +40,7 @@ class FunctionalHTTP(TeamIsolation):
         status,html=request(srv,'GET','/')
         self.assertEqual(status,200)
         self.assertNotIn('보관한 입력 1개',html)
-        pipeline.process()
+        classify_queued(pipeline)
         card=frame('candidates.list')['cards'][0]
         self.assertEqual(frame('collection.status')['counts']['reviewPending'],1)
         self.assertEqual(self.client.items(self.teams['A']),[])

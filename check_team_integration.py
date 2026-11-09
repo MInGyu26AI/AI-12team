@@ -12,14 +12,14 @@ from unittest.mock import patch
 import psycopg
 
 from ai.syncup_ai.llm import DecisionsClient
-from check_local_privacy import work_gate
+from batch_classification import classify_queued
 from check_teams import TeamIsolation, own_tests, request, running_server
-from check_pipeline import AI
-from check_integration_store import public_card
-from integration import Pipeline
+from collection_settings import configure
+from local_fixtures import AI, public_card, work_gate
 from native_host import request as native_request
+from review_page import Review
 from storage import connect
-import app
+from turn_pipeline import TurnPipeline
 
 
 def checked(req, conflicts=None):
@@ -368,10 +368,17 @@ class TeamIntegration(TeamIsolation):
         self.assertFalse(self.team_request('GET', 'conflicts')[1]['conflicts'])
 
     def test_native_http_approval_delivery(self):
-        with connect(self.db) as c: c.execute('UPDATE settings SET end=?',(time.time()+600,))
-        pipeline=Pipeline(self.db,self.client); pipeline.llm_factory=lambda:AI(); pipeline.decider_factory=lambda:None; pipeline.privacy=work_gate()
-        pipeline.configure(dict(projectTopic='가상 통합 검사'))
-        srv=self.enterContext(running_server(app.Review)); srv.db=self.db; srv.pipeline=pipeline; srv.rpc_secret=secrets.token_urlsafe(32)
+        with connect(self.db) as c:
+            c.execute('UPDATE settings SET end=?', (time.time()+600,))
+        pipeline = TurnPipeline(self.db, self.client)
+        pipeline.llm_factory = lambda: AI()
+        pipeline.decider_factory = lambda: None
+        pipeline.privacy = work_gate()
+        configure(pipeline, dict(projectTopic='가상 통합 검사'))
+        srv = self.enterContext(running_server(Review))
+        srv.db = self.db
+        srv.pipeline = pipeline
+        srv.rpc_secret = secrets.token_urlsafe(32)
         connection, registration = self.native_host(srv)
         self.assertEqual(registration['allowed_origins'], ['chrome-extension://'+'a'*32+'/'])
         self.assertTrue(self.native_frame(registration, 'collection.status')['ok'])
@@ -383,8 +390,10 @@ class TeamIntegration(TeamIsolation):
             result = native_request(connection, dict(version=1, method=method, params=params or {}))
             self.assertTrue(result['ok'], result)
             return result['result']
-        msg=dict(id='m1',conversationId='manual',site='manual',role='user',text='SQLite로 결정했다.',collectedAt='2026-11-08T00:00:00+09:00')
-        rpc('turns.append',dict(messages=[msg],flush=True)); pipeline.process()
+        msg = dict(id='m1', conversationId='manual', site='manual', role='user', text='SQLite로 결정했다.',
+                   collectedAt='2026-11-08T00:00:00+09:00')
+        rpc('turns.append', dict(messages=[msg], flush=True))
+        classify_queued(pipeline)
         card = rpc('candidates.list')['cards'][0]
         rpc('candidates.update', dict(id=card['id'], patch=dict(content='검토 후 승인 문구')))
         rpc('candidates.approve', dict(ids=[card['id']], teamId=self.teams['A']))

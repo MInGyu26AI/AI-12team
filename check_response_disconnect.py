@@ -2,12 +2,12 @@
 import unittest
 from unittest.mock import Mock
 
-from app import LocalHandler
+from secure_http import SecureHandler
 
 
 class ResponseDisconnect(unittest.TestCase):
     def handler(self):
-        handler = LocalHandler.__new__(LocalHandler)
+        handler = SecureHandler.__new__(SecureHandler)
         handler.send_response = Mock()
         handler.send_header = Mock()
         handler.end_headers = Mock()
