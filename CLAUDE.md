@@ -29,7 +29,7 @@
   - Content Script(ChatGPT DOM 추출), Background Service Worker, Native Messaging, chrome.storage
 - 팀 웹: Next.js(App Router), TypeScript, Tailwind, shadcn/ui, lucide-react, Pretendard 폰트, sonner(토스트)
 - 파일 처리: JSZip (ChatGPT 내보내기 zip을 브라우저 안에서 열기)
-- 배포: 웹은 Vercel(Root Directory = web, 환경변수 NEXT_PUBLIC_USE_MOCK·NEXT_PUBLIC_API_URL), 확장 프로그램은 개발자 모드로 직접 설치해 시연(팝업 설정의 "개인 검토함 주소"에 Vercel 주소 입력)
+- 배포: 웹은 Vercel(Root Directory = web, 환경변수 NEXT_PUBLIC_USE_MOCK), 확장 프로그램은 개발자 모드로 직접 설치해 시연(팝업 설정의 "개인 검토함 주소"에 Vercel 주소 입력)
 - 확장 배포: https://syncup-ashen.vercel.app/install 에서 zip 내려받기 → 개발자 모드 설치. 확장을 고치면 extension/package.json 버전을 올리고 `cd extension && npm run zip:web` 후 웹 재배포
 
 ## 5. 폴더 구조
@@ -99,7 +99,7 @@ B. ChatGPT 대화 자동 추출
   - 설정 기간 중 새로 완료된 발화 단위로 추출(대화마다 버튼 누를 필요 없음)
   - 사이트별 추출 코드는 파일을 분리(ChatGPT 화면 구조가 바뀌면 그 파일만 수정)
 C. 로컬 수집기 연동 (분류는 김하은님 ai/ — 확장 코드는 하은님 규칙에 맞춘다)
-  - Background에서 Native Messaging으로 발화 전달(NativeClassifyRequest/Response), 실패하면 목업 분류
+  - Background에서 Native Messaging RPC(turns.append·candidates.list)로 발화 전달, 수집기 연결이 실패하면 팝업·화면에 오류를 알림(목업 분류로 대체하지 않음)
   - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(ai/syncup_ai/batch.py = shared/batch.ts). 일시중지·종료 시각·수동 보내기 땐 남은 것까지
   - 민감정보 가림 규칙(ai/syncup_ai/mask.py = shared/classify.ts mask), 충돌 규칙 판정(ai/syncup_ai/conflict.py = shared/conflict.ts)
   - 분류 완료 시 팝업의 후보 수 갱신 (배지는 공유 후보만 셈)
@@ -128,7 +128,7 @@ F. 상태·에러 처리
 - GET  /conflicts?team={code} : 처리 안 된 충돌 + '논의 요청' 중인 충돌
 - POST /conflicts/{id}/resolve : 충돌 처리(resolution: keep-existing | adopt-new | discuss, resolutionNote)
 - GET /todos/done, POST /items/{id}/done : 할 일 완료 체크 (형식 미정, 동균님과 확정)
-- API 주소는 환경변수로 관리 (웹: NEXT_PUBLIC_API_URL)
+- 웹은 별도 API 주소를 쓰지 않는다. 실제 모드는 로컬 수집기 RPC로 팀 서버에 접근한다: 기본은 확장 경유, `NEXT_PUBLIC_LOCAL_BRIDGE=true`면 웹 서버의 `/api/local` 경유(서버 쪽 `SYNCUP_CONNECTION_FILE`·`SYNCUP_LOCAL_*` 필요). 목업 여부는 `NEXT_PUBLIC_USE_MOCK`
 
 ## 9. 개인정보·보안 원칙 (반드시 지킬 것)
 - 최초 설정에서 자동 수집 범위와 외부 AI 전송을 사용자에게 안내

@@ -14,7 +14,7 @@
 2. 새 DB만: 안전한 로컬 환경에 SYNCUP_ADMIN_DATABASE_URL을 설정하고 소유자만 읽을 수 있는 API 비밀번호 파일을 준비한 뒤 `python team_admin.py init --api-password-file /absolute/private/api-password.key` 실행. 명령행에 연결 문자열/비밀번호 자체를 쓰지 않는다. init은 기존 DB에 재실행하지 않는다.
 3. 기존 DB: API 쓰기를 중지하고 백업을 확인한 뒤 `python team_admin.py migrate-integration`. 하나의 트랜잭션에서 실행하며 두 번 실행해도 진단 컬럼을 중복 생성하지 않는다. 임의로 변경된 모든 스키마를 자동 복구하는 도구는 아니다. 누락 테이블/컬럼/정책은 카탈로그 대조 후 별도 처리한다.
 4. API에는 제한 계정 SYNCUP_DATABASE_URL만 전달한다. 관리자 환경변수를 제거하고 서버를 시작한다. 새 코드 시작 전 진단 컬럼을 적용해야 한다.
-5. 서버는 현재 127.0.0.1에만 바인딩한다. 클라우드 운영에는 HTTPS 프록시가 필요하며 내부 Host는 127.0.0.1:8878로 전달한다. DB 생성만으로 API 배포나 외부 접근이 완료되지는 않는다.
+5. `team_server.py`(CLI)는 127.0.0.1에만 바인딩하며 외부 접근에는 HTTPS 프록시가 필요하고 내부 Host는 127.0.0.1:8878로 전달한다. 클라우드 이미지(`Dockerfile.cloud` → `cloud_server.py`)는 관리형 HTTPS 인그레스 뒤에서 `0.0.0.0:$PORT`에 바인딩하고 정확한 공개 호스트(`SYNCUP_PUBLIC_HOST`)만 받는다. DB 생성만으로 API 배포나 외부 접근이 완료되지는 않는다.
 6. 실제 사용자 대화를 옮기기 전에 가짜 계정 두 개/팀 두 개로 승인·중복 재전송·권한 회수·재시작을 수행한다. 다른 기기에서 같은 HTTPS API에 연결해 검증한 별도 결과를 남긴다.
 
 ## 백업과 복구 절차
