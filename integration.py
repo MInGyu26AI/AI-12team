@@ -24,7 +24,7 @@ from storage import connect
 from team_client import bind_sharing
 
 # Messages of the latest batch queued before a job for the same team, session, conversation and site. Params: team, job id, start, conversation, site.
-PREVIOUS_BATCH = '''SELECT x.messages FROM job_context x JOIN jobs j ON j.id=x.job
+PREVIOUS_BATCH = '''SELECT x.job,x.messages FROM job_context x JOIN jobs j ON j.id=x.job
                 WHERE x.team_id=? AND j.rowid<(SELECT rowid FROM jobs WHERE id=?)
                 AND json_extract(x.context,'$.collectionStart')=?
                 AND json_extract(x.messages,'$[0].conversationId')=?
@@ -230,9 +230,9 @@ class Pipeline:
                     continue
                 try:
                     messages = json.loads(job['messages'])
-                    earlier = self._previous_batch(job, ctx, messages)
+                    earlier_job, earlier = self._previous_batch(job, ctx, messages)
                     # Batch, earlier context and metadata all pass the on-device gate before any AI client exists.
-                    review = self.privacy.review_job(self.db, job['id'], messages, earlier, ctx)
+                    review = self.privacy.review_job(self.db, job['id'], messages, earlier, ctx, earlier_job)
                     if review.decision == HOLD:
                         continue
                     if review.decision == EXCLUDE:
@@ -264,11 +264,11 @@ class Pipeline:
         return True
 
     def _previous_batch(self, job, ctx, messages):
-        """Tail of the batch queued just before this one for the same conversation and session, or []."""
+        """(job id, tail) of the batch queued just before this one for the same conversation and session, or (None, [])."""
         with connect(self.db) as c:
             previous = c.execute(PREVIOUS_BATCH,
                 (job['team_id'],job['id'],ctx['collectionStart'],messages[0]['conversationId'],messages[0]['site'])).fetchone()
-        return context_tail(json.loads(previous[0])) if previous else []
+        return (previous['job'], context_tail(json.loads(previous['messages']))) if previous else (None, [])
 
     def _exclude_locally(self, job, ctx):
         # Checked by _job_runnable before the review; here lock (BEGIN IMMEDIATE) → re-check (require_active) → mark done

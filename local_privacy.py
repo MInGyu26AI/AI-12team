@@ -436,37 +436,36 @@ class Gate:
             return False
         return row[1] not in TRANSIENT or time.time() - row[2] < RECHECK_SECONDS
 
-    def review_job(self, db, job: str, messages: list[dict], context_messages: list[dict], context: dict) -> JobReview:
+    def _decide(self, db, message: dict, excluded: set, identity: str | None, topic: str) -> Result:
+        if message.get('id') in excluded:
+            return Result(EXCLUDE, 'user_excluded')
+        return self.check(db, str(message.get('text', '')), message.get('role'), identity, topic)
+
+    def review_job(self, db, job: str, messages: list[dict], context_messages: list[dict], context: dict,
+                   context_job: str | None = None) -> JobReview:
+        """context_messages come from context_job; the user's exclusions there apply to them as well."""
         identity = self._identity()
         topic = context.get('projectTopic') if isinstance(context.get('projectTopic'), str) else ''
-        with closing(sqlite3.connect(db, timeout=10)) as c:
-            excluded = {r[0] for r in c.execute('SELECT message_id FROM privacy_overrides WHERE job=?', (job,))}
+        excluded = _user_exclusions(db, job)
         detail, allowed, fragments = [], [], []
         for m in messages:
             original = str(m.get('text', ''))
-            if m.get('id') in excluded:
-                result = Result(EXCLUDE, 'user_excluded')
-            else:
-                result = self.check(db, original, m.get('role'), identity, topic)
+            result = self._decide(db, m, excluded, identity, topic)
             detail.append(dict(id=m.get('id'), decision=result.decision, reason=result.reason,
                                categories=result.categories, rules=result.rules,
                                sanitized=result.sanitized if result.decision == ALLOW else None))
             if result.decision == ALLOW:
                 allowed.append(dict(m, text=result.sanitized, masked=result.sanitized != original or bool(m.get('masked')),
                                     privacy=result.reason))
-                fragments += [s for s in result.spans if len(s) >= 4]
-            else:
-                fragments += _fragments(original) + [s for s in result.spans if len(s) >= 4]
-            fragments += secret_values(original)
+            fragments += _blocked_pieces(original, result)
+        context_excluded = _user_exclusions(db, context_job) if context_job else set()
         context_allowed = []
         for m in context_messages:
             original = str(m.get('text', ''))
-            result = self.check(db, original, m.get('role'), identity, topic)
+            result = self._decide(db, m, context_excluded, identity, topic)
             if result.decision == ALLOW:
                 context_allowed.append(dict(m, text=result.sanitized, privacy=result.reason))
-            else:
-                fragments += _fragments(original)
-            fragments += secret_values(original) + [s for s in result.spans if len(s) >= 4]
+            fragments += _blocked_pieces(original, result)
         clean_context = {k: apply_rules(v)[0] if isinstance(v, str) else v for k, v in context.items()}
         decisions = [d['decision'] for d in detail]
         if HOLD in decisions:
@@ -493,6 +492,17 @@ class Gate:
         for m in messages:
             masked = apply_rules(_limit(str(m.get('text', '')), m.get('role')))[0]
             c.execute('DELETE FROM privacy_results WHERE key=?', (_key(identity, m.get('role'), masked),))
+
+
+def _user_exclusions(db, job: str) -> set[str]:
+    with closing(sqlite3.connect(db, timeout=10)) as c:
+        return {r[0] for r in c.execute('SELECT message_id FROM privacy_overrides WHERE job=?', (job,))}
+
+
+def _blocked_pieces(original: str, result: Result) -> list[str]:
+    """Text an outgoing payload must not carry: secrets, personal spans and, unless allowed, the message itself."""
+    pieces = secret_values(original) + [s for s in result.spans if len(s) >= 4]
+    return pieces if result.decision == ALLOW else pieces + _fragments(original)
 
 
 def review_evidence(db, gate: 'Gate', job: str, evidence: list[dict]):

@@ -363,6 +363,24 @@ class FailClosed(Base):
         listed = restarted.rpc('privacy.list', {})
         self.assertEqual((listed['items'], [(e['messageId'], e['reason']) for e in listed['excluded']]), ([], [('b', 'user_excluded')]))
 
+    def test_user_excluded_message_is_not_sent_as_next_batch_context(self):
+        # Held while the model was down, so no cached answer: once the model is back it would call the message work.
+        doubt = '그 사람 얘기는 나중에 따로 하자'
+        gate = Gate(Scripted(mode='down'))
+        self.pipeline.privacy = gate
+        self.pipeline.configure(dict(turnsPerBatch=2))
+        self.pipeline.append([self.message('a', 'API 명세는 내일 올릴게'), self.message('b', doubt)], True)
+        self.run_offline()
+        held = self.pipeline.rpc('privacy.list', {})['items'][0]['id']
+        self.pipeline.rpc('privacy.exclude', dict(id=held, teamId='a', messageId='b'))
+        gate.classifier.mode = None
+        self.run_offline()
+        self.pipeline.append([self.message('c', 'PostgreSQL도 검토했다.'), self.message('d', '배포는 금요일에 하자')], True)
+        self.run_offline()
+        self.assertEqual(len(self.requests), 2)
+        self.assertFalse(leaked(self.requests, doubt))
+        self.assertTrue(any('PostgreSQL도 검토했다.' in s for s in strings(self.requests[1]['body'])))
+
     def test_recheck_request_stays_held_until_the_worker_decides(self):
         gate = Gate(Scripted(mode='down'))
         self.pipeline.privacy = gate
