@@ -8,21 +8,19 @@
 - 2026 인공지능학과 대학 연합 해커톤 출품작. 11/8 중간 보고서 MVP, 11/16 최종 제출
 
 ## 2. 팀 역할
-- 김단비(나): 프론트엔드 - 크롬 확장 프로그램 + 팀 웹 화면 + 배포 + 중간 보고서 총괄
+- 김단비: 프론트엔드 - 크롬 확장 프로그램 + 팀 웹 화면 + 배포 + 중간 보고서 총괄
 - 김하은: 백엔드 A(AI) - 분류 프롬프트, 카드 JSON 형식, 충돌 판정
 - 김동균: 백엔드 B(서버) - 팀 서버 API, DB, Mac 로컬 수집기(Native Messaging host), 배포
 - 김민규: 기획/디자인 - Figma 화면 디자인, 분류 기준표, 샘플 대화·정답표
 
 ## 3. 전체 구조 (데이터 흐름)
-1. 사용자가 확장 프로그램 팝업에서 최초 1회 팀 코드로 가입, 수집 기간·허용 사이트·로컬 프로젝트 설정 후 '수집 시작'
+1. 사용자가 확장 프로그램 팝업에서 로컬 수집기에 연결된 등록 팀을 확인하고, 프로젝트 주제·수집 종료 시각을 정한 뒤 자동 수집을 켬 (수집할 로컬 프로젝트는 수집기 실행 때 지정)
 2. Content Script가 ChatGPT 화면에서 설정 기간 중 새로 완료된 발화(사용자·AI)를 자동 추출
 3. Background Service Worker가 Native Messaging으로 발화를 동균님의 Mac 로컬 수집기에 전달
 4. 로컬 수집기가 웹 발화 + 선택한 프로젝트의 Codex·Claude Code 발화를 전처리하고, 필요한 발췌만 외부 AI로 분류
-5. 분류된 후보 카드는 확장 프로그램의 '개인 검토함'(비공개)에 표시 → 사용자가 확인·수정·승인
-6. 승인한 카드와 근거 발췌만 팀 서버(/items/approve)로 전송 → 서버가 충돌 검사
+5. 분류된 후보 카드는 '개인 검토함'(웹 /review, 비공개)에 표시 → 사용자가 확인·수정·승인
+6. 승인한 카드와 근거 발췌만 로컬 전송 대기열을 거쳐 팀 서버로 전송 → 서버가 충돌 검사 (8장)
 7. 팀 웹(Next.js)에서 팀 결정 보드와 충돌 경고를 보고 해결
-
-※ 승인 전 분석·후보 조회는 로컬 수집기 담당이라 팀 서버 /analyze는 사용하지 않음
 
 ## 4. 기술 스택
 - 확장 프로그램: Chrome Extension Manifest V3, WXT, React, TypeScript, Tailwind
@@ -36,6 +34,10 @@
 - /extension : WXT 확장 프로그램
 - /web : Next.js 팀 웹
 - /shared : 두 프로젝트가 같이 쓰는 타입 정의(카드, 충돌 등)와 목업 데이터
+- /ai : 분류·충돌 판정 AI 모듈 (하은님)
+- /src : Codex·Claude Code 대화 기록을 읽는 Rust 수집기
+- 루트의 *.py : Mac 로컬 수집기·개인 검토함, 팀 서버, 검사(check_*.py) (동균님, 실행·검사 방법은 README.md)
+- /docs : 분류 기준, 설계와 검증 기록
 
 ## 6. 데이터 형식 (코드는 /shared/types.ts)
 **분류 기준은 [docs/classification.md](docs/classification.md)를 따른다.** (관련성 → 소주제 → 표시, 민감정보 별도 검사, 분류 예시 22개)
@@ -47,7 +49,7 @@
 | relevance | 관련성: related / personal | related | 필수 |
 | subtopic | 소주제: 주제·목표 / 자료 조사 / 작업·결과물 / 역할·일정 / 과제 조건·피드백 / 발표·제출 / 기타 | 작업·결과물 | 관련만 |
 | tag | 표시: decision(결정) / todo(할 일) / research(조사) / none(제안) | decision | 관련만 |
-| topic_key | 세부 주제 (충돌 비교 기준, 기존 이름 먼저) | MVP 범위 | 관련만 |
+| topic_key | 세부 주제 (보드 묶음·충돌 비교 순서, 기존 이름 먼저) | MVP 범위 | 관련만 |
 | is_new_topic | 기존 세부 주제 목록에 없는 새 주제인지 | false | 관련만 |
 | content | 정리된 내용 한 줄 | 브라우저 확장 = MVP 포함 | 관련만 |
 | reason | 결정 이유 (있으면) | 대화 자동 수집이 있어야 시연 효과가 큼 | 선택 |
@@ -68,52 +70,41 @@
 - `id: string` — 카드 식별자
 - `status: "candidate" | "approved" | "dismissed"` — 개인 검토함 승인 상태
 
-```
-Conflict {
-  id: string
-  topic_key: string        // 충돌한 두 카드의 공통 topic_key
-  cardA: Card              // 기존 결정
-  cardB: Card              // 새 결정
-  judgement: "같음" | "변경" | "충돌"
-  reason: string
-  resolution?: "keep-existing" | "adopt-new" | "both-valid"
-  resolutionNote?: string
-}
-```
+충돌 경고 형식은 /shared/types.ts의 `Conflict`를 따른다.
 
 ### 화면 규칙 (디자인 기준: 김민규님 피그마 6개 화면)
-- 화면: 1 첫 화면(/) · 2 팀 만들기(/team/new) · 3 대화 수집(/collect, 백업 입력 /collect/paste) · 4 승인함(/review) · 5 충돌 경고(승인 직후·보드의 '확인하기' 모달) · 6 팀 결정 기록(/board) · 확장 설치(/install)
+- 화면: 1 첫 화면(/) · 2 팀 만들기(/team/new) · 3 대화 수집(/collect, 백업 입력 /collect/paste) · 4 승인함(/review) · 5 충돌 경고(보드의 '확인하기' 모달, 목업 모드는 승인 직후에도) · 6 팀 결정 기록(/board) · 확장 설치(/install)
 - 승인함: 공유 후보(결정·조사·할 일)는 확신도 0.6 이상이면 기본 체크. 개인은 "개인 N개 제외"로만(내용 저장 안 함), tag=none(요청·제안·AI 답변)은 접어서 숨김
 - confidence < 0.6이면 "확인 필요" 배지, masked=true면 "민감정보 가림" 배지, is_change=true인 결정은 "변경" 배지
 - 팀 결정 기록: 왼쪽 topic_key 필터 · 가운데 결정 타임라인(최신순, 충돌 카드 빨간 테두리) · 오른쪽 할 일 체크 + 조사·참고. 맨 위 충돌 배너 → 충돌 모달
-- 충돌 모달: 기존 유지 / 새 결정으로 변경 / 팀에 논의 요청(resolution "discuss", 경고 유지) + 처리 이유(선택)
+- 충돌 모달: '충돌'은 기존 유지 / 새 결정으로 변경 / 둘 다 유효 / 팀에 논의 요청(resolution "discuss", 경고 유지). '변경'은 예(새 결정 채택) / 아니오(기존 유지)와 '기존 안 확인하기'. 어느 쪽이든 처리 이유(선택)를 남길 수 있음
 - 색 (피그마, /shared/theme.css 토큰): 브랜드·결정=남색 #4F46E5, 조사=초록, 할 일=주황, 개인=회색, 충돌=빨강, 변경=주황빛
 
 ## 7. 기능 목록과 우선순위
 ### [MVP 11/8 필수]
 A. 확장 프로그램 팝업
-  - 최초 1회 팀 코드 가입·로그인 계정 확인
-  - 수집 기간, 허용 사이트, 로컬 프로젝트 설정
-  - 이후 수집 상태, 종료 시각, 미검토 카드 수 표시, '수집 시작' / '일시중지' 버튼
+  - 로컬 수집기에 연결된 등록 팀·사용자 확인 (실제 모드는 관리자가 등록, 팀 코드 가입은 웹 목업 모드만)
+  - 프로젝트 주제·소주제, 분류 묶음 크기, 수집 종료 시각 설정 (로컬 프로젝트는 수집기 실행 때 지정)
+  - 이후 '자동 수집' 켜기/끄기 스위치, 다음 분류까지 쌓인 대화 수와 '지금 분류하기', 검토 대기 카드 수, 마지막 수집 시각, '개인 검토함 열기'
 B. ChatGPT 대화 자동 추출
   - 설정 기간 중 새로 완료된 발화 단위로 추출(대화마다 버튼 누를 필요 없음)
   - 사이트별 추출 코드는 파일을 분리(ChatGPT 화면 구조가 바뀌면 그 파일만 수정)
 C. 로컬 수집기 연동 (분류는 김하은님 ai/ — 확장 코드는 하은님 규칙에 맞춘다)
   - Background에서 Native Messaging RPC(turns.append·candidates.list)로 발화 전달, 수집기 연결이 실패하면 팝업·화면에 오류를 알림(목업 분류로 대체하지 않음)
-  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(ai/syncup_ai/batch.py = shared/batch.ts). 일시중지·종료 시각·수동 보내기 땐 남은 것까지
-  - 민감정보 가림 규칙(ai/syncup_ai/mask.py = shared/classify.ts mask), 충돌 규칙 판정(ai/syncup_ai/conflict.py = shared/conflict.ts)
+  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(묶기는 ai/syncup_ai/batch.py, shared/batch.ts에는 기본값만). 수동 보내기(지금 분류하기·싱크업에 보내기·선택한 내용 보내기) 땐 남은 것까지, 일시중지·종료 때는 보내지 않고 로컬에 둠
+  - 민감정보 가림 규칙(ai/syncup_ai/mask.py = shared/classify.ts mask, shared/mask-cases.json으로 함께 검사), 충돌 판정은 팀 서버의 ai/syncup_ai/conflict.py (shared/conflict.ts는 목업 모드용 근사)
   - 분류 완료 시 팝업의 후보 수 갱신 (배지는 공유 후보만 셈)
 D. 승인함 (웹 /review — 확장이 모은 후보 + 붙여넣기 후보, 본인만 보는 비공개 화면)
   - 후보를 결정·할 일·조사(tag)로 표시, 출처와 원문(sentence) 확인·수정
-  - 체크한 카드만 /items/approve로 전송
+  - 체크한 카드만 승인(로컬 RPC candidates.approve) → 팀 서버로 전송 (8장)
   - 백업 입력 1: 대화 붙여넣기 입력창 (자동 추출 실패 시)
   - 백업 입력 2: ChatGPT 내보내기 zip 또는 conversations.json 업로드
     → JSZip으로 브라우저 안에서 열고, 대화 목록(제목·날짜)에서 팀 관련 대화만 선택
     → 원본 파일은 서버에 보내지 않고, 붙여넣기와 같은 로컬 전처리·승인 절차를 거침
 E. 팀 웹
   - 팀 결정 기록: topic_key 필터 · 결정 타임라인 · 할 일 체크 (위 화면 규칙)
-  - 충돌 경고: 충돌한 두 결정과 근거 문장을 나란히 표시, 같음/변경/충돌/무관 중 변경·충돌을 경고(CONFLICT_ON_CHANGE)
-    '기존 유지 / 새 결정으로 변경 / 팀에 논의 요청' + 처리 이유(선택) → /conflicts/{id}/resolve
+  - 충돌 경고: 같음/변경/충돌/무관 중 변경·충돌을 경고(CONFLICT_ON_CHANGE). '충돌'은 두 결정과 근거 문장을 나란히 표시, '변경'은 새 결정만 보이고 기존 안은 눌러서 확인
+    선택지는 위 화면 규칙의 충돌 모달, 처리는 로컬 RPC team.resolve
   - 팀 기록 복사: 팀 결정 기록을 AI에 붙여넣기 좋은 텍스트로 변환해 클립보드 복사
 F. 상태·에러 처리
   - 로컬 수집기 연결 끊김, 분류 실패, 공유 실패, 충돌 검사 대기를 구분해서 표시
@@ -122,12 +113,11 @@ F. 상태·에러 처리
 - Claude·Gemini 웹 채팅 지원 추가
 - '팀 기록 불러오기': 팀 결정 기록을 AI 입력창에 자동으로 채우기(전송은 사용자가 직접)
 
-## 8. 팀 서버 API (동균님과 형식 확정 전까지 목업으로 개발)
-- POST /items/approve : 승인한 카드와 근거 발췌 전송 → 응답 {conflicts}: 하은님 `python -m syncup_ai conflicts` 결과 (cardA 기존, cardB 새 결정)
-- GET  /board?team={code} : 팀 결정 보드 조회
-- GET  /conflicts?team={code} : 처리 안 된 충돌 + '논의 요청' 중인 충돌
-- POST /conflicts/{id}/resolve : 충돌 처리(resolution: keep-existing | adopt-new | discuss, resolutionNote)
-- GET /todos/done, POST /items/{id}/done : 할 일 완료 체크 (형식 미정, 동균님과 확정)
+## 8. 팀 서버 API
+- 승인한 카드는 로컬 전송 대기열을 거쳐 POST /teams/{id}/items로 올라간다. 충돌 검사는 팀 서버가 저장 뒤 비동기로 하므로 실제 모드의 승인 응답에는 충돌이 없다 (보드의 검사 진행·충돌 배너로 확인)
+- 웹의 TeamApi(web/src/lib/api/types.ts)는 로컬 RPC를 부른다: 승인 candidates.approve, 조회 team.board·team.history·team.conflicts·team.conflictHistory·team.done, 처리 team.resolve·team.setDone·team.retryCheck
+- 로컬 수집기는 team.* 요청을 연결된 팀의 /teams/{id}/... 경로로 넘긴다 (team_relay.py, 경로 목록은 team_server.py)
+- 충돌 처리 resolution: keep-existing | adopt-new | both-valid | discuss (+ resolutionNote)
 - 웹은 별도 API 주소를 쓰지 않는다. 실제 모드는 로컬 수집기 RPC로 팀 서버에 접근한다: 기본은 확장 경유, `NEXT_PUBLIC_LOCAL_BRIDGE=true`면 웹 서버의 `/api/local` 경유(서버 쪽 `SYNCUP_CONNECTION_FILE`·`SYNCUP_LOCAL_*` 필요). 목업 여부는 `NEXT_PUBLIC_USE_MOCK`
 
 ## 9. 개인정보·보안 원칙 (반드시 지킬 것)
