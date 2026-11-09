@@ -5,46 +5,46 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { mockClassify, type Utterance } from "@shared/classify";
+import { mockClassify } from "@shared/classify";
 import { DEMO_KNOWN_NAMES } from "@shared/mock";
+import type { Utterance } from "@shared/utterance";
 import { ExportUpload } from "@/components/review/export-upload";
 import { PasteInput } from "@/components/review/paste-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api, USE_MOCK } from "@/lib/api";
-import { rpc } from "@/lib/rpc";
+import { boardTopicKeys, USE_MOCK } from "@/lib/api";
+import { appendToCollector } from "@/lib/collector-intake";
 import { useLocalCandidates } from "@/lib/local-candidates";
 import { knownNamesOf, useTeam } from "@/lib/team";
 
-// 확장 없이 쓰는 백업 입력: 대화 붙여넣기 · ChatGPT 내보내기 파일 (이 브라우저 안에서만 분류)
+// 확장 없이 쓰는 백업 입력: 대화 붙여넣기 · ChatGPT 내보내기 파일
+// 실제 모드는 로컬 수집기로 보내 개인정보 검사와 외부 AI 분류를 거친다. 목업 모드만 이 브라우저 안에서 분류한다
 export default function PastePage() {
   const router = useRouter();
-  const [team] = useTeam();
+  const team = useTeam();
   const local = useLocalCandidates();
   const [busy, setBusy] = useState(false);
+
+  // 목업 모드: 브라우저 안 규칙 분류기로 바로 후보를 만든다 (기존 세부 주제 이름을 먼저 쓴다)
+  const classifyInBrowser = async (utterances: Utterance[], label: string) => {
+    const existingTopicKeys = [...(await boardTopicKeys().catch(() => new Set<string>()))];
+    const cards = mockClassify(utterances, {
+      userName: team.me,
+      knownNames: [...new Set([...knownNamesOf(team), ...DEMO_KNOWN_NAMES])],
+      existingTopicKeys,
+    });
+    local.replace(cards, label);
+  };
 
   const classify = (label: string) => async (utterances: Utterance[]) => {
     setBusy(true);
     try {
-      if (!USE_MOCK) {
-        const conversationId = crypto.randomUUID();
-        const messages = utterances.map((u, i) => ({ id: u.id ?? `${conversationId}:${i}`, conversationId: u.conversationId ?? conversationId,
-          collectedAt: u.collectedAt ?? new Date().toISOString(), site: u.conversationId ? 'chatgpt-export' : 'manual',
-          role: u.speaker === 'ai' ? 'assistant' : 'user', roleGuessed: u.roleGuessed ?? true, text: u.text }));
-        for (let i=0; i<messages.length; i+=200) await rpc('turns.append', { messages: messages.slice(i,i+200), flush: i+200>=messages.length });
-        toast.success('분류 대기함에 저장했어요. 승인함에서 처리 결과를 확인하세요.');
-        router.push('/review');
-        return;
+      if (USE_MOCK) {
+        await classifyInBrowser(utterances, label);
+        toast.success("분류했어요. 승인함에서 팀에 올릴 내용을 골라 주세요");
+      } else {
+        await appendToCollector(utterances);
+        toast.success("분류 대기함에 저장했어요. 승인함에서 처리 결과를 확인하세요.");
       }
-      const board = await api.getBoard().catch(() => []);
-      const existingTopicKeys = [...new Set(board.map((c) => c.topic_key).filter((k): k is string => !!k))];
-      // 지금은 목업 분류기. 로컬 수집기(하은 님 AI)는 확장을 통해서만 부를 수 있다
-      const cards = mockClassify(utterances, {
-        userName: team.me,
-        knownNames: [...new Set([...knownNamesOf(team), ...DEMO_KNOWN_NAMES])],
-        existingTopicKeys,
-      });
-      local.replace(cards, label);
-      toast.success("분류했어요. 승인함에서 팀에 올릴 내용을 골라 주세요");
       router.push("/review");
     } catch (e) {
       toast.error(`분류 실패: ${(e as Error).message}`);

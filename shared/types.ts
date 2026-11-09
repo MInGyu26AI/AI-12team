@@ -23,20 +23,12 @@ interface CommonOutput {
 }
 
 export interface RelatedOutput extends CommonOutput {
-  classificationMethod?: "chat" | "decisions" | "manual" | "demo";
-  evidence?: { messageId: string; role: "user" | "assistant"; roleGuessed: boolean; quote: string };
-  deliveryState?: "pending" | "sent" | "blocked";
-  decisionState?: "active" | "review" | "superseded" | "rejected";
-  conflictCheckStatus?: "pending" | "running" | "complete" | "failed" | "not-required";
-  conflictCheckProgress?: { total: number; completed: number; skipped: number } | null;
-  conflictCheckDetail?: string;
-  approvedBy?: string;
-  approvedAt?: number;
   relevance: "related";
   sentence: string; // 원문 문장(또는 나눈 일부)
   subtopic: Subtopic | null; // tag=none(제안)이면 null 가능
   tag: Tag;
-  topic_key: string | null; // 세부 주제. 같은 topic_key의 decision끼리만 충돌 비교. tag=none이면 null 가능
+  // 세부 주제. 팀 서버는 비교 순서에만 쓰고 모든 유효 결정과 한 쌍씩 비교한다(목업은 같은 키끼리만). tag=none이면 null 가능
+  topic_key: string | null;
   is_new_topic: boolean;
   content: string;
   reason: string | null;
@@ -57,7 +49,23 @@ interface AppFields {
   id: string;
   status: CardStatus;
 }
-export type RelatedCard = RelatedOutput & AppFields;
+
+// 로컬 수집기가 후보에 붙이는 필드 (candidate_review.list_candidates)
+interface CandidateFields {
+  classificationMethod?: "chat" | "decisions" | "manual";
+  evidence?: { messageId: string; role: "user" | "assistant"; roleGuessed: boolean; quote: string };
+  deliveryState?: "pending" | "sent" | "blocked";
+}
+
+// 팀 서버가 보드 카드에 붙이는 필드 (team_board.py board)
+interface BoardFields {
+  decisionState?: "active" | "review" | "superseded" | "rejected";
+  conflictCheckStatus?: "pending" | "running" | "complete" | "failed" | "not-required";
+  conflictCheckProgress?: { total: number; completed: number; skipped: number } | null;
+  conflictCheckDetail?: string;
+}
+
+export type RelatedCard = RelatedOutput & AppFields & CandidateFields & BoardFields;
 export type PersonalCard = PersonalOutput & AppFields;
 export type Card = RelatedCard | PersonalCard;
 

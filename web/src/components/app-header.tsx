@@ -15,7 +15,7 @@ const NAV = [
 
 export function AppHeader() {
   const pathname = usePathname();
-  const [team] = useTeam();
+  const team = useTeam();
   const setup = pathname.startsWith("/team/new") || pathname.startsWith("/join");
 
   return (

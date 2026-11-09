@@ -6,17 +6,25 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { TEAM_KINDS } from "@shared/mock";
 import { Avatar } from "@/components/avatar";
+import { RegisteredTeamNotice } from "@/components/registered-team-notice";
 import { Button } from "@/components/ui/button";
-import { useTeam } from "@/lib/team";
-import { useExtensionBridge } from "@/lib/use-extension-bridge";
-import { cn } from "@/lib/utils";
 import { USE_MOCK } from "@/lib/api";
+import { useDemoTeam } from "@/lib/team";
+import { cn } from "@/lib/utils";
 
-// 피그마 2번: 새 팀 만들기 (서버 붙기 전에는 이 브라우저에 저장)
 export default function NewTeamPage() {
+  if (USE_MOCK) return <NewTeamForm />;
+  return (
+    <RegisteredTeamNotice title="등록된 팀으로 연결" linkLabel="팀 연결 확인하기" className="max-w-content py-10">
+      현재 내부 시연은 관리자가 미리 등록한 사용자와 팀으로 연결합니다. 수집 화면에서 소속 팀을 선택하세요.
+    </RegisteredTeamNotice>
+  );
+}
+
+// 피그마 2번: 새 팀 만들기 (목업 모드 전용, 이 브라우저에 저장)
+function NewTeamForm() {
   const router = useRouter();
-  const [team, setTeam] = useTeam();
-  const ext = useExtensionBridge();
+  const [team, setTeam] = useDemoTeam();
   const [form, setForm] = useState({ name: team.name, topic: team.topic, deadline: team.deadline, kind: team.kind });
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -38,13 +46,10 @@ export default function NewTeamPage() {
   const create = () => {
     if (!valid) return;
     setTeam({ ...team, name: form.name.trim(), topic: form.topic.trim(), deadline: form.deadline, kind: form.kind });
-    // 확장이 설치돼 있으면 팀 정보를 확장 설정에도 채운다 (팝업에서 다시 입력할 필요 없음)
-    if (ext.available) ext.updateSettings({ teamName: form.name.trim(), projectTopic: form.topic.trim(), userName: team.me });
-    toast.success(ext.available ? "팀을 만들고 브라우저 확장에도 연결했어요" : "팀을 만들었어요");
+    toast.success("팀을 만들었어요");
     router.push("/collect");
   };
 
-  if (!USE_MOCK) return <div className="mx-auto max-w-content space-y-4 px-gutter py-10"><h1 className="text-2xl font-bold">등록된 팀으로 연결</h1><p>현재 내부 시연은 관리자가 미리 등록한 사용자와 팀으로 연결합니다. 수집 화면에서 소속 팀을 선택하세요.</p><a href="/collect" className="underline">팀 연결 확인하기</a></div>;
   return (
     <div className="mx-auto max-w-content space-y-6 px-gutter py-10">
       <div className="space-y-2">

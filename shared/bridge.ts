@@ -1,18 +1,24 @@
-// 웹 ↔ 확장 프로그램(web-bridge 콘텐츠 스크립트) window.postMessage 형식
-import type { RelatedCard } from "./types";
+// 웹 ↔ 확장 window.postMessage 식별자와 로컬 수집기 RPC 결과 타입.
+// 메시지는 type:'rpc' / 'rpc-result' 다 (web/src/lib/rpc.ts ↔ extension/entrypoints/web-bridge.content.ts)
+import type { CollectedMessage } from "./collector";
+import type { Subtopic } from "./types";
 
 export const BRIDGE_FROM_WEB = "syncup-web";
 export const BRIDGE_FROM_EXT = "syncup-ext";
 
-// 확장의 대화 수집 한 묶음 (10턴마다 분류된 것)
+// 수집기에 쌓인 발화의 출처: turns.append 사이트와 코딩 도구.
+// claude-code 는 스캐너가 붙이고, codex 는 출처가 없는 스캐너 발화에 turn_intake 가 붙이는 기본값이다
+export type MessageSite = CollectedMessage["site"] | "codex" | "claude-code";
+
+// 분류를 마친 수집 묶음 한 개 (collection.status 의 recent)
 export interface BatchRecord {
   id: string;
   at: string; // ISO
-  site: string; // "ChatGPT"
+  site: MessageSite; // 묶음 첫 발화의 출처
   turns: number; // 대화 횟수 (질문 + 답변 = 1턴)
-  cardIds: string[]; // 이 묶음에서 나온 검토 대기 카드 (공유 후보만)
-  personal?: number; // 버린 개인 내용 수 (내용은 저장하지 않음)
-  trigger: "auto" | "flush" | "manual" | "selection";
+  cardIds: string[]; // 이 묶음에서 나온 공유 후보 카드 (이미 승인한 카드 포함)
+  // 묶음을 대기열에 넣은 요청: flush = 남은 대화까지 보내기(collection.flush, flush 인 turns.append), manual = intake.retry
+  trigger: "auto" | "flush" | "manual";
 }
 
 export interface ExtStatus {
@@ -26,9 +32,9 @@ export interface ExtStatus {
   autoCollect: boolean; // false = 수집 일시정지
   turnsPerBatch: number;
   bufferedTurns: number; // 아직 분류에 안 보낸 대화 수
-  endsAt: string | null; // 수집 종료 시각 (ISO)
+  endsAt: string; // 수집 종료 시각 (ISO)
   lastCollectedAt: string | null;
-  lastClassifier: "native" | "mock" | null;
+  lastClassifier: "native" | null;
   teamName: string;
   userName: string;
   recent: BatchRecord[]; // 최근 수집 (새 것부터)
@@ -60,7 +66,7 @@ export interface PrivacyExcluded {
   reason: string | null;
   decidedAt: number;
   role: "user" | "assistant" | null;
-  site: string | null;
+  site: MessageSite | null;
   collectedAt: string | null;
   text: string;
 }
@@ -72,35 +78,12 @@ export interface PrivacyList {
   excludedCount: number;
 }
 
-// 웹에서 바꿀 수 있는 확장 설정 (팀 만들기 → 확장 설정 채우기, 대화 수집 화면의 수집 기준)
+// collection.configure 가 받는 수집 설정 (collection_settings.CONFIGURABLE)
 export interface ExtSettingsPatch {
   teamId?: string;
-  teamName?: string;
   projectTopic?: string;
-  userName?: string;
+  enabledSubtopics?: Subtopic[];
   autoCollect?: boolean;
   turnsPerBatch?: number;
-  endsAt?: string | null;
+  endsAt?: string;
 }
-
-// 웹 → 확장
-export type WebToExt =
-  | { source: typeof BRIDGE_FROM_WEB; type: "hello" } // "확장 있으면 검토 대기 카드·상태 보내 줘"
-  | { source: typeof BRIDGE_FROM_WEB; type: "remove"; ids: string[]; reason: "approved" | "dismissed" }
-  | { source: typeof BRIDGE_FROM_WEB; type: "updateSettings"; patch: ExtSettingsPatch }
-  | { source: typeof BRIDGE_FROM_WEB; type: "flush" }; // 쌓인 대화 지금 분류
-
-// 확장 → 웹
-export type ExtToWeb = {
-  source: typeof BRIDGE_FROM_EXT;
-  type: "pending";
-  cards: RelatedCard[]; // 개인(personal)은 이미 버렸고, 민감정보는 가린 상태
-  userName: string;
-  status?: ExtStatus; // v0.2 부터
-};
-
-export const isExtToWeb = (d: unknown): d is ExtToWeb =>
-  typeof d === "object" && d !== null && (d as ExtToWeb).source === BRIDGE_FROM_EXT && (d as ExtToWeb).type === "pending";
-
-export const isWebToExt = (d: unknown): d is WebToExt =>
-  typeof d === "object" && d !== null && (d as WebToExt).source === BRIDGE_FROM_WEB;

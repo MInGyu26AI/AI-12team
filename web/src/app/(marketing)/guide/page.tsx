@@ -2,21 +2,34 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { USE_MOCK } from "@/lib/api";
+import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "이용 방법 · Sync up",
-  description: "팀 만들기부터 팀 결정 기록까지, Sync up을 쓰는 6단계",
+  description: "팀 연결부터 팀 결정 기록까지, Sync up을 쓰는 6단계",
 };
 
+// 첫 단계는 모드마다 다르다: 목업은 이 브라우저에 팀을 만들고, 실제는 관리자가 등록한 팀을 확인한다
+const FIRST_STEP = USE_MOCK
+  ? {
+      title: START.step,
+      body: "팀 이름, 프로젝트 주제, 마감일을 입력해요. 프로젝트 주제는 AI가 팀 관련 대화를 고르는 기준이 돼요. 초대 링크를 카카오톡·디스코드에 보내면 팀원이 바로 참여해요.",
+      tip: "예시 모드에서는 팀 정보가 이 브라우저에만 저장돼요.",
+      href: START.href,
+      cta: START.short,
+    }
+  : {
+      title: START.step,
+      body: "팀과 사용자는 관리자가 미리 등록해요. 로컬 수집기를 실행한 뒤 대화 수집 화면에서 승인 대상 팀과 프로젝트 주제를 확인해요. 프로젝트 주제는 AI가 팀 관련 대화를 고르는 기준이 돼요.",
+      tip: "초대 링크만으로는 팀에 들어갈 수 없어요. 소속이 없으면 관리자에게 등록을 요청하세요.",
+      href: START.href,
+      cta: "대화 수집 화면",
+    };
+
 const STEPS = [
-  {
-    title: "팀 만들기·초대",
-    body: "팀 이름, 프로젝트 주제, 마감일을 입력해요. 프로젝트 주제는 AI가 팀 관련 대화를 고르는 기준이 돼요. 초대 링크를 카카오톡·디스코드에 보내면 팀원이 바로 참여해요.",
-    tip: "확장을 먼저 설치해 두면 팀 정보가 확장 설정에도 자동으로 채워져요.",
-    href: "/team/new",
-    cta: "팀 만들기",
-  },
+  FIRST_STEP,
   {
     title: "브라우저 확장 연결",
     body: "크롬 확장 zip을 내려받아 압축을 풀고, chrome://extensions 의 개발자 모드에서 ‘압축해제된 확장 프로그램 로드’로 설치해요. 툴바에 고정해 두면 편해요.",
@@ -61,7 +74,7 @@ const FAQ = [
   },
   {
     q: "개인적인 대화도 팀에 올라가나요?",
-    a: "아니요. 개인 내용은 분류 단계에서 버리고 문장도 저장하지 않아요. 팀에는 승인함에서 내가 체크한 카드만 올라가요.",
+    a: "아니요. 이 기기의 개인정보 검사가 개인 내용으로 본 발화는 외부 AI와 팀 서버로 보내지 않아요. 원문은 이 기기에만 남았다가, 그 대화 묶음의 처리가 모두 끝나고 7일이 지나면 지워져요. 팀에는 승인함에서 내가 체크한 카드만 올라가요.",
   },
   {
     q: "단톡방 대화를 붙여넣어도 되나요?",
@@ -69,7 +82,7 @@ const FAQ = [
   },
   {
     q: "Claude나 Gemini도 되나요?",
-    a: "지금은 ChatGPT 웹을 지원하고, Claude·Gemini 웹은 행사 이후 지원할 예정이에요. 그 전에는 대화를 붙여넣어 쓸 수 있어요.",
+    a: "지금은 ChatGPT 웹을 지원하고, Claude·Gemini 웹은 지원할 예정이에요. 그 전에는 대화를 붙여넣어 쓸 수 있어요.",
   },
 ];
 
@@ -124,8 +137,8 @@ export default function GuidePage() {
             ))}
           </div>
           <div className="mt-10 text-center">
-            <Link href="/team/new" className={cn(buttonVariants({ size: "lg" }), "h-11 bg-brand px-6 hover:bg-brand-hover")}>
-              팀 만들고 시작하기
+            <Link href={START.href} className={cn(buttonVariants({ size: "lg" }), "h-11 bg-brand px-6 hover:bg-brand-hover")}>
+              {START.label}
             </Link>
           </div>
         </div>

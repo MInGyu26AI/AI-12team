@@ -8,12 +8,6 @@
   --color-brand-soft: #eef0ff;
   --color-canvas: #f5f6f8; /* 앱 화면 바탕 (피그마 2~6번) */
 
-  /* 분류 기준표의 단계 색 (관련성·소주제) */
-  --color-relevance: #2e7d32;
-  --color-relevance-soft: #e8f5e9;
-  --color-subtopic: #7e22ce;
-  --color-subtopic-soft: #f3e8ff;
-
   /* 표시(tag) */
   --color-tag-decision: #4f46e5;
   --color-tag-decision-soft: #eef0ff;

@@ -2,21 +2,18 @@
   "name": "syncup-extension",
   "description": "SyncUp Chrome extension",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.2",
   "type": "module",
   "scripts": {
     "dev": "wxt",
-    "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
-    "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:web": "wxt zip && node scripts/publish-to-web.mjs",
-    "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "test": "vitest run",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "jszip": "^3.10.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
@@ -25,8 +22,10 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "happy-dom": "^21.0.4",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.12",
     "web-ext": "^10.5.0",
     "wxt": "^0.21.3"
   }

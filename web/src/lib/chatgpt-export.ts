@@ -1,8 +1,8 @@
 // ChatGPT 내보내기(zip 또는 conversations.json)를 브라우저 안에서만 연다.
 // 원본 파일은 어디로도 전송하지 않는다 (CLAUDE.md §9).
 import JSZip from "jszip";
-import type { Utterance } from "@shared/classify";
-import { nowSource } from "@shared/classify";
+import { formatSource } from "@shared/format";
+import type { Utterance } from "@shared/utterance";
 
 interface RawNode {
   parent?: string | null;
@@ -27,39 +27,48 @@ export interface ExportConversation {
   utterances: Utterance[];
 }
 
+const MAX_EXPORT_BYTES = 50 * 1024 * 1024;
 const toDate = (sec?: number | null) => (sec ? new Date(sec * 1000) : null);
 
-function toUtterances(conv: RawConversation, conversationId: string): Utterance[] {
+// current_node 에서 parent 를 따라 올라가면 화면에 보이던 대화 한 줄기 (처음 발화부터 순서대로)
+function visibleBranch(conv: RawConversation): { id: string; node: RawNode }[] {
   const mapping = conv.mapping ?? {};
-  // current_node 에서 parent 를 따라 올라가면 화면에 보이던 대화 한 줄기
-  const chain: RawNode[] = [];
-  const ids: string[] = [];
+  const branch: { id: string; node: RawNode }[] = [];
   const seen = new Set<string>();
   let id = conv.current_node;
   while (id && mapping[id]) {
-    if (seen.has(id)) throw new Error('대화 파일의 연결 구조가 잘못되었습니다.');
-    seen.add(id); ids.push(id);
-    chain.push(mapping[id]!);
-    id = mapping[id]!.parent ?? undefined;
+    if (seen.has(id)) throw new Error("대화 파일의 연결 구조가 잘못되었습니다.");
+    seen.add(id);
+    branch.push({ id, node: mapping[id] });
+    id = mapping[id].parent ?? undefined;
   }
-  chain.reverse();
-  ids.reverse();
+  return branch.reverse();
+}
 
+function toUtterances(conv: RawConversation, conversationId: string): Utterance[] {
   const out: Utterance[] = [];
-  for (const [index, node] of chain.entries()) {
+  for (const { id, node } of visibleBranch(conv)) {
     const m = node.message;
     const role = m?.author?.role;
     if (role !== "user" && role !== "assistant") continue;
     const text = (m?.content?.parts ?? []).filter((p): p is string => typeof p === "string").join("\n").trim();
     if (!text) continue;
     const at = toDate(m?.create_time) ?? toDate(conv.create_time) ?? new Date();
-    out.push({ id: ids[index], conversationId, collectedAt: at.toISOString(), roleGuessed: false, speaker: role === "user" ? "user" : "ai", text, source: nowSource("ChatGPT", at) });
+    out.push({
+      id,
+      conversationId,
+      collectedAt: at.toISOString(),
+      roleGuessed: false,
+      speaker: role === "user" ? "user" : "ai",
+      text,
+      source: formatSource("ChatGPT", at),
+    });
   }
   return out;
 }
 
 export async function readChatGPTExport(file: File): Promise<ExportConversation[]> {
-  if (file.size > 50*1024*1024) throw new Error('50MB 이하 파일을 선택하세요.');
+  if (file.size > MAX_EXPORT_BYTES) throw new Error("50MB 이하 파일을 선택하세요.");
   let raw: RawConversation[] = [];
   if (file.name.toLowerCase().endsWith(".zip")) {
     const zip = await JSZip.loadAsync(file);

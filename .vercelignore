@@ -1,9 +1,11 @@
-# Vercel CLI 배포 시 올리지 않을 것 (레포 최상위에서 배포, 프로젝트 Root Directory = web)
+# Vercel CLI 배포 때 올릴 것만 고른다 (레포 최상위에서 배포, 프로젝트 Root Directory = web)
+# CLI 는 .gitignore 를 따르지 않으므로 최상위는 모두 빼고 필요한 폴더만 다시 넣는다
 # web 은 ../shared 를 import 하므로 shared 는 반드시 포함돼야 함
-extension/
+/*
+!/web
+!/shared
 **/node_modules
 **/.next
-**/.output
-**/.wxt
+**/.next-integration
 **/.env*
 !**/.env.example

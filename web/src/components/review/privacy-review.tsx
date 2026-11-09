@@ -4,9 +4,11 @@ import { useState } from "react";
 import { ChevronDown, EyeOff, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { PrivacyExcluded, PrivacyHold, PrivacyMessage } from "@shared/bridge";
+import { SITE_LABEL } from "@shared/labels";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { USE_MOCK } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const REASON: Record<string, string> = {
@@ -63,8 +65,10 @@ export function HeldBatches({ items, teamId, modelAvailable, onAction, onRefresh
     const current = new Map(items.map((i) => [i.id, i]));
     const settled = Object.keys(asked).filter((id) => !current.has(id) || !REQUESTED[current.get(id)!.reason]);
     if (settled.length) {
-      setFinished((f) => [...settled.filter((id) => !current.has(id)).map((id) => asked[id]), ...f].slice(0, 3));
-      setStillHeld((s) => ({ ...s, ...Object.fromEntries(settled.filter((id) => current.has(id)).map((id) => [id, true])) }));
+      const gone = settled.filter((id) => !current.has(id)); // 목록에서 빠짐 = 처리 끝
+      const back = settled.filter((id) => current.has(id)); // 새 판정으로 돌아옴 = 아직 확인 필요
+      setFinished((f) => [...gone.map((id) => asked[id]), ...f].slice(0, 3));
+      setStillHeld((s) => ({ ...s, ...Object.fromEntries(back.map((id) => [id, true])) }));
       setAsked((a) => Object.fromEntries(Object.entries(a).filter(([id]) => !settled.includes(id))));
     }
   }
@@ -72,7 +76,8 @@ export function HeldBatches({ items, teamId, modelAvailable, onAction, onRefresh
   const run = async (item: PrivacyHold, kind: Kind, messageId?: string) => {
     setBusy(item.id + (messageId ?? ""));
     try {
-      await onAction(kind === "recheck" ? "privacy.recheck" : "privacy.exclude", { id: item.id, teamId, ...(messageId ? { messageId } : {}) });
+      const method = kind === "recheck" ? "privacy.recheck" : "privacy.exclude";
+      await onAction(method, { id: item.id, teamId, ...(messageId ? { messageId } : {}) });
       setAsked((a) => ({ ...a, [item.id]: kind }));
       setStillHeld((s) => ({ ...s, [item.id]: false }));
     } catch (error) {
@@ -89,77 +94,108 @@ export function HeldBatches({ items, teamId, modelAvailable, onAction, onRefresh
       {kind === "exclude" ? "제외를 반영했어요. 남은 발화는 승인 대기에서 확인하세요." : "다시 검사를 마쳤어요. 결과는 승인 대기나 제외됨에서 확인하세요."}
     </p>
   ));
-  if (!items.length) return <div className="space-y-4">{notices}<EmptyState title="확인이 필요한 대화 묶음이 없어요" /></div>;
+  if (!items.length) {
+    return (
+      <div className="space-y-4">
+        {notices}
+        <EmptyState title="확인이 필요한 대화 묶음이 없어요" />
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       {notices}
       {modelAvailable === false && (
-        <p role="status" className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">
+        <p role="status" className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           이 기기의 로컬 검사 모델에 연결할 수 없어요. 모델을 실행한 뒤 다시 검사하세요. 그전까지는 외부 AI로 보내지 않아요.
         </p>
       )}
-      {items.map((item) => {
-        const waiting = REQUESTED[item.reason] ? { kind: REQUESTED[item.reason] } : null;
-        const disabled = !!waiting || busy !== null;
-        const held = item.messages.filter((m) => m.decision !== "allow");
-        return (
-          <article key={item.id} className="space-y-3 rounded-xl border p-5" aria-busy={!!waiting}>
-            <div className="flex flex-wrap items-center gap-2">
-              <ShieldAlert className="size-4 text-amber-600" aria-hidden />
-              <Badge variant="outline">{waiting ? "검사 대기 중" : reasonLabel(item.reason)}</Badge>
-              <span className="text-xs text-muted-foreground">{time(item.decidedAt)} 판정 · 발화 {item.messages.length}개</span>
-            </div>
-            <p className="break-keep">현재 묶음은 외부 AI 분석 전 보류되어 있어요.</p>
-            {waiting && (
-              <p role="status" className="text-sm text-muted-foreground">
-                {waiting.kind === "recheck" ? "다시 검사를 요청했어요. 결과를 기다리는 중…" : "제외를 요청했어요. 남은 발화를 다시 확인하는 중…"}
-              </p>
-            )}
-            {!waiting && stillHeld[item.id] && (
-              <p role="status" className="text-sm text-muted-foreground">다시 검사했지만 아직 확인이 필요해요.</p>
-            )}
-            <button
-              className="flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
-              aria-expanded={!!open[item.id]}
-              onClick={() => setOpen((o) => ({ ...o, [item.id]: !o[item.id] }))}
-            >
-              발화 {item.messages.length}개 보기
-              <ChevronDown className={cn("size-4 transition-transform", open[item.id] && "rotate-180")} aria-hidden />
-            </button>
-            {open[item.id] && (
-              <ul className="space-y-3">
-                <li className="text-xs text-muted-foreground">키·연락처 같은 형식만 가린 로컬 원문이에요. 개인 내용이 그대로 보일 수 있고, 이 화면에서만 보여요.</li>
-                {item.messages.map((m: PrivacyMessage) => (
-                  <li key={m.id} className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium">{ROLE[m.role] ?? m.role}</span>
-                      <Badge variant={m.decision === "allow" ? "secondary" : "outline"}>{m.decision ? DECISION[m.decision] : "판정 없음"}</Badge>
-                      {m.decision !== "allow" && <span className="text-muted-foreground">{reasonLabel(m.reason)}</span>}
-                    </div>
-                    <Preview text={m.text} />
-                    {m.decision !== "allow" && (
-                      <Button variant="outline" size="sm" disabled={disabled} onClick={() => run(item, "exclude", m.id)}>
-                        이 발화 분석에서 제외
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" disabled={disabled} onClick={() => run(item, "recheck")}>
-                {busy === item.id ? "요청 중…" : "다시 검사"}
-              </Button>
-              {held.length > 0 && (
-                <Button variant="ghost" disabled={disabled} onClick={() => run(item, "exclude")}>
-                  확인이 필요한 발화 {held.length}개 분석에서 제외
-                </Button>
-              )}
-            </div>
-          </article>
-        );
-      })}
+      {items.map((item) => (
+        <HeldBatchCard
+          key={item.id}
+          item={item}
+          busy={busy}
+          stillHeld={!!stillHeld[item.id]}
+          open={!!open[item.id]}
+          onToggle={() => setOpen((o) => ({ ...o, [item.id]: !o[item.id] }))}
+          onRun={(kind, messageId) => run(item, kind, messageId)}
+        />
+      ))}
     </div>
+  );
+}
+
+// 보류된 묶음 하나: 보류 이유, 요청 대기·재검사 결과, 펼치면 발화별 판정과 제외 버튼
+function HeldBatchCard({ item, busy, stillHeld, open, onToggle, onRun }: {
+  item: PrivacyHold;
+  busy: string | null; // 요청 중인 묶음(또는 묶음+발화) id
+  stillHeld: boolean;
+  open: boolean;
+  onToggle: () => void;
+  onRun: (kind: Kind, messageId?: string) => void;
+}) {
+  const waiting = REQUESTED[item.reason] ?? null;
+  const disabled = !!waiting || busy !== null;
+  const held = item.messages.filter((m) => m.decision !== "allow");
+  return (
+    <article className="space-y-3 rounded-xl border p-5" aria-busy={!!waiting}>
+      <div className="flex flex-wrap items-center gap-2">
+        <ShieldAlert className="size-4 text-amber-600" aria-hidden />
+        <Badge variant="outline">{waiting ? "검사 대기 중" : reasonLabel(item.reason)}</Badge>
+        <span className="text-xs text-muted-foreground">{time(item.decidedAt)} 판정 · 발화 {item.messages.length}개</span>
+      </div>
+      <p className="break-keep">현재 묶음은 외부 AI 분석 전 보류되어 있어요.</p>
+      {waiting && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {waiting === "recheck" ? "다시 검사를 요청했어요. 결과를 기다리는 중…" : "제외를 요청했어요. 남은 발화를 다시 확인하는 중…"}
+        </p>
+      )}
+      {!waiting && stillHeld && <p role="status" className="text-sm text-muted-foreground">다시 검사했지만 아직 확인이 필요해요.</p>}
+      <button
+        className="flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        발화 {item.messages.length}개 보기
+        <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} aria-hidden />
+      </button>
+      {open && (
+        <ul className="space-y-3">
+          <li className="text-xs text-muted-foreground">키·연락처 같은 형식만 가린 로컬 원문이에요. 개인 내용이 그대로 보일 수 있고, 이 화면에서만 보여요.</li>
+          {item.messages.map((m) => (
+            <HeldMessage key={m.id} message={m} disabled={disabled} onExclude={() => onRun("exclude", m.id)} />
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" disabled={disabled} onClick={() => onRun("recheck")}>
+          {busy === item.id ? "요청 중…" : "다시 검사"}
+        </Button>
+        {held.length > 0 && (
+          <Button variant="ghost" disabled={disabled} onClick={() => onRun("exclude")}>
+            확인이 필요한 발화 {held.length}개 분석에서 제외
+          </Button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function HeldMessage({ message: m, disabled, onExclude }: { message: PrivacyMessage; disabled: boolean; onExclude: () => void }) {
+  return (
+    <li className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-medium">{ROLE[m.role] ?? m.role}</span>
+        <Badge variant={m.decision === "allow" ? "secondary" : "outline"}>{m.decision ? DECISION[m.decision] : "판정 없음"}</Badge>
+        {m.decision !== "allow" && <span className="text-muted-foreground">{reasonLabel(m.reason)}</span>}
+      </div>
+      <Preview text={m.text} />
+      {m.decision !== "allow" && (
+        <Button variant="outline" size="sm" disabled={disabled} onClick={onExclude}>
+          이 발화 분석에서 제외
+        </Button>
+      )}
+    </li>
   );
 }
 
@@ -179,7 +215,7 @@ export function ExcludedMessages({ items, total }: { items: PrivacyExcluded[]; t
                 <EyeOff className="size-4 text-muted-foreground" aria-hidden />
                 <Badge variant="outline">{reasonLabel(e.reason)}</Badge>
                 <span className="text-muted-foreground">
-                  {[e.role ? ROLE[e.role] : null, e.site, time(e.decidedAt) + " 판정"].filter(Boolean).join(" · ")}
+                  {[e.role ? ROLE[e.role] : null, e.site && (SITE_LABEL[e.site] ?? e.site), time(e.decidedAt) + " 판정"].filter(Boolean).join(" · ")}
                 </span>
               </div>
               <p className="text-sm">이 발화는 분석에서 제외됐어요.</p>
@@ -200,6 +236,15 @@ export function ExcludedMessages({ items, total }: { items: PrivacyExcluded[]; t
   );
 }
 
-export function PrivacyError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <ErrorState message={`개인정보 검사 목록을 새로 읽지 못했어요. 마지막으로 받은 목록을 보여 줘요. (${message})`} onRetry={onRetry} />;
+// '확인 필요'·'제외됨' 탭 공통: 목업 모드 안내, 목록을 새로 읽지 못했을 때의 오류
+export function PrivacyTab({ error, onRetry, children }: { error: string | null; onRetry: () => void; children: React.ReactNode }) {
+  if (USE_MOCK) return <p className="text-muted-foreground">예시 모드에는 로컬 개인정보 검사 결과가 없어요.</p>;
+  return (
+    <>
+      {error && (
+        <ErrorState message={`개인정보 검사 목록을 새로 읽지 못했어요. 마지막으로 받은 목록을 보여 줘요. (${error})`} onRetry={onRetry} />
+      )}
+      {children}
+    </>
+  );
 }

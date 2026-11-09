@@ -1,16 +1,8 @@
-// 목업 분류기 (웹·확장 공용). docs/classification.md "신호 표현" 키워드로 대충 분류한다.
-// 나중에 김동균 님 로컬 수집기 결과로 바꿀 때는 mockClassify 한 함수만 교체하면 된다.
+// 분류 전 가림(mask)과 웹 목업 모드의 규칙 분류기(mockClassify).
+// 실제 모드의 분류는 로컬 수집기(ai/syncup_ai)가 한다. mockClassify 는 docs/classification.md "신호 표현" 키워드로 대충 분류한다.
+// check_mask_cases.cjs 가 이 파일을 그대로 읽어 mask() 를 검사하므로 런타임 import 를 두지 않는다 (타입 import 만).
 import type { Card, RelatedCard, Speaker, Subtopic, Tag } from "./types";
-
-export interface Utterance {
-  id?: string;
-  conversationId?: string;
-  collectedAt?: string;
-  roleGuessed?: boolean;
-  speaker: Speaker;
-  text: string;
-  source: string; // 예: "ChatGPT, 2026-11-06 21:10"
-}
+import type { Utterance } from "./utterance";
 
 // 분류 프롬프트에 함께 넣는 정보 (docs/classification.md 4장)
 export interface ClassifyContext {
@@ -51,17 +43,14 @@ const SENSITIVE: [RegExp, Replacer][] = [
       keep + (/api[_-]?key/i.test(key) ? "[API키]" : /passw/i.test(key) ? "[비밀번호]" : "[액세스토큰]"),
   ],
   // 개인정보
+  // 국제 표기(+82)와 지역번호 유선전화(02·031·070 …)도 연락처다. 계좌 규칙보다 먼저 둔다.
+  [/(?<!\d)\+82[-.\s]?0?(?:1[016789]|2|[3-6][1-5]|70)[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)/g, "[연락처]"],
+  [/(?<![\d-])0(?:2|[3-6][1-5]|70)[-.\s)]\s?\d{3,4}[-.\s]\d{4}(?!\d)/g, "[연락처]"],
   [/01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/g, "[연락처]"],
   [/[\w.+-]+@[\w-]+\.[\w.]+/g, "[이메일]"],
   [/\d{6}-?[1-4]\d{6}/g, "[주민번호]"],
   [/\d{3,6}-\d{2,6}-\d{4,8}/g, "[계좌]"], // 날짜(2026-11-06)는 안 걸리게
 ];
-
-// 가린 자리 표시 (코드가 쓰는 것 + 분류 AI 가 쓰는 것). ai/syncup_ai/mask.py MASK_TOKENS 와 같음
-export const MASK_TOKENS = [
-  "[API키]", "[액세스토큰]", "[비밀번호]",
-  "[연락처]", "[이메일]", "[주민번호]", "[계좌]", "[주소]", "[건강정보]", "[금융정보]", "[개인사정]",
-] as const;
 
 export function mask(text: string) {
   let masked = false;
@@ -77,7 +66,7 @@ export function mask(text: string) {
 }
 
 // ── 문장 나누기: 마침표·물음표·줄바꿈, 그리고 "~하고," / "~해서 ~로 가자" 같은 복합문 ──
-export function splitSentences(text: string): string[] {
+function splitSentences(text: string): string[] {
   return text
     .split(/(?<=[.?!])\s+|\n+/)
     .flatMap((s) => s.split(/(?<=(?:하고|이고|로 하고),)\s*/))
@@ -162,28 +151,31 @@ function fallbackTopic(body: string): string {
 }
 
 const CHAT_LINE = /^\[([^\]\s]{1,10})\]\s*(.+)$/; // 단톡방 한 줄: [하린] 서버는 …
-export const MAX_CARDS_PER_AI_MESSAGE = 2; // config.MAX_CARDS_PER_AI_MESSAGE
+const MAX_CARDS_PER_AI_MESSAGE = 2; // 목업 전용. ai/syncup_ai/config.py MAX_CARDS_PER_AI_MESSAGE 를 흉내 낸다
 
+// 기한 계산용 날짜 문자열. format.ts 의 ymd 와 같은 형식이지만, 이 파일은 런타임 import 를 둘 수 없어 따로 둔다
 const WEEKDAYS = "일월화수목금토";
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 // "내일", "모레", "금요일", "11월 8일", "11/8" → YYYY-MM-DD (기준: 발화 시각)
 function pickDue(s: string, base: Date): string | null {
-  const d = new Date(base);
-  if (/모레/.test(s)) return d.setDate(d.getDate() + 2), ymd(d);
-  if (/내일/.test(s)) return d.setDate(d.getDate() + 1), ymd(d);
-  if (/오늘/.test(s)) return ymd(d);
+  const after = (days: number) => {
+    const d = new Date(base);
+    d.setDate(d.getDate() + days);
+    return ymd(d);
+  };
+  if (/모레/.test(s)) return after(2);
+  if (/내일/.test(s)) return after(1);
+  if (/오늘/.test(s)) return ymd(base);
   const md = s.match(/(\d{1,2})\s?(?:월|\/)\s?(\d{1,2})/);
-  if (md) return ymd(new Date(d.getFullYear(), Number(md[1]) - 1, Number(md[2])));
+  if (md) return ymd(new Date(base.getFullYear(), Number(md[1]) - 1, Number(md[2])));
   const wd = s.match(/([일월화수목금토])요일/);
-  if (wd && /까지/.test(s)) {
-    const diff = (WEEKDAYS.indexOf(wd[1]!) - d.getDay() + 7) % 7 || 7;
-    return d.setDate(d.getDate() + diff), ymd(d);
-  }
+  if (wd && /까지/.test(s)) return after((WEEKDAYS.indexOf(wd[1]!) - base.getDay() + 7) % 7 || 7);
   return null;
 }
 
+// 출처("ChatGPT, 2026-11-06 21:10")의 발화 시각. 날짜만 있으면 정오로 둬서 며칠을 더할 때 서머타임 경계에서 날짜가 밀리지 않게 한다
 const baseDate = (source: string) => {
   const m = source.match(/(\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?/);
   return m ? new Date(`${m[1]}T${m[2] ?? "12:00"}:00`) : new Date();
@@ -192,98 +184,92 @@ const baseDate = (source: string) => {
 let seq = 0;
 const newId = () => `p${Date.now().toString(36)}${(seq++).toString(36)}`;
 
+// AI 답변은 결정·할 일이 될 수 없음 → 제안 (ai/syncup_ai/classify.py 와 같음)
+function tagFor(body: string, speaker: Speaker): Tag | null {
+  const tag = pickTag(body);
+  return speaker === "ai" && (tag === "decision" || tag === "todo") ? "none" : tag;
+}
+
+function subtopicFor(body: string, tag: Tag, enabled: Set<Subtopic> | null): Subtopic | null {
+  if (tag === "none") return null;
+  const found =
+    SUBTOPIC_RULES.find(([, re]) => re.test(body))?.[0] ??
+    (tag === "todo" ? "역할·일정" : tag === "research" ? "자료 조사" : "기타");
+  return enabled && !enabled.has(found) ? "기타" : found; // 꺼 둔 소주제
+}
+
+function topicKeyFor(body: string, tag: Tag): string | null {
+  if (tag === "none") return null;
+  return TOPIC_RULES.find(([, re]) => re.test(body))?.[0] ?? fallbackTopic(body);
+}
+
+function confidenceOf(tag: Tag, owner: string | null, subtopic: Subtopic | null): number {
+  let confidence = 0.8;
+  if (tag === "todo" && !owner) confidence = 0.5; // 담당 미정 → 확인 필요
+  if (subtopic === "기타") confidence -= 0.15;
+  return Math.round(confidence * 100) / 100;
+}
+
+interface Scope {
+  ctx: ClassifyContext;
+  known: Set<string>; // 지금까지 나온 세부 주제 (기존 + 이번에 만든 것)
+  enabled: Set<Subtopic> | null;
+}
+
+type CardBase = Pick<RelatedCard, "id" | "source" | "masked" | "status">;
+
+/** sentence = 가린 문장, body = 단톡방 화자 표시를 뗀 내용, speakerName = 단톡방 줄의 화자 */
+function relatedCard(base: CardBase, sentence: string, body: string, tag: Tag, speakerName: string | undefined, scope: Scope): RelatedCard {
+  const subtopic = subtopicFor(body, tag, scope.enabled);
+  const topic_key = topicKeyFor(body, tag);
+  const owner = tag === "decision" || tag === "todo" ? pickOwner(body, tag, scope.ctx, speakerName) : null;
+  return {
+    ...base,
+    relevance: "related",
+    sentence,
+    subtopic,
+    tag,
+    topic_key,
+    is_new_topic: topic_key ? !scope.known.has(topic_key) : false,
+    content: body.replace(/[.?!]+$/, ""),
+    reason: null,
+    owner,
+    due: tag === "todo" ? pickDue(body, baseDate(base.source)) : null,
+    is_change: tag === "decision" && CHANGE.test(body),
+    confidence: confidenceOf(tag, owner, subtopic),
+  };
+}
+
 /** 발화 목록 → 후보 카드 (개인 카드 포함. 개인은 sentence 없이 relevance 만) */
 export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Card[] {
-  const known = new Set(ctx.existingTopicKeys ?? []);
-  const enabled = ctx.enabledSubtopics ? new Set<Subtopic>(ctx.enabledSubtopics) : null;
+  const scope: Scope = {
+    ctx,
+    known: new Set(ctx.existingTopicKeys ?? []),
+    enabled: ctx.enabledSubtopics ? new Set<Subtopic>(ctx.enabledSubtopics) : null,
+  };
   const cards: Card[] = [];
-
   for (const u of utterances) {
     let aiCards = 0;
     for (const raw of splitSentences(u.text)) {
-      const { text: masked0, masked } = mask(raw);
-      const chat = u.speaker === "user" ? masked0.match(CHAT_LINE) : null;
-      const sentence = masked0;
-      const body = chat ? chat[2]! : masked0;
-      let tag = pickTag(body);
-      // AI 답변은 결정·할 일이 될 수 없음 → 제안 (ai/syncup_ai/classify.py 와 같음)
-      if (u.speaker === "ai" && (tag === "decision" || tag === "todo")) tag = "none";
-      if (u.speaker === "ai" && tag !== null && !PERSONAL.test(body) && ++aiCards > MAX_CARDS_PER_AI_MESSAGE) continue;
-      const common = { id: newId(), source: u.source, masked, status: "candidate" as const };
-
-      // AI 답변의 인사·추천 같은 군말은 카드도 개인도 아님 (해당 없음 → 만들지 않음)
-      if (u.speaker === "ai" && tag === null && !PERSONAL.test(body)) continue;
-      if (PERSONAL.test(body) || tag === null) {
-        // 개인: 문장은 저장하지 않는다
-        cards.push({ ...common, relevance: "personal", confidence: PERSONAL.test(body) ? 0.85 : 0.5 });
+      const { text: sentence, masked } = mask(raw);
+      const chat = u.speaker === "user" ? sentence.match(CHAT_LINE) : null;
+      const body = chat ? chat[2]! : sentence;
+      const personal = PERSONAL.test(body);
+      const tag = tagFor(body, u.speaker);
+      if (u.speaker === "ai" && !personal) {
+        if (tag === null) continue; // AI 답변의 인사·추천 같은 군말은 카드도 개인도 아님
+        aiCards += 1;
+        if (aiCards > MAX_CARDS_PER_AI_MESSAGE) continue;
+      }
+      const base = { id: newId(), source: u.source, masked, status: "candidate" as const };
+      if (personal || tag === null) {
+        cards.push({ ...base, relevance: "personal", confidence: personal ? 0.85 : 0.5 }); // 개인: 문장은 저장하지 않는다
         continue;
       }
-
-      let subtopic: Subtopic | null =
-        tag === "none"
-          ? null
-          : (SUBTOPIC_RULES.find(([, re]) => re.test(body))?.[0] ??
-            (tag === "todo" ? "역할·일정" : tag === "research" ? "자료 조사" : "기타"));
-      if (subtopic && enabled && !enabled.has(subtopic)) subtopic = "기타"; // 꺼 둔 소주제
-      const topic_key =
-        tag === "none"
-          ? null
-          : (TOPIC_RULES.find(([, re]) => re.test(body))?.[0] ?? fallbackTopic(body));
-      const owner = tag === "decision" || tag === "todo" ? pickOwner(body, tag, ctx, chat?.[1]) : null;
-      const due = tag === "todo" ? pickDue(body, baseDate(u.source)) : null;
-
-      let confidence = 0.8;
-      if (tag === "todo" && !owner) confidence = 0.5; // 담당 미정 → 확인 필요
-      if (subtopic === "기타") confidence -= 0.15;
-
-      const card: RelatedCard = {
-        ...common,
-        relevance: "related",
-        sentence,
-        subtopic,
-        tag,
-        topic_key,
-        is_new_topic: topic_key ? !known.has(topic_key) : false,
-        content: body.replace(/[.?!]+$/, ""),
-        reason: null,
-        owner,
-        due,
-        is_change: tag === "decision" && CHANGE.test(body),
-        confidence: Math.round(confidence * 100) / 100,
-      };
-      if (topic_key) known.add(topic_key);
+      const card = relatedCard(base, sentence, body, tag, chat?.[1], scope);
+      if (card.topic_key) scope.known.add(card.topic_key);
       cards.push(card);
     }
   }
   return cards;
 }
-
-// ── 붙여넣은 대화 → 발화. "나:", "You said:", "ChatGPT:" 같은 화자 표시를 읽는다 ──
-const USER_PREFIX = /^(?:나|me|user|you said|you|사용자)\s*:?\s*$|^(?:나|me|user|you|사용자)\s*:\s*/i;
-const AI_PREFIX = /^(?:chatgpt|gpt|claude|gemini|ai|assistant)(?: said)?\s*:?\s*$|^(?:chatgpt|gpt|claude|gemini|ai|assistant)\s*:\s*/i;
-
-export function parsePasted(text: string, source: string): Utterance[] {
-  const out: Utterance[] = [];
-  let speaker: Speaker = "user";
-  let roleGuessed = true;
-  for (const line of text.split(/\r?\n/)) {
-    let body = line;
-    if (USER_PREFIX.test(line)) {
-      speaker = "user";
-      roleGuessed = false;
-      body = line.replace(USER_PREFIX, "");
-    } else if (AI_PREFIX.test(line)) {
-      speaker = "ai";
-      roleGuessed = false;
-      body = line.replace(AI_PREFIX, "");
-    }
-    if (!body.trim()) continue;
-    const last = out.at(-1);
-    if (last && last.speaker === speaker && last.roleGuessed === roleGuessed) last.text += "\n" + body;
-    else out.push({ speaker, text: body, source, roleGuessed });
-  }
-  return out;
-}
-
-export const nowSource = (label: string, d = new Date()) =>
-  `${label}, ${ymd(d)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
