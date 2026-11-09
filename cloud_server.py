@@ -6,7 +6,13 @@ import re
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
-from team_server import TeamHandler, TeamServer, verify_database
+from team_access import DatabaseSetupError, verify_database
+from team_server import TeamHandler, TeamServer
+
+HEALTH_TIMEOUT_SECONDS = 3  # shorter than API transactions, so a stalled DB fails the probe quickly
+# Both hosting set-ups stay supported: Railway probes /healthz from this host, Render supplies
+# RENDER_EXTERNAL_HOSTNAME. The deployment in use is not recorded in this repository.
+RAILWAY_PROBE_HOST = 'healthcheck.railway.app'
 
 
 class CloudHandler(TeamHandler):
@@ -17,13 +23,13 @@ class CloudHandler(TeamHandler):
         if self.path != '/healthz':
             return super().handle_api()
         # Health checks reveal only readiness, never identities or DB error text.
-        # Railway probes use a dedicated host; it is allowed only on this read-only route.
-        probe = self.headers.get_all('Host', []) == ['healthcheck.railway.app']
+        # The probe host is allowed only on this read-only route.
+        probe = self.headers.get_all('Host', []) == [RAILWAY_PROBE_HOST]
         if self.command != 'GET' or not (self.valid_host() or probe):
             return self.reply(400, '{}', 'application/json')
         try:
-            with psycopg.connect(self.server.dsn, connect_timeout=3) as c:
-                c.execute("SET LOCAL statement_timeout = '3s'")
+            with psycopg.connect(self.server.dsn, connect_timeout=HEALTH_TIMEOUT_SECONDS) as c:
+                c.execute("SELECT set_config('statement_timeout',%s,true)", (f'{HEALTH_TIMEOUT_SECONDS}s',))
                 c.execute('SELECT 1')
             status = 200
         except psycopg.Error:
@@ -50,6 +56,8 @@ def main():
     try:
         dsn, host, port = settings()
         verify_database(dsn)
+    except DatabaseSetupError as error:
+        raise SystemExit(str(error)) from None
     except (KeyError, ValueError, psycopg.Error):
         raise SystemExit('Cloud configuration or restricted DB connection failed; credentials are not logged.') from None
     # The provider terminates TLS; only this authenticated API is bound publicly.

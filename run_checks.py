@@ -41,7 +41,7 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('rust', [PY, 'check_claude.py'], 'Rust 스캐너: Claude Code 로그'),
     ('rust', [PY, 'check_portability.py'], 'Rust 스캐너: 경로·OS 이식성'),
     # ServerRecovery inherits TeamIntegration (check_team_integration.py), which inherits TeamIsolation (check_teams.py),
-    # so this one file runs all three suites once; listing the other two files as well would repeat the inherited tests.
+    # so this one file runs all three suites once. Every other team file runs only its own tests (check_teams.own_tests).
     ('team', [PY, 'check_server_recovery.py'], '팀 격리(RLS) + 로컬 ↔ 팀 서버 통합 + 서버 복구 (상속으로 함께 실행)'),
     ('team', [PY, 'check_resumable_conflicts.py'], '충돌 검사 재개·재시작'),
     ('team', [PY, 'check_db_connection_recovery.py'], 'DB 연결 시간 초과·복구'),

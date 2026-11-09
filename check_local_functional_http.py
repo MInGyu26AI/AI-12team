@@ -1,17 +1,14 @@
 """Native frames -> authenticated local RPC -> PostgreSQL -> second team member."""
 import json
 import secrets
-import struct
-import subprocess
 import time
 import unittest
 
 from check_pipeline import AI
 from check_local_privacy import work_gate
-from check_teams import TeamIsolation, request
+from check_teams import TeamIsolation, own_tests, request
 from integration import Pipeline
 from native_host import request as native_request
-from prepare_native import prepare
 from storage import connect
 
 
@@ -20,21 +17,14 @@ class FunctionalHTTP(TeamIsolation):
         with connect(self.db) as c: c.execute('UPDATE settings SET end=?',(time.time()+600,))
         pipeline=Pipeline(self.db,self.client)
         pipeline.llm_factory=lambda:AI(); pipeline.decider_factory=lambda:None; pipeline.privacy=work_gate()
-        srv=self.review()
-        srv.pipeline=pipeline; srv.rpc_secret=secrets.token_urlsafe(32)
-        connection=self.state/'connection.json'
-        connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{srv.server_port}/rpc',token=srv.rpc_secret)))
-        connection.chmod(0o600)
-        manifest=prepare('a'*32,connection,self.state/'native')
-        registration=json.loads(manifest.read_text())
+        srv = self.review()
+        srv.pipeline = pipeline
+        srv.rpc_secret = secrets.token_urlsafe(32)
+        connection, registration = self.native_host(srv)
 
-        def frame(method,params=None,ok=True):
-            payload=json.dumps(dict(version=1,method=method,params=params or {})).encode()
-            completed=subprocess.run([registration['path'],registration['allowed_origins'][0]],
-                input=struct.pack('=I',len(payload))+payload,capture_output=True,timeout=15)
-            self.assertEqual(completed.returncode,0)
-            self.assertEqual(struct.unpack('=I',completed.stdout[:4])[0],len(completed.stdout)-4)
-            response=json.loads(completed.stdout[4:]); self.assertEqual(response['ok'],ok,response)
+        def frame(method, params=None, ok=True):
+            response = self.native_frame(registration, method, params)
+            self.assertEqual(response['ok'], ok, response)
             return response.get('result')
 
         message=dict(id='bad',conversationId='manual',site='manual',role='unknown',
@@ -77,5 +67,9 @@ class FunctionalHTTP(TeamIsolation):
         self.assertEqual(response['result']['counts']['reviewPending'],0)
 
 
-if __name__=='__main__':
-    unittest.main(defaultTest='FunctionalHTTP.test_recovery_approval_and_second_member',verbosity=2)
+def load_tests(loader, tests, pattern):
+    return own_tests(FunctionalHTTP)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

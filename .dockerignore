@@ -4,7 +4,12 @@
 !supabase-ca.crt
 !cloud_server.py
 !team_server.py
-!team_records.py
+!team_access.py
+!team_board.py
+!team_publish.py
+!conflict_checks.py
+!conflict_resolution.py
+!conflict_scheduler.py
 !app.py
 !collector.py
 !delivery.py

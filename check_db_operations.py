@@ -1,12 +1,7 @@
 """Disposable databases only: populated upgrades, backup/restore and process restart."""
 import json
 import os
-from pathlib import Path
-import queue
-import re
 import subprocess
-import sys
-import threading
 import unittest
 from unittest.mock import patch
 
@@ -16,11 +11,12 @@ from psycopg.conninfo import make_conninfo
 
 from check_integration_store import IntegrationStore
 from check_team_integration import TeamIntegration
+from check_teams import own_tests, team_api_process
 from delivery import approve
 from integration_store import initialize_integration
 from storage import connect
+from team_access import verify_database
 from team_client import TeamClient
-from team_server import verify_database
 
 
 def sqlite_rows(c):
@@ -73,7 +69,7 @@ class ServerUpgrade(TeamIntegration):
         return rows,schema
 
     def test_populated_upgrade_dump_restore_and_process_restart(self):
-        self.test_change_yes_discuss_and_history()
+        self.change_after_discussion()
         self.publish_card('todo','합성 복구 점검','todo')
         self.assertEqual(self.team_request('POST','items/todo/done',dict(done=True))[0],200)
         with psycopg.connect(self.admin_dsn) as c:
@@ -101,22 +97,18 @@ class ServerUpgrade(TeamIntegration):
         self.assertEqual(self.snapshot(restored_admin),(after,schema))
         verify_database(restored_api)
         # Restart the actual CLI twice against the restored DB; credentials remain local to subprocesses.
+        env = dict(os.environ, SYNCUP_DATABASE_URL=restored_api)
+        env.pop('SYNCUP_ADMIN_DATABASE_URL', None)
         for _ in range(2):
-            env = dict(os.environ,SYNCUP_DATABASE_URL=restored_api)
-            env.pop('SYNCUP_ADMIN_DATABASE_URL',None)
-            child = subprocess.Popen([sys.executable,str(Path(__file__).with_name('team_server.py')),'--port','0'],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-            try:
-                lines=queue.Queue()
-                threading.Thread(target=lambda:lines.put(child.stdout.readline()),daemon=True).start()
-                line=lines.get(timeout=15)
-                port=int(re.search(r'127\.0\.0\.1:(\d+)',line).group(1))
-                client=TeamClient(f'http://127.0.0.1:{port}/',self.keys['Alice'])
-                self.assertEqual(len(client.items(self.teams['A'])),3)
-            finally:
-                child.terminate();child.communicate(timeout=10)
+            with team_api_process(env) as api:
+                client = TeamClient(f'http://127.0.0.1:{api.server_port}/', self.keys['Alice'])
+                self.assertEqual(len(client.items(self.teams['A'])), 3)
         self.assertEqual(self.snapshot(restored_admin),(after,schema))
 
 
+def load_tests(loader, tests, pattern):
+    return own_tests(LocalUpgrade, ServerUpgrade)
+
+
 if __name__ == '__main__':
-    suite=unittest.TestSuite([LocalUpgrade('test_populated_14_to_17_and_backup_restore'),ServerUpgrade('test_populated_upgrade_dump_restore_and_process_restart')])
-    raise SystemExit(not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful())
+    unittest.main(verbosity=2)

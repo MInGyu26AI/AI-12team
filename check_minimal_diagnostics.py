@@ -2,15 +2,13 @@
 import hashlib
 import json
 import unittest
-from unittest.mock import patch
 
 import psycopg
 
-from check_team_integration import TeamIntegration, checked
-from check_server_recovery import ServerRecovery
-from diagnostics import check_finished, check_started, model_fingerprint
-from team_records import process_checks
-from team_server import authorized, verify_database
+from check_team_integration import TeamIntegration, checked, decisions_model
+from check_teams import own_tests
+from diagnostics import check_finished, check_started, checked_count, model_fingerprint
+from team_access import verify_database
 
 SECRET = 'SYNTHETIC_PRIVATE_TOKEN_AND_PERSONAL_TEXT_739'
 
@@ -26,6 +24,7 @@ class MetadataContract(unittest.TestCase):
                 result = dict(ok=True, checkStatus='complete', results=rows, error=SECRET)
                 record = check_finished(start, result, 'new', {'a', 'b'}, 1, 'complete')
                 self.assertIsNone(record['checked_count'])
+                self.assertIsNone(checked_count(result, 'new', {'a', 'b'}))
                 self.assertNotIn(SECRET, json.dumps(record))
         result = dict(ok=True, checkStatus='complete', results=[dict(cardId='new', judgements=[])])
         self.assertEqual(check_finished(check_started(1, 0), result, 'new', set(), 0, 'complete')['checked_count'], 0)
@@ -33,8 +32,8 @@ class MetadataContract(unittest.TestCase):
 
 
 class DiagnosticPersistence(TeamIntegration):
-    def saved(self, identifier='new', token=None, team=None):
-        with authorized(self.api_dsn, token or self.tokens['Dana'], team or self.teams['A']) as (c, _):
+    def saved(self, identifier='new', user='Dana', team='A'):
+        with self.team_db(user, team) as c:
             return c.execute('SELECT state,attempts,diagnostics FROM syncup.conflict_checks WHERE card_id=%s',
                              (identifier,)).fetchone()
 
@@ -42,8 +41,7 @@ class DiagnosticPersistence(TeamIntegration):
         for i in range(count):
             self.publish_card('old'+str(i), SECRET + ' old ' + str(i))
         self.publish_card('todo', 'Synthetic task', tag='todo')
-        with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
-            c.execute("UPDATE syncup.conflict_checks SET state='complete' WHERE team_id=%s", (self.teams['A'],))
+        self.settle_checks()
         self.publish_card('new', SECRET + ' new')
 
     def test_diagnostic_success_no_plaintext_and_survives_reconnect(self):
@@ -54,8 +52,8 @@ class DiagnosticPersistence(TeamIntegration):
             def decide(self, text, questions):
                 calls.append(questions)
                 return {q['name']: dict(type='choice', choice='무관', confidence=.9) for q in questions}
-        with patch('team_records.from_env', return_value=None), patch('team_records.decider_from_env', return_value=Model()):
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        with decisions_model(Model()):
+            self.run_due_checks()
         row = self.saved()
         d = row['diagnostics']
         self.assertEqual((row['state'], d['outcome'], d['candidate_count'], d['checked_count']), ('complete', 'complete', 1, 1))
@@ -67,11 +65,11 @@ class DiagnosticPersistence(TeamIntegration):
         self.assertNotIn(SECRET, json.dumps(d))
         self.assertLess(len(json.dumps(d)), 1024)
         # A new DB connection/worker sees the committed snapshot, with no repeat call.
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         self.assertEqual(self.saved()['diagnostics'], d)
         self.assertEqual(len(calls), 1)
-        self.assertIsNone(self.saved(token=self.tokens['Bob'], team=self.teams['B']))
-        with authorized(self.api_dsn, self.tokens['Bob'], self.teams['B']) as (c, _):
+        self.assertIsNone(self.saved(user='Bob', team='B'))
+        with self.team_db('Bob', 'B') as c:
             self.assertEqual(c.execute("UPDATE syncup.conflict_checks SET diagnostics='{}' WHERE card_id='new'").rowcount, 0)
         board = self.team_request('GET', 'board')[1]
         self.assertNotIn('diagnostics', json.dumps(board))
@@ -85,9 +83,9 @@ class DiagnosticPersistence(TeamIntegration):
                 calls.append(questions)
                 return {q['name']: dict(type='choice', choice='무관', confidence=.9 if len(calls) == 1 else .4)
                         for q in questions}
-        with patch('team_records.from_env', return_value=None), patch('team_records.decider_from_env', return_value=Model()):
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        with decisions_model(Model()):
+            self.run_due_checks()
+            self.run_due_checks()
         d = self.saved()['diagnostics']
         self.assertEqual((d['candidate_count'], d['outcome'], len(calls)), (1, 'needs-review', 2))
         item = next(c for c in self.team_request('GET', 'board')[1]['items'] if c['id'] == 'new')
@@ -99,18 +97,17 @@ class DiagnosticPersistence(TeamIntegration):
         self.ready()
         self.api.conflict_engine = lambda req: dict(ok=False, retryable=True, failureReason='communication', error=SECRET)
         for attempt in range(1, 4):
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+            self.run_due_checks()
             d = self.saved()['diagnostics']
             self.assertEqual(d['attempt'], attempt)
             self.assertEqual(d['outcome'], 'retry-pending' if attempt < 3 else 'retry-exhausted')
             self.assertIsNone(d['checked_count'])
             self.assertNotIn(SECRET, json.dumps(d))
-            with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
-                c.execute("UPDATE syncup.conflict_checks SET next_attempt=now()-interval '1 second' WHERE card_id='new'")
+            self.make_check_due('new')
         self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
         self.assertEqual(self.saved()['diagnostics'], {})
         self.api.conflict_engine = lambda req: dict(ok=True, checkStatus='complete', conflicts=[])
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         d = self.saved()['diagnostics']
         self.assertEqual((d['attempt'], d['outcome']), (1, 'check-failed'))
         self.assertIsNone(d['checked_count'])  # Custom engine did not provide comparison results.
@@ -122,12 +119,12 @@ class DiagnosticPersistence(TeamIntegration):
             raise ValueError(SECRET)
         self.api.conflict_engine = failed
         with self.assertLogs('syncup', level='WARNING') as logs:
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+            self.run_due_checks()
         self.assertNotIn(SECRET, ''.join(logs.output))
         self.assertEqual(self.saved()['diagnostics']['outcome'], 'check-failed')
         self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
         self.api.conflict_engine = lambda req: dict(ok=False, failureReason=SECRET, error=SECRET)
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         self.assertNotIn(SECRET, json.dumps(self.saved()['diagnostics']))
 
     def test_diagnostic_interrupted_attempt_is_durable(self):
@@ -137,17 +134,16 @@ class DiagnosticPersistence(TeamIntegration):
             raise KeyboardInterrupt()
         self.api.conflict_engine = interrupted
         with self.assertRaises(KeyboardInterrupt):
-            process_checks(self.api, self.tokens['Dana'], self.teams['A'])
-        with authorized(self.api_dsn, self.tokens['Dana'], self.teams['A']) as (c, _):
-            c.execute("UPDATE syncup.conflict_checks SET next_attempt=now()-interval '1 second' WHERE card_id='new'")
+            self.run_due_checks()
+        self.make_check_due('new')
         self.api.conflict_engine = checked
-        process_checks(self.api, self.tokens['Dana'], self.teams['A'])
+        self.run_due_checks()
         row = self.saved()
         self.assertEqual((row['state'], row['diagnostics']['outcome']), ('complete', 'complete'))
         self.assertEqual(row['diagnostics']['checked_count'], 1)
 
     def test_diagnostic_late_worker_cannot_replace_new_lease(self):
-        ServerRecovery.test_late_worker_cannot_overwrite_retried_attempt_with_same_number(self)
+        self.lose_lease_to_manual_retry()
         self.assertEqual(self.saved('late')['diagnostics'], {})  # Manual retry cleared the old attempt.
 
     def test_diagnostic_legacy_upgrade_twice_preserves_records(self):
@@ -165,7 +161,9 @@ class DiagnosticPersistence(TeamIntegration):
             self.assertEqual(c.execute('SELECT team_id,id,packet FROM syncup.shared_cards ORDER BY id').fetchall(), before)
 
 
+def load_tests(loader, tests, pattern):
+    return own_tests(MetadataContract, DiagnosticPersistence)
+
+
 if __name__ == '__main__':
-    suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(MetadataContract))
-    suite.addTests(DiagnosticPersistence(name) for name in dir(DiagnosticPersistence) if name.startswith('test_diagnostic_'))
-    raise SystemExit(not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful())
+    unittest.main(verbosity=2)
