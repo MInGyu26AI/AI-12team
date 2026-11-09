@@ -6,14 +6,19 @@ import type { Subtopic } from "./types";
 export const BRIDGE_FROM_WEB = "syncup-web";
 export const BRIDGE_FROM_EXT = "syncup-ext";
 
+// 수집기에 쌓인 발화의 출처: turns.append 사이트와 코딩 도구.
+// claude-code 는 스캐너가 붙이고, codex 는 출처가 없는 스캐너 발화에 turn_intake 가 붙이는 기본값이다
+export type MessageSite = CollectedMessage["site"] | "codex" | "claude-code";
+
 // 분류를 마친 수집 묶음 한 개 (collection.status 의 recent)
 export interface BatchRecord {
   id: string;
   at: string; // ISO
-  site: CollectedMessage["site"] | "codex" | "claude-code"; // 묶음 첫 발화의 출처 (코딩 도구 발화는 스캐너가 붙인 이름)
+  site: MessageSite; // 묶음 첫 발화의 출처
   turns: number; // 대화 횟수 (질문 + 답변 = 1턴)
-  cardIds: string[]; // 이 묶음에서 나온 검토 대기 카드 (공유 후보만)
-  trigger: "auto" | "flush" | "manual"; // flush = 수동·선택 보내기, manual = 수집 오류 발화를 고쳐 다시 넣음
+  cardIds: string[]; // 이 묶음에서 나온 공유 후보 카드 (이미 승인한 카드 포함)
+  // 묶음을 대기열에 넣은 요청: flush = 남은 대화까지 보내기(collection.flush, flush 인 turns.append), manual = intake.retry
+  trigger: "auto" | "flush" | "manual";
 }
 
 export interface ExtStatus {
@@ -61,7 +66,7 @@ export interface PrivacyExcluded {
   reason: string | null;
   decidedAt: number;
   role: "user" | "assistant" | null;
-  site: string | null;
+  site: MessageSite | null;
   collectedAt: string | null;
   text: string;
 }

@@ -1,5 +1,5 @@
 // 로컬 수집기에 들어가는 발화 모양, Native Messaging host 이름, 로컬 RPC 버전.
-// 확장·웹 → 로컬 수집기는 { version, method, params } RPC 다 (extension background.ts, web/src/lib/rpc.ts).
+// 확장·웹 → 로컬 수집기는 { version, method, params } RPC 다 (extension/lib/collector-rpc.ts, web/src/lib/rpc.ts).
 import type { ClassificationOutput, Subtopic } from "./types";
 
 export const NATIVE_HOST = "com.syncup.collector";

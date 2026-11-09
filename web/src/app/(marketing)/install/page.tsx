@@ -142,7 +142,7 @@ export default function InstallPage() {
       </section>
 
       <p className="text-sm text-muted-foreground">
-        설치가 됐는지는 <Link href="/collect" className="underline">대화 수집</Link>에서 “브라우저 확장 연결됨” 표시가 보이는지로
+        설치가 됐는지는 <Link href="/collect" className="underline">대화 수집</Link>에서 “로컬 수집기 연결됨” 표시가 보이는지로
         확인할 수 있어요.
       </p>
     </div>
