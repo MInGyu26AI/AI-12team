@@ -14,7 +14,7 @@ import collector
 import delivery
 from check_integrity import post, server
 from check_local_privacy import work_gate
-from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line
+from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line, write_lock
 
 HIDDEN = ("demo@example.com", "TOOL_SECRET", "TOOL_RESULT_SECRET", "PRIVATE_THOUGHT", "COMMENTARY_NOT_EVIDENCE")
 CLAUDE_EXCERPT_FIELDS = {"n", "role", "text", "source", "session_id", "message_id", "timestamp",
@@ -222,6 +222,16 @@ class ClaudeScannerChecks(unittest.TestCase):
             self.scan()
         self.assertEqual(self.job_sessions(), [session])
         self.assertIsNone(self.cursor(broken))
+
+    def test_locked_database_ends_the_scan_within_its_time_limit(self):
+        # Every transcript has a turn to store, so waiting out the lock once per transcript would pass
+        # collector.scan's limit.
+        sessions = {self.add_session() for _ in range(4)}
+        with write_lock(self.db), self.assertRaises(ValueError):
+            self.scan()
+        self.assertEqual(self.rows(), [])
+        self.scan()
+        self.assertEqual(set(self.job_sessions()), sessions)
 
     def test_codex_failure_does_not_block_claude_input_or_processing(self):
         db, missing_codex, claude = self.db, self.codex, self.claude

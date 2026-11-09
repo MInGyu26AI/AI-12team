@@ -4,8 +4,16 @@ use crate::{Result, SQLITE_BUSY_TIMEOUT};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::error::Error;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Whether a scan error came from this database, such as a lock held past the busy timeout or a failed
+/// write, rather than from a log. Every log is stored through this database, so such an error ends the scan:
+/// going on would wait for the same lock, or fail the same way, once per log.
+pub fn is_database_error(error: &(dyn Error + 'static)) -> bool {
+    error.is::<rusqlite::Error>()
+}
 
 /// The project to collect from and when collection runs (`settings`, row 1).
 pub struct Settings {
