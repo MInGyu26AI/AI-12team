@@ -20,7 +20,7 @@ from storage import connect
 class TurnPipeline:
     def __init__(self, db, client, profile=None):
         self.db, self.client = db, client
-        # Serialises local writes: RPC calls, batching and approval each run as one transaction under it.
+        # Serialises the pipeline's own writes (see write()); other local writers rely on SQLite's write lock only.
         self.lock = threading.RLock()
         # One classification run at a time; it does not hold self.lock during AI calls.
         self.process_lock = threading.Lock()
@@ -36,10 +36,12 @@ class TurnPipeline:
 
     @contextmanager
     def write(self):
-        """The one write transaction of an RPC or worker step: self.lock, then BEGIN IMMEDIATE; rolled back on error.
+        """The write transaction of a pipeline RPC method or worker step: self.lock, then BEGIN IMMEDIATE; rolled back on
+        error. Make network calls (the team client) before entering it.
 
-        Make network calls (the team client) before entering it. The classification run is the exception: its writes
-        take BEGIN IMMEDIATE without self.lock (batch_classification), so configure() can run during an AI call.
+        Writers that take BEGIN IMMEDIATE (or an implicit transaction) without self.lock, unchanged from before the split:
+        the classification run's writes (batch_classification, so configure() can run during an AI call), the review
+        page's form actions, approval delivery, retention and the legacy collector drain.
         """
         with self.lock, connect(self.db) as c:
             c.execute('BEGIN IMMEDIATE')

@@ -27,14 +27,19 @@ def queue_batch(c, batch, team_id, context):
     c.executemany('UPDATE intake SET job=? WHERE id=?', [(identifier, m['intakeId']) for m in batch])
 
 
+def unbatched_turns(c, team_id, start):
+    """This session's stored messages that no batch has taken yet, per conversation, in arrival order."""
+    conversations = {}
+    for r in c.execute(UNBATCHED, (team_id, start)).fetchall():
+        conversations.setdefault(r['conversation'], []).append(dict(json.loads(r['message']), intakeId=r['id']))
+    return conversations
+
+
 def queue_ready_batches(c, team_id, context, flush=False):
     """Queue every full batch of this session's unbatched turns; flush also queues what is left."""
     turns_per_batch = read_options(c)['turnsPerBatch']
-    conversations = {}
-    for r in c.execute(UNBATCHED, (team_id, context['collectionStart'])).fetchall():
-        conversations.setdefault(r['conversation'], []).append(dict(json.loads(r['message']), intakeId=r['id']))
     trigger = 'flush' if flush else 'auto'
-    for messages in conversations.values():
+    for messages in unbatched_turns(c, team_id, context['collectionStart']).values():
         ready, _ = take_ready_batches(messages, turns_per_batch, flush)
         for batch in ready:
             queue_batch(c, batch, team_id, dict(context, trigger=trigger))

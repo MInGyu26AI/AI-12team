@@ -2,7 +2,9 @@
 from datetime import datetime, timezone
 import io
 import json
+import sqlite3
 import struct
+import threading
 import time
 import unittest
 
@@ -145,6 +147,33 @@ class PipelineTest(PipelineFixture):
         configure(self.pipeline, dict(autoCollect=True))
         classify_queued(self.pipeline)
         self.assertEqual(len(list_candidates(self.pipeline)),1)
+
+    def test_team_relay_needs_a_bound_team(self):
+        sent=[]
+        self.pipeline.client.request=lambda *a: sent.append(a)
+        with connect(self.db) as c:
+            c.execute('UPDATE sharing SET team_id=NULL')
+        with self.assertRaisesRegex(ValueError,'팀을 먼저 선택'):
+            dispatch(self.pipeline,'team.board',{})
+        self.assertEqual(sent,[])
+
+    def test_write_holds_the_pipeline_lock_and_the_database_write_lock(self):
+        def lock_free():
+            result=[]
+            def probe():
+                acquired=self.pipeline.lock.acquire(blocking=False)
+                result.append(acquired)
+                if acquired:
+                    self.pipeline.lock.release()
+            worker=threading.Thread(target=probe)
+            worker.start()
+            worker.join()
+            return result[0]
+        with self.pipeline.write():
+            self.assertFalse(lock_free(),'another thread must wait for pipeline.lock')
+            with sqlite3.connect(self.db,timeout=0) as other, self.assertRaises(sqlite3.OperationalError):
+                other.execute('BEGIN IMMEDIATE')
+        self.assertTrue(lock_free())
 
     def test_team_relay_requires_target_id(self):
         sent=[]

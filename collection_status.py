@@ -5,6 +5,7 @@ import json
 from ai.syncup_ai.batch import group_turns
 from collection_settings import local_profile, read_options
 from batch_classification import failed_batches
+from batch_queue import unbatched_turns
 from collection_session import active, bound_team, session_state
 import local_privacy
 from storage import connect
@@ -20,8 +21,6 @@ EXCLUDED_COUNT = '''SELECT count(*) FROM privacy_jobs p JOIN job_context x ON x.
     WHERE x.team_id=? AND p.decision='exclude' '''
 CANDIDATE_STATES = '''SELECT c.status,o.state,count(*) AS n FROM candidate_details d JOIN cards c ON c.id=d.id
     LEFT JOIN outbox o ON o.id=c.id WHERE d.team_id=? AND NOT d.dismissed GROUP BY c.status,o.state'''
-UNBATCHED_TURNS = '''SELECT conversation,message FROM intake WHERE team_id=? AND job IS NULL
-    AND json_extract(message,'$.session')=? ORDER BY rowid'''
 LAST_COLLECTED = "SELECT MAX(received) FROM intake WHERE team_id=? AND json_extract(message,'$.session')=?"
 RECENT_BATCHES = '''SELECT x.job,x.context,x.messages,MAX(i.received) AS received FROM job_context x
     JOIN jobs j ON j.id=x.job JOIN intake i ON i.job=x.job
@@ -58,10 +57,7 @@ def _counts(c, team_id, start, failed, issues):
 
 def _buffered_turns(c, team_id, start):
     """Turns stored this session that no batch has taken yet."""
-    conversations = {}
-    for row in c.execute(UNBATCHED_TURNS, (team_id, start)):
-        conversations.setdefault(row['conversation'], []).append(json.loads(row['message']))
-    return sum(len(group_turns(messages)) for messages in conversations.values())
+    return sum(len(group_turns(messages)) for messages in unbatched_turns(c, team_id, start).values())
 
 
 def _recent_batches(c, team_id):

@@ -154,11 +154,14 @@ class IntegratedModeForms(PipelineFixture):
     def test_team_outage_on_approval_is_reported_as_team_connection(self):
         card=self.candidate()
         srv=self.review()
-        with patch.object(self.pipeline.client,'me',side_effect=OSError('offline')):
-            status,body=post(srv,'/approve',dict(id=card,text='승인',quote='SQLite로 결정했다.',target_team='a'))
-        self.assertEqual(status,503)
-        self.assertIn('팀 연결을 확인하지 못했습니다',body.decode())
-        self.assertEqual(self.snapshot()['outbox'],[])
+        before=self.snapshot()
+        forms={'/approve':dict(id=card,text='승인',quote='SQLite로 결정했다.',target_team='a'),'/switch-team':dict(team_id='b')}
+        for path,fields in forms.items():
+            with self.subTest(path=path), patch.object(self.pipeline.client,'me',side_effect=OSError('offline')):
+                status,body=post(srv,path,fields)
+                self.assertEqual(status,503)
+                self.assertIn('팀 연결을 확인하지 못했습니다',body.decode())
+                self.assertEqual(self.snapshot(),before)
 
     def test_page_names_the_real_source_and_the_configured_ai(self):
         self.candidate()

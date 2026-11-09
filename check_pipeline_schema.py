@@ -93,6 +93,9 @@ class PipelineSchema(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_packet(p)
         del p['card']['privateRaw']
+        for method in ('manual','demo'):  # no classifier produces these; the team trust boundary refuses them
+            with self.assertRaises(ValueError):
+                validate_packet(dict(p,card=dict(p['card'],classificationMethod=method)))
         p['speaker']='AI'
         with self.assertRaises(ValueError):
             validate_packet(p)
