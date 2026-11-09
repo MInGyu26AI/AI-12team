@@ -1,6 +1,4 @@
 """Real HTTP/PostgreSQL recovery plus the existing team isolation/integration suite."""
-import json
-import os
 import socket
 import subprocess
 import sys

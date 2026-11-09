@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import time
 
 from storage import connect
@@ -75,7 +76,7 @@ def _purge_job(c, job: str, tables: set[str]) -> None:
 def sweep(db, now: float | None = None) -> dict:
     """Apply the retention policy once. Safe to call repeatedly; returns counts only (no content)."""
     now = time.time() if now is None else now
-    result = dict(settled=0, purgedJobs=0, purgedIssues=0, cacheDeleted=0, backupsDeleted=0)
+    result = dict(settled=0, purgedJobs=0, purgedIssues=0, cacheDeleted=0, backupsDeleted=0, backupErrors=0)
     with connect(db) as c:
         c.execute('BEGIN IMMEDIATE')
         initialize(c)
@@ -103,11 +104,17 @@ def sweep(db, now: float | None = None) -> dict:
         if c.execute('PRAGMA foreign_key_check').fetchall():
             raise ValueError('보존 정리 중 참조 오류: 변경을 취소했습니다.')
     path = Path(db)
+    errors = set()
     for backup in path.parent.glob(path.name + '.*.bak.sqlite'):
         try:
             if backup.is_file() and not backup.is_symlink() and backup.stat().st_mtime <= now - BACKUP_DAYS * DAY:
                 backup.unlink()
                 result['backupsDeleted'] += 1
-        except OSError:
-            continue
+        except OSError as error:
+            # Keep going with the other backups, but never fail silently: a backup that cannot be
+            # deleted still holds raw text. File names stay out of the log.
+            result['backupErrors'] += 1
+            errors.add(type(error).__name__)
+    if errors:
+        print(f"retention: 오래된 백업 {result['backupErrors']}개를 지우지 못했습니다 ({', '.join(sorted(errors))})", file=sys.stderr)
     return result

@@ -74,8 +74,9 @@ def main():
             if args.command in ('init', 'migrate-integration'):
                 c.execute(Path(__file__).with_name('team_diagnostics.sql').read_text(encoding='utf-8'))
         print(str(identifier) if args.command in ('user', 'team') else '완료 (인증 값은 출력하지 않습니다.)')
-    except (ValueError, OSError, psycopg.Error):
-        parser.exit(1, '설정을 확인하세요. 기존 키 파일은 덮어쓰지 않습니다. 실패 후 생성된 키 파일은 유효하지 않을 수 있습니다.\n')
+    except (ValueError, OSError, psycopg.Error) as error:
+        # 예외 메시지에는 접속 정보가 섞일 수 있어 종류만 알린다
+        parser.exit(1, f'설정을 확인하세요 ({type(error).__name__}). 기존 키 파일은 덮어쓰지 않습니다. 실패 후 생성된 키 파일은 유효하지 않을 수 있습니다.\n')
 
 
 if __name__ == '__main__':

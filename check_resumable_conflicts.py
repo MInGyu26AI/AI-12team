@@ -14,7 +14,7 @@ import psycopg
 
 from check_teams import TeamIsolation, request, running_server
 from check_team_integration import TeamIntegration, checked
-from team_records import process_checks, schedule, CONFLICT_POLICY_SHA256
+from team_records import process_checks, schedule
 from team_server import authorized
 
 

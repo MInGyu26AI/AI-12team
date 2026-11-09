@@ -1,5 +1,4 @@
 """Local queue contracts and atomic intake correction; synthetic input only."""
-import json
 import threading
 import unittest
 from unittest.mock import patch

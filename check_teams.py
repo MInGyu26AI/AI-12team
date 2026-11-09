@@ -2,9 +2,7 @@
 import concurrent.futures
 from contextlib import closing, contextmanager
 import copy
-import hashlib
 import http.client
-import http.server
 import json
 import os
 from pathlib import Path

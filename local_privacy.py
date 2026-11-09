@@ -392,16 +392,16 @@ def judge(text: str, label: dict, allowed: str = '') -> Result:
 class Gate:
     def __init__(self, classifier):
         self.classifier = classifier
-        self.last_state = dict(model=None, available=None, reason=None, checked=None)
+        self.last_state = dict(model=None, available=None, reason=None)
 
     def _identity(self) -> str | None:
         try:
             identity = self.classifier.identity()
-            self.last_state.update(model=identity, available=True, reason=None, checked=time.time())
+            self.last_state.update(model=identity, available=True, reason=None)
             return identity
         except (ModelUnavailable, ModelTimeout, ModelError) as error:
             reason = {ModelUnavailable: 'model_unavailable', ModelTimeout: 'model_timeout'}.get(type(error), 'model_error')
-            self.last_state.update(available=False, reason=reason, checked=time.time())
+            self.last_state.update(available=False, reason=reason)
             return None
 
     def check(self, db, text: str, role: str, identity: str | None, allowed: str = '') -> Result:
@@ -553,6 +553,3 @@ class OutboundGuard:
         self._check(input_text, json.dumps(questions, ensure_ascii=False))
         return self.inner.decide(input_text, questions)
 
-    def embed(self, texts: list[str]):
-        self._check(*texts)
-        return self.inner.embed(texts)

@@ -1,11 +1,14 @@
 """Local retention policy on synthetic data: settled raw text clears after 7 days, everything still open stays."""
+import contextlib
 from datetime import datetime, timezone
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import retention
 from check_local_privacy import Gate, Scripted
@@ -143,11 +146,24 @@ class Retention(unittest.TestCase):
         self.assertGreaterEqual(later['backupsDeleted'], 2)
         self.assertEqual((fresh.exists(), other.exists(), list(folder.glob('private.sqlite.*.bak.sqlite'))), (False, True, []))
         self.assertGreater(later['cacheDeleted'], 0)
+        self.assertEqual(later['backupErrors'], 0)
         with connect(self.db) as c:
             issues = dict(c.execute('SELECT id,message FROM intake_issues'))
             self.assertEqual(c.execute('SELECT count(*) FROM privacy_results').fetchone()[0], 0)
         self.assertEqual(json.loads(issues[issue]), retention.PURGED)
         self.assertIn('OPEN_CANARY', issues[open_issue], 'unresolved quarantine stays')
+
+    def test_backup_delete_failure_is_counted_not_silent(self):
+        old = Path(self.temp.name) / 'private.sqlite.v1-locked.bak.sqlite'
+        old.write_bytes(b'synthetic backup')
+        t0 = time.time(); os.utime(old, (t0 - 8 * DAY, t0 - 8 * DAY))
+        err = io.StringIO()
+        with mock.patch.object(Path, 'unlink', side_effect=PermissionError('synthetic')), contextlib.redirect_stderr(err):
+            result = retention.sweep(self.db, now=t0)
+        self.assertEqual((result['backupsDeleted'], result['backupErrors']), (0, 1))
+        self.assertIn('PermissionError', err.getvalue())
+        self.assertNotIn('locked', err.getvalue(), 'file names stay out of the log')
+        self.assertTrue(old.exists())
 
 
 if __name__ == '__main__':

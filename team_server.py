@@ -109,7 +109,6 @@ class TeamHandler(LocalHandler):
             if path.query or path.fragment:
                 raise AccessError(404)
             parts = path.path.strip('/').split('/')
-            team_id = None
             if len(parts) >= 3 and parts[0] == 'teams':
                 team_id = uuid.UUID(parts[1])
             elif parts != ['me']:
