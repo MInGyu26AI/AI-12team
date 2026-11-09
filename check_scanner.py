@@ -146,16 +146,19 @@ class CodexScannerChecks(unittest.TestCase):
         self.assertEqual(self.job_ids(), {job_id("valid/before-pause")})
 
     def test_paused_or_expired_collection_waits_until_resumed(self):
-        self.append(self.add_chat("valid"), self.turn("first"))
+        valid = self.add_chat("valid")
+        self.append(valid, self.turn("first"))
+        self.scan()
+        self.append(valid, self.turn("second", began=40, ended=41))
         for stopped in ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start"):
             with collector.connect(self.db) as c:
                 c.execute(stopped)
             self.scan()
-            self.assertEqual(self.jobs(), [], stopped)
+            self.assertEqual(self.job_ids(), {job_id("valid/first")}, stopped)
         with collector.connect(self.db) as c:
             c.execute("UPDATE settings SET end=?", (self.start + 600,))
         self.scan()
-        self.assertEqual(self.job_ids(), {job_id("valid/first")})
+        self.assertEqual(self.job_ids(), {job_id("valid/first"), job_id("valid/second")})
 
     def test_broken_line_is_reported_and_later_threads_still_scanned(self):
         # The broken thread is listed first, so stopping at its error would leave the valid thread unread.

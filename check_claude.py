@@ -165,14 +165,16 @@ class ClaudeScannerChecks(unittest.TestCase):
         self.assertEqual(self.job_sessions(), [session])
 
     def test_paused_or_expired_collection_waits_until_resumed(self):
-        session = self.add_session(begin=120, end=130)
+        session = self.add_session()
+        self.scan()
+        self.write(session, self.transcript(session, "2", 120, 130, parent="a1"), True)
         for stopped in ("UPDATE settings SET paused=1", "UPDATE settings SET paused=0,end=start"):
             self.execute(stopped)
             self.scan()
-            self.assertEqual(self.rows(), [], stopped)
+            self.assertEqual(len(self.rows()), 1, stopped)
         self.execute("UPDATE settings SET end=?", (self.start + 600,))
         self.scan()
-        self.assertEqual(self.job_sessions(), [session])
+        self.assertEqual({e["message_id"] for e in json.loads(self.rows()[1]["evidence"])}, {"u2", "a2"})
 
     def test_failed_job_insert_keeps_cursor_and_retry_imports_once(self):
         session = self.add_session()
