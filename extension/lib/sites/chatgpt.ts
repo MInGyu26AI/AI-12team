@@ -1,5 +1,6 @@
 // ChatGPT 화면 전용 추출. ChatGPT DOM 이 바뀌면 이 파일 맨 위 SELECTORS 만 고친다.
 // 진단: ChatGPT 탭 콘솔에서 "[싱크업]" 로그를 보면 어떤 셀렉터가 먹혔는지 나온다.
+// 더 자세히 보려면 scripts/chatgpt-diagnose.js 를 그 탭 콘솔에 붙여넣는다 (결과에 대화 앞부분이 나오니 공유 전에 가린다).
 import type { CollectedMessage } from '@shared/collector';
 import { hash } from '../hash';
 import type { ExtractResult, SiteAdapter } from './types';
@@ -25,15 +26,14 @@ export const SELECTORS = {
   assistantHint: '.markdown, [class*="prose"]',
   // 답변 생성 중에만 보이는 정지 버튼
   streaming: ['[data-testid="stop-button"]', 'button[aria-label*="Stop"]', 'button[aria-label*="중지"]'],
-  // 메시지 id
   messageId: '[data-message-id]',
-  // 대화 제목
   title: ['nav a[aria-current="page"]', 'nav [data-active] a'],
 } as const;
 
 // 스크린리더용 머리말 ("You said:" 등) — 화자 추정 + 본문에서 제거
 const USER_HEADING = /^(you said|나의 말|내가 말함)\s*:?\s*$/i;
 const AI_HEADING = /^(chatgpt said|chatgpt의 말|chatgpt가 말함)\s*:?\s*$/i;
+const CONVERSATION_PATH = /\/c\/([\w-]+)/;
 
 type Role = CollectedMessage['role'];
 
@@ -85,7 +85,8 @@ function repeatedBlocks(): HTMLElement[] {
   if (!main) return [];
   let best: HTMLElement[] = [];
   main.querySelectorAll<HTMLElement>('*').forEach((parent) => {
-    const kids = [...parent.children].filter((c): c is HTMLElement => c instanceof HTMLElement && (c.textContent ?? '').trim().length > 0); // textContent: 레이아웃 계산 없이 빠름
+    // textContent: innerText 와 달리 레이아웃 계산이 없어 빠르다
+    const kids = [...parent.children].filter((c): c is HTMLElement => c instanceof HTMLElement && !!c.textContent?.trim());
     if (kids.length < 4) return;
     const byTag = new Map<string, HTMLElement[]>();
     kids.forEach((k) => byTag.set(k.tagName, [...(byTag.get(k.tagName) ?? []), k]));
@@ -93,6 +94,15 @@ function repeatedBlocks(): HTMLElement[] {
   });
   return best;
 }
+
+// 전략은 차례로 하나씩 계산한다. 앞 전략이 메시지를 찾으면 뒤 전략(특히 repeatedBlocks)은 계산하지 않는다
+const STRATEGIES: { name: string; nodes: () => HTMLElement[] }[] = [
+  ...SELECTORS.strategies.map((s) => ({
+    name: s.name,
+    nodes: () => outermost([...document.querySelectorAll<HTMLElement>(s.selector)]),
+  })),
+  { name: 'repeated-blocks', nodes: repeatedBlocks },
+];
 
 // 화자를 못 읽은 메시지는 앞뒤 메시지와 번갈아 있다고 보고 추정
 function fillRoles(roles: (Role | null)[]): { roles: Role[]; guessed: boolean[] } {
@@ -107,11 +117,34 @@ function fillRoles(roles: (Role | null)[]): { roles: Role[]; guessed: boolean[] 
   return { roles: out as Role[], guessed };
 }
 
-const conversationId = () => location.pathname.match(/\/c\/([\w-]+)/)?.[1] ?? 'new';
+const conversationIdOf = (url: string) => new URL(url).pathname.match(CONVERSATION_PATH)?.[1] ?? 'new';
+const titleOf = (title: string) => title.replace(/\s*[-|]\s*ChatGPT$/, '').trim() || '(제목 없음)';
+const conversationTitle = () => titleOf(first(document, SELECTORS.title)?.textContent?.trim() || document.title);
 
-function conversationTitle() {
-  const text = first(document, SELECTORS.title)?.textContent?.trim() || document.title;
-  return text.replace(/\s*[-|]\s*ChatGPT$/, '').trim() || '(제목 없음)';
+// 글이 있는 요소들 → 수집 메시지. 생성 중인 마지막 AI 답변은 완료된 뒤에 다시 읽는다
+function toMessages(found: { el: HTMLElement; text: string }[]) {
+  const { roles, guessed } = fillRoles(found.map((x) => roleOf(x.el)));
+  const streaming = !!first(document, SELECTORS.streaming);
+  const convId = conversationIdOf(location.href);
+  const title = conversationTitle();
+  const now = new Date().toISOString();
+  const messages: CollectedMessage[] = [];
+  found.forEach(({ el, text }, i) => {
+    if (streaming && i === found.length - 1 && roles[i] === 'assistant') return;
+    const siteId = el.getAttribute('data-message-id') ?? el.querySelector(SELECTORS.messageId)?.getAttribute('data-message-id');
+    messages.push({
+      id: `chatgpt:${siteId ?? `${convId}:${hash(text)}`}`,
+      site: 'chatgpt',
+      role: roles[i]!,
+      ...(guessed[i] ? { roleGuessed: true } : {}),
+      text,
+      conversationId: convId,
+      conversationTitle: title,
+      url: location.href,
+      collectedAt: now,
+    });
+  });
+  return { messages, guessedRoles: guessed.filter(Boolean).length };
 }
 
 // 같은 결과를 디바운스마다 반복해서 찍지 않도록 직전 로그를 기억
@@ -127,49 +160,20 @@ export const chatgpt: SiteAdapter = {
   label: 'ChatGPT',
   hosts: ['chatgpt.com', 'chat.openai.com'],
 
-  isConversationPage: () => /\/c\/[\w-]+/.test(location.pathname),
+  isConversationPage: () => CONVERSATION_PATH.test(location.pathname),
+  conversationIdOf,
+  titleOf,
 
   extract(): ExtractResult {
     const tried: ExtractResult['tried'] = [];
-    const candidates: { name: string; nodes: HTMLElement[] }[] = [
-      ...SELECTORS.strategies.map((s) => ({
-        name: s.name,
-        nodes: outermost([...document.querySelectorAll<HTMLElement>(s.selector)]),
-      })),
-      { name: 'repeated-blocks', nodes: repeatedBlocks() },
-    ];
+    for (const { name, nodes } of STRATEGIES) {
+      const found = nodes().map((el) => ({ el, text: textOf(el) })).filter((x) => x.text.length > 0);
+      tried.push({ name, count: found.length });
+      if (!found.length) continue;
 
-    for (const { name, nodes } of candidates) {
-      const withText = nodes.map((el) => ({ el, text: textOf(el) })).filter((x) => x.text.length > 0);
-      tried.push({ name, count: withText.length });
-      if (!withText.length) continue;
-
-      const { roles, guessed } = fillRoles(withText.map((x) => roleOf(x.el)));
-      const streaming = !!first(document, SELECTORS.streaming);
-      const convId = conversationId();
-      const title = conversationTitle();
-      const now = new Date().toISOString();
-
-      const messages: CollectedMessage[] = [];
-      withText.forEach(({ el, text }, i) => {
-        // 생성 중인 마지막 AI 답변은 완료된 뒤에 다시 읽는다
-        if (streaming && i === withText.length - 1 && roles[i] === 'assistant') return;
-        const siteId = el.getAttribute('data-message-id') ?? el.querySelector(SELECTORS.messageId)?.getAttribute('data-message-id');
-        messages.push({
-          id: `chatgpt:${siteId ?? `${convId}:${hash(text)}`}`,
-          site: 'chatgpt',
-          role: roles[i]!,
-          ...(guessed[i] ? { roleGuessed: true } : {}),
-          text,
-          conversationId: convId,
-          conversationTitle: title,
-          url: location.href,
-          collectedAt: now,
-        });
-      });
-
-      const guessedRoles = guessed.filter(Boolean).length;
-      logOnce(`ok:${name}:${messages.length}`, () =>
+      const { messages, guessedRoles } = toMessages(found);
+      // 대화마다, 그리고 먹힌 전략이 바뀔 때만 찍는다 (새 메시지마다 찍지 않음)
+      logOnce(`ok:${location.pathname}:${name}`, () =>
         console.info(
           `[싱크업] 대화 읽기 성공: "${name}" 셀렉터, 메시지 ${messages.length}개` +
             (guessedRoles ? ` (화자 ${guessedRoles}개는 순서로 추정)` : ''),

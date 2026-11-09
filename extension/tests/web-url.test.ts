@@ -5,9 +5,9 @@ import {
   PRODUCTION_WEB_URL,
   WEB_BRIDGE_MATCHES,
   bridgeSupported,
+  isTrustedWebOrigin,
   normalizeWebUrl,
-} from '@/lib/config';
-import { isTrustedWebOrigin } from '@/lib/settings';
+} from '@/lib/web-url';
 
 describe('isTrustedWebOrigin', () => {
   it('설정한 주소 하나만 믿는다: 배포 주소를 고르면 로컬 3000번 페이지는 못 부른다', () => {
