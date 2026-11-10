@@ -5,6 +5,7 @@ import type { CollectResult } from './messages';
 import type { SiteAdapter } from './sites';
 
 const COLLECT_DEBOUNCE_MS = 2000;
+const NEW_CHAT_FOLLOW_MS = 500;
 const ERROR_TOAST_EVERY_MS = 30_000;
 
 interface AutoCollectOptions {
@@ -36,22 +37,48 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
   const baseline = new Set<string>();
   let baselinePath: string | null = null;
   // 새 채팅 화면(주소에 대화 id 가 아직 없음)에서 기준선 뒤에 나타난 메시지: 첫 글과 개수. ChatGPT 는 첫 질문을 보내면 주소를
-  // /c/<id> 로 바꾼다. 바뀐 주소의 대화가 이 글로 시작하고, 메시지가 그 개수에 답 하나를 더한 것보다 많지 않을 때만 같은 대화로
-  // 이어 본다. 홈에서 연 지난 대화는 다른 글로 시작하거나 메시지가 더 많다
+  // /c/<id> 로 바꾼다. 바뀐 주소의 대화가 이 글로 시작하고, 메시지가 그 개수에서 0.5초에 하나씩만 늘어 왔을 때만 같은 대화로
+  // 이어 본다. 홈에서 연 지난 대화는 다른 글로 시작하거나 메시지가 짧은 사이에 여러 개 나타난다
   let newChat: { first: string; count: number } | null = null;
+  let followedAt = 0; // 새 채팅의 메시지 개수를 마지막으로 읽은 때
   const errorToast = limitErrorToasts(showError);
   const markSeen = (messages = site.extract().messages) => messages.forEach((m) => baseline.add(m.id));
   const rememberNewChat = () => {
     const fresh = site.extract().messages.filter((m) => !baseline.has(m.id));
     const [first] = fresh;
-    if (first) newChat = { first: newChat?.first ?? first.text, count: fresh.length };
+    followedAt = Date.now();
+    if (!first) return;
+    // 기억한 첫 글이 화면에서 사라졌으면(보내기 실패 뒤 다시 쓴 새 채팅 등) 지금 보이는 첫 글로 바꾼다
+    const remembered = newChat?.first;
+    const kept = remembered !== undefined && fresh.some((m) => m.text === remembered) ? remembered : first.text;
+    newChat = { first: kept, count: fresh.length };
+  };
+  const continuesNewChat = (messages: CollectedMessage[]) =>
+    newChat !== null && messages[0]?.text === newChat.first && messages.length <= newChat.count + 1;
+  // 주소가 /c/<id> 로 바뀐 뒤 처음 보낼 때까지 개수를 따라간다. 첫 답이 끝나자마자 다음 질문을 보내면 화면이 2초 동안
+  // 조용해지기 전에 메시지가 셋 이상이 된다. 0.5초에 한 번만 읽고 한 번에 하나만 올린다: 답이 생성되는 동안 화면 변화마다
+  // 대화를 다시 읽지 않고, 짧은 사이에 이어서 그려지는 지난 대화는 따라가지 않는다
+  let followTimer: ReturnType<typeof setTimeout> | undefined;
+  const followNewChat = () => {
+    if (!newChat || baselinePath === location.pathname || !site.isConversationPage()) return;
+    const wait = followedAt + NEW_CHAT_FOLLOW_MS - Date.now();
+    if (wait > 0) {
+      // 건너뛴 화면 변화가 마지막이었어도 한 번은 읽는다 (답이 끝난 뒤 화면이 조용하면 그 답을 세지 못한다)
+      followTimer ??= setTimeout(() => {
+        followTimer = undefined;
+        followNewChat();
+      }, wait);
+      return;
+    }
+    followedAt = Date.now();
+    const { messages } = site.extract();
+    if (newChat && continuesNewChat(messages)) newChat.count = Math.max(newChat.count, messages.length);
   };
 
   const sendFresh = async () => {
     const { messages } = site.extract();
     if (baselinePath !== location.pathname) {
-      const sameChat =
-        site.isConversationPage() && newChat !== null && messages[0]?.text === newChat.first && messages.length <= newChat.count + 1;
+      const sameChat = site.isConversationPage() && continuesNewChat(messages);
       baselinePath = location.pathname;
       newChat = null;
       if (!sameChat) {
@@ -76,7 +103,10 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
     if (records.every((r) => overlay.contains(r.target))) return;
     if (!isActive()) return markSeen();
     // 처음 기준선을 잡기 전에는 기억하지 않는다 (그때 보이는 메시지는 이번에 쓴 글이 아니다)
-    if (baselinePath !== null && !site.isConversationPage()) rememberNewChat();
+    if (baselinePath !== null) {
+      if (!site.isConversationPage()) rememberNewChat();
+      else if (newChat && baselinePath !== location.pathname) followNewChat();
+    }
     clearTimeout(timer);
     timer = setTimeout(() => void sendFresh(), COLLECT_DEBOUNCE_MS);
   });

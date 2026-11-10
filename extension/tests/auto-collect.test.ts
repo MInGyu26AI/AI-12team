@@ -134,6 +134,64 @@ describe('startAutoCollect', () => {
     expect(sent).toEqual([['first-question', 'first-answer']]);
   });
 
+  it('첫 답이 끝나고 2초 안에 다음 질문을 보내도 첫 질문·답변부터 보낸다', async () => {
+    await openNewChat();
+    await show('first-question');
+    window.history.pushState(null, '', '/c/new-id');
+    await vi.advanceTimersByTimeAsync(1000);
+    await show('first-answer');
+    await vi.advanceTimersByTimeAsync(1000);
+    await show('second-question');
+    await vi.advanceTimersByTimeAsync(1000);
+    await show('second-answer');
+    await waitDebounce();
+    expect(sent).toEqual([['first-question', 'first-answer', 'second-question', 'second-answer']]);
+  });
+
+  it('첫 답이 끝난 뒤 화면이 조용하다가 다음 질문이 나타나도 첫 질문·답변부터 보낸다', async () => {
+    await openNewChat();
+    await show('first-question');
+    window.history.pushState(null, '', '/c/new-id');
+    await vi.advanceTimersByTimeAsync(300);
+    await show('first-answer'); // 직전 읽기에서 0.5초가 안 지나 바로 읽지 않는다
+    await vi.advanceTimersByTimeAsync(1200); // 그동안 화면 변화 없음
+    await show('second-question');
+    await vi.advanceTimersByTimeAsync(300);
+    await show('second-answer');
+    await waitDebounce();
+    expect(sent).toEqual([['first-question', 'first-answer', 'second-question', 'second-answer']]);
+  });
+
+  it('새 채팅 화면에 남아 있다 사라진 글이 있어도, 그 뒤 새로 쓴 첫 질문과 답변을 보낸다', async () => {
+    await openNewChat();
+    await show('unsent-question'); // 주소가 바뀌지 않은 글 (예: 보내기 실패)
+    await waitDebounce();
+    visible = [];
+    await show();
+    await waitDebounce();
+    await show('first-question');
+    window.history.pushState(null, '', '/c/new-id');
+    await show('first-answer');
+    await waitDebounce();
+    expect(sent).toEqual([['first-question', 'first-answer']]);
+  });
+
+  it('새 채팅에 쓴 글과 같은 글로 시작하는 지난 대화가 한 메시지씩 이어서 그려져도 보내지 않는다', async () => {
+    await openNewChat();
+    await show('안녕');
+    window.history.pushState(null, '', '/c/old');
+    visible = ['안녕'];
+    await show();
+    for (const old of ['old-a', 'old-b', 'old-c']) {
+      await vi.advanceTimersByTimeAsync(100);
+      await show(old);
+    }
+    await vi.advanceTimersByTimeAsync(1500);
+    await show(); // 늦게 온 화면 변화 (예: 이미지 로딩)
+    await waitDebounce();
+    expect(sent).toEqual([]);
+  });
+
   it('새 채팅 화면에서 지난 대화를 열면 그 대화의 메시지는 보내지 않는다', async () => {
     await openNewChat();
     window.history.pushState(null, '', '/c/old');
