@@ -35,18 +35,34 @@ function limitErrorToasts(showError: (text: string) => void) {
 export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isActive, send, showError }: AutoCollectOptions) {
   const baseline = new Set<string>();
   let baselinePath: string | null = null;
+  // 새 채팅 화면(주소에 대화 id 가 아직 없음)에서 기준선 뒤에 나타난 메시지: 첫 글과 개수. ChatGPT 는 첫 질문을 보내면 주소를
+  // /c/<id> 로 바꾼다. 바뀐 주소의 대화가 이 글로 시작하고, 메시지가 그 개수에 답 하나를 더한 것보다 많지 않을 때만 같은 대화로
+  // 이어 본다. 홈에서 연 지난 대화는 다른 글로 시작하거나 메시지가 더 많다
+  let newChat: { first: string; count: number } | null = null;
   const errorToast = limitErrorToasts(showError);
   const markSeen = (messages = site.extract().messages) => messages.forEach((m) => baseline.add(m.id));
+  const rememberNewChat = () => {
+    const fresh = site.extract().messages.filter((m) => !baseline.has(m.id));
+    const [first] = fresh;
+    if (first) newChat = { first: newChat?.first ?? first.text, count: fresh.length };
+  };
 
   const sendFresh = async () => {
     const { messages } = site.extract();
     if (baselinePath !== location.pathname) {
-      // 대화가 바뀜(SPA 이동) → 지금 보이는 메시지를 기준선으로
+      const sameChat =
+        site.isConversationPage() && newChat !== null && messages[0]?.text === newChat.first && messages.length <= newChat.count + 1;
       baselinePath = location.pathname;
-      baseline.clear();
-      markSeen(messages);
-      return;
+      newChat = null;
+      if (!sameChat) {
+        // 대화가 바뀜(SPA 이동) → 지금 보이는 메시지를 기준선으로
+        baseline.clear();
+        markSeen(messages);
+        return;
+      }
     }
+    // 새 채팅 화면에서는 대화 id 가 생길 때까지 보내지 않는다. id 없이 보내면 서로 다른 새 대화가 한 대화('new')로 묶인다
+    if (!site.isConversationPage()) return;
     const fresh = messages.filter((m) => !baseline.has(m.id));
     if (!fresh.length) return;
     const result = await send(fresh);
@@ -59,11 +75,14 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
   const observer = new MutationObserver((records) => {
     if (records.every((r) => overlay.contains(r.target))) return;
     if (!isActive()) return markSeen();
+    // 처음 기준선을 잡기 전에는 기억하지 않는다 (그때 보이는 메시지는 이번에 쓴 글이 아니다)
+    if (baselinePath !== null && !site.isConversationPage()) rememberNewChat();
     clearTimeout(timer);
     timer = setTimeout(() => void sendFresh(), COLLECT_DEBOUNCE_MS);
   });
   ctx.setTimeout(() => {
     baselinePath = location.pathname;
+    newChat = null;
     markSeen();
   }, COLLECT_DEBOUNCE_MS);
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
