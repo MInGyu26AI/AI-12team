@@ -119,7 +119,9 @@ class PersonalLexicon(unittest.TestCase):
                      '테스트하기도 했어', '수집기도 다시 켜자', '두 팀이 일정 갈등을 빚고 있어', '마찰을 빚어 일정이 밀렸다',
                      '혼선을 빚었다', '오해를 빚는 문구는 빼자', '우리 집계 기준은 주간이다', '우리 집중 시간은 오전이다',
                      '배포 일정에 차질을 빚을 수 있어요', '일정에 차질을 빚게 됐어', '차질을 빚습니다', '혼선을 빚은 부분 정리하자',
-                     '1기도 이 기능 썼어'):
+                     '1기도 이 기능 썼어', '여기도 고쳐야 해', '그 얘기도 했어', '이번 분기도 목표는 같다', '분류기도 다시 돌리자',
+                     '일기도 쓰는 앱이다', '원인이기도 하다', '모바일 기기도 지원하자', '송편을 빚고 있어', '우리 집무실은 3층이다',
+                     '우리 집약적 설계가 낫다', '우리 집적 회로 팀'):
             with self.subTest(text=text):
                 self.assertEqual(personal_categories(text), [])
 
@@ -129,7 +131,13 @@ class PersonalLexicon(unittest.TestCase):
                  '수요기도회 끝나고 갈게': 'belief_legal', '금식기도 중이라 점심 못 먹어': 'belief_legal',
                  '주기도문 외워야 해': 'belief_legal', '빚이 너무 많아': 'money', '빚은 다 갚았어': 'money',
                  '빚을 갚느라 힘들어': 'money', '친구한테 빚지고 있어': 'money', '학비를 빚으로 냈어': 'money',
-                 '우리 집에 오늘 손님 와': 'home', '우리집 고양이가 아파': 'home', '우리 집안 사정이 있어': 'home'}
+                 '우리 집에 오늘 손님 와': 'home', '우리집 고양이가 아파': 'home', '우리 집안 사정이 있어': 'home',
+                 '수요기도 가야 해서 회의 못 들어가': 'belief_legal', '안수기도 받고 왔어': 'belief_legal',
+                 '금요기도 끝나고 연락할게': 'belief_legal', '묵주기도 드리고 올게': 'belief_legal',
+                 '40일기도 중이야': 'belief_legal', '매일기도하고 있어': 'belief_legal', '릴레이기도 순서라 빠질게': 'belief_legal',
+                 '하나님께기도했어': 'belief_legal', '식전기도': 'belief_legal', '빚고민이 많아': 'money',
+                 '빚고 뭐고 다 지쳤어': 'money', '우리 집계약 끝나서 이사해': 'home', '우리집계약금': 'home',
+                 '우리 집적금 깼어': 'home', '우리집약도 보내줄게': 'home', '우리 집무너졌어': 'home'}
         for text, category in cases.items():
             with self.subTest(text=text):
                 self.assertIn(category, personal_categories(text))

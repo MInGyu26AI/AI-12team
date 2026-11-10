@@ -70,23 +70,41 @@ def secret_values(text: str) -> list[str]:
     return [f for f in found if len(f) >= 8]
 
 
+# First parts of prayer compounds written without a space ('수요기도', '묵주기도'). A list, because the syllable before
+# '기도' cannot tell '묵주기도' from '폴링 주기도' or '매일기도' from '일기도'. A compound whose first part is not here
+# is missed unless it ends in 회·문·원.
+_PRAYER_COMPOUNDS = ('께 밤'
+                     ' 새벽 아침 저녁 심야 매일 주일 월요 화요 수요 목요 금요 토요 일요 백일 천일 구일 보름 정초 동지 백중'
+                     ' 신년 송년 성탄 부활 사순 대림 고난 수능 입시'
+                     ' 중보 감사 식사 식전 식후 취침 철야 대표 금식 통성 합심 회개 안수 방언 작정 특별 구역 연합 구국 산상'
+                     ' 가정 가족 부부 개인 공동 태교 위해 묵주 화살 삼종 침묵 관상 묵상 성령 치유 축복 축사 봉헌 헌금'
+                     ' 개회 폐회 마침 대적 선포 골방 무릎 눈물 서원 결단 영접 파송 임종 추모 위령 관음 지장 신중 산신 칠성'
+                     ' 릴레이 수험생 초하루 다니엘').split()
+
+
+def _after(words: list[str]) -> str:
+    """Lookbehind for any of the words; Python takes one width per lookbehind, so one group per length."""
+    return '|'.join('(?<=' + '|'.join(w for w in words if len(w) == n) + ')' for n in sorted({len(w) for w in words}))
+
+
 # Personal-content lexicon: a safety net beside the model, never a reason to allow.
 # Short words are bounded so common endings do not hold work sentences: '-기도' after a syllable or digit ('크기도',
 # '하기도', '1기도'), the verb '빚다' ('갈등을 빚고', '차질을 빚을'), and Sino-Korean words after '우리 집' ('집계',
-# '집중'). Prayer compounds written without a space still match, and the match stays '기도' so a project topic
-# such as '기도 앱' still exempts it. Other ambiguous forms such as '빚은'·'빚을' still match.
+# '집중'). '기도' counts at the start of a word, after a listed first part or a day count ('40일기도'), and before
+# 회·문·원. The match stays '기도' so a project topic such as '기도 앱' still exempts it. Other ambiguous forms such as
+# '빚은'·'빚을' still match, and so do '빚고민', '빚고 뭐고', '우리 집계약', '우리 집적금', '우리 집약도'.
 PERSONAL_TERMS: dict[str, re.Pattern] = {
     'health': re.compile(r'병원|진료|수술|입원|퇴원|처방|복용|약\s*먹|우울|공황|정신과|심리\s*상담|치료\s*받|진단\s*받|임신|출산|생리통'
                          r'|아파서|아프다|아픈\s*(?:데|곳)|몸이\s*안\s*좋|감기|독감|확진|건강\s*검진|투병|통증'),
     'family': re.compile(r'부모님|어머니|아버지|엄마|아빠|할머니|할아버지|가족|장례|결혼식|이혼|육아|아이가\s*아|배우자|아내|남편'),
     'relationship': re.compile(r'남자\s*친구|여자\s*친구|남친|여친|연애|헤어졌|애인|소개팅'),
-    'money': re.compile(r'대출|(?<!차질을 )(?<!갈등을 )(?<!혼선을 )(?<!물의를 )(?<!논란을 )(?<!오해를 )(?<!마찰을 )빚(?![고어었는게습])'
+    'money': re.compile(r'대출|(?<!차질을 )(?<!갈등을 )(?<!혼선을 )(?<!물의를 )(?<!논란을 )(?<!오해를 )(?<!마찰을 )빚(?![어었는게습]|고(?!민|\s*뭐고))'
                         r'|연체|월급|연봉|카드\s*값|신용\s*점수|파산|생활비|월세'),
     'belief_legal': re.compile(r'교회|성당|종교'
-                               r'|(?:(?<![가-힣0-9])|(?<=새벽|중보|감사|식사|철야|대표|금식|통성|합심|회개|아침|저녁|주일))기도|기도(?=회|문|원)'
+                               r'|(?:(?<![가-힣0-9])|(?<=[0-9]일)|' + _after(_PRAYER_COMPOUNDS) + r')기도|기도(?=회|문|원)'
                                r'|소송|고소|경찰서|성적\s*지향|커밍아웃'),
     'crisis': re.compile(r'자살|자해|죽고\s*싶'),
-    'home': re.compile(r'집\s*주소|우리\s*집(?![계중합단착약적필행권무])|자택'),
+    'home': re.compile(r'집\s*주소|우리\s*집(?![중합단착필행권]|계(?!약)|약(?!도)|적(?!금)|무(?!너))|자택'),
 }
 
 
