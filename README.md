@@ -22,6 +22,8 @@
 
 ## 흐름
 
+<img width="1204" height="609" alt="Tracer_20261110_092735" src="https://github.com/user-attachments/assets/5ae2d31b-a839-4282-931b-1c6b6306c90a" />
+
 1. 확장이 ChatGPT 대화를, 스캐너가 지정한 프로젝트의 Codex·Claude Code 대화를 읽어 Mac 로컬 수집기에 모음
 2. 기기 안에서 민감정보를 가리고 개인 내용을 거른 뒤, 남은 발췌만 외부 AI로 분류
 3. 승인함(웹 `/review`, 본인만 봄)에서 후보를 확인·수정·승인
