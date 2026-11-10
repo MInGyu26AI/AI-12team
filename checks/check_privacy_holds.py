@@ -137,6 +137,19 @@ class FailClosed(PrivacyFixture):
             classify_queued(restarted)
         self.assertEqual(len(self.requests), 1)
 
+    def test_hold_from_the_previous_policy_is_judged_again(self):
+        doubt = '그 사람 얘기는 나중에 따로 하자'
+        gate = Gate(Scripted({doubt: dict(label='unsure', personal=[])}))
+        self.pipeline.privacy = gate
+        with patch.object(local_privacy, 'POLICY_VERSION', 'syncup-local-privacy/3'):
+            turn_intake.append(self.pipeline, [self.message('m', doubt)], True)
+            self.run_offline()
+            gate.classifier.labels = {}  # the model would now answer work
+            self.run_offline()
+            self.assertEqual(self.requests, [], 'a hold of the current policy waits for the user')
+        self.run_offline()
+        self.assertEqual(len(self.requests), 1)
+
     def test_exclusion_during_a_rereview_holds_until_the_next_run(self):
         doubt = '그 사람 얘기는 나중에 따로 하자'
         gate = Gate(Scripted(mode='down'))

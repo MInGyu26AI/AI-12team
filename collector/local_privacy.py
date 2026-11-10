@@ -26,8 +26,9 @@ from outbound_guard import BLOCK_REASONS, blocked_reason, message_fragments
 from privacy_model import ModelFailure, ModelOutputError, ModelTimeout, ModelUnavailable, classifier_from_env
 from privacy_rules import PERSONAL_TOKEN, SECRET_TOKEN, apply_rules, personal_categories, secret_values
 
-# v3 invalidates cached answers accepted before strict JSON validation; v2 credential masking is retained.
-POLICY_VERSION = 'syncup-local-privacy/3'
+# v4: the personal-word lexicon changed (bounded endings, prayer compounds, topic words), so batches held under v3 are
+# judged again. v3 invalidated cached answers accepted before strict JSON validation; v2 credential masking is retained.
+POLICY_VERSION = 'syncup-local-privacy/4'
 ALLOW, EXCLUDE, HOLD = 'allow', 'exclude', 'hold'
 # Holds caused by the runtime, not the content, are re-checked on their own after a short wait.
 TRANSIENT = ('model_unavailable', 'model_timeout', 'model_error')

@@ -72,14 +72,18 @@ def secret_values(text: str) -> list[str]:
 
 # First parts of prayer compounds written without a space ('수요기도', '묵주기도'). A list, because the syllable before
 # '기도' cannot tell '묵주기도' from '폴링 주기도' or '매일기도' from '일기도'. A compound whose first part is not here
-# is missed unless it ends in 회·문·원.
-_PRAYER_COMPOUNDS = ('께 밤'
-                     ' 새벽 아침 저녁 심야 매일 주일 월요 화요 수요 목요 금요 토요 일요 백일 천일 구일 보름 정초 동지 백중'
-                     ' 신년 송년 성탄 부활 사순 대림 고난 수능 입시'
-                     ' 중보 감사 식사 식전 식후 취침 철야 대표 금식 통성 합심 회개 안수 방언 작정 특별 구역 연합 구국 산상'
-                     ' 가정 가족 부부 개인 공동 태교 위해 묵주 화살 삼종 침묵 관상 묵상 성령 치유 축복 축사 봉헌 헌금'
-                     ' 개회 폐회 마침 대적 선포 골방 무릎 눈물 서원 결단 영접 파송 임종 추모 위령 관음 지장 신중 산신 칠성'
+# is missed unless it ends in 회·문·원. Left out on purpose: parts that make another word with what follows or precedes
+# when a work phrase is written without a space ('도입시기도' for 입시, '회식후기도' for 식후, '성공동기도' for 공동,
+# '개인기도 좋다' for 개인, '두께기도' for 께).
+_PRAYER_COMPOUNDS = ('밤'
+                     ' 새벽 아침 저녁 심야 매일 주일 월요 화요 수요 목요 금요 토요 일요 백일 천일 보름 님께 위해'
+                     ' 신년 송년 성탄 부활 사순 대림 고난 수능'
+                     ' 중보 감사 식사 식전 취침 철야 대표 금식 통성 합심 회개 안수 방언 작정 특별 구역 연합'
+                     ' 가정 가족 부부 묵주 화살 삼종 침묵 묵상 성령 치유 축복 봉헌 헌금'
+                     ' 개회 폐회 마침 골방 무릎 눈물 서원 파송 추모 위령'
                      ' 릴레이 수험생 초하루 다니엘').split()
+# Words in a project topic that only look like a lexicon word. They do not exempt it.
+_TOPIC_LOOKALIKES = re.compile(r'(?<![가-힣0-9])(?:경기도|일기도)')
 
 
 def _after(words: list[str]) -> str:
@@ -92,7 +96,7 @@ def _after(words: list[str]) -> str:
 # '하기도', '1기도'), the verb '빚다' ('갈등을 빚고', '차질을 빚을'), and Sino-Korean words after '우리 집' ('집계',
 # '집중'). '기도' counts at the start of a word, after a listed first part or a day count ('40일기도'), and before
 # 회·문·원. The match stays '기도' so a project topic such as '기도 앱' still exempts it. Other ambiguous forms such as
-# '빚은'·'빚을' still match, and so do '빚고민', '빚고 뭐고', '우리 집계약', '우리 집적금', '우리 집약도'.
+# '빚은'·'빚을' still match, and so do '빚고민', '빚고 뭐고', '우리 집계약', '우리 집적금'.
 PERSONAL_TERMS: dict[str, re.Pattern] = {
     'health': re.compile(r'병원|진료|수술|입원|퇴원|처방|복용|약\s*먹|우울|공황|정신과|심리\s*상담|치료\s*받|진단\s*받|임신|출산|생리통'
                          r'|아파서|아프다|아픈\s*(?:데|곳)|몸이\s*안\s*좋|감기|독감|확진|건강\s*검진|투병|통증'),
@@ -104,12 +108,16 @@ PERSONAL_TERMS: dict[str, re.Pattern] = {
                                r'|(?:(?<![가-힣0-9])|(?<=[0-9]일)|' + _after(_PRAYER_COMPOUNDS) + r')기도|기도(?=회|문|원)'
                                r'|소송|고소|경찰서|성적\s*지향|커밍아웃'),
     'crisis': re.compile(r'자살|자해|죽고\s*싶'),
-    'home': re.compile(r'집\s*주소|우리\s*집(?![중합단착필행권]|계(?!약)|약(?!도)|적(?!금)|무(?!너))|자택'),
+    'home': re.compile(r'집\s*주소|우리\s*집(?![중합단착약필행권]|계(?!약)|적(?!금)|무(?!너))|자택'),
 }
 
 
 def personal_categories(text: str, allowed: str = '') -> list[str]:
-    """Lexicon categories in text. Words the user put in the project topic (e.g. 병원 for a clinic app) do not count."""
+    """Lexicon categories in text. Words the user put in the project topic (e.g. 병원 for a clinic app) do not count.
+
+    A lookalike in the topic does not exempt: '기도 앱' and '교회기도앱' exempt 기도, '경기도 버스 앱' does not.
+    """
+    allowed = _TOPIC_LOOKALIKES.sub(' ', allowed)
     return [name for name, pattern in PERSONAL_TERMS.items()
             if any(m.group(0) not in allowed for m in pattern.finditer(text))]
 

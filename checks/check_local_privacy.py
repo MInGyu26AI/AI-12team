@@ -121,7 +121,9 @@ class PersonalLexicon(unittest.TestCase):
                      '배포 일정에 차질을 빚을 수 있어요', '일정에 차질을 빚게 됐어', '차질을 빚습니다', '혼선을 빚은 부분 정리하자',
                      '1기도 이 기능 썼어', '여기도 고쳐야 해', '그 얘기도 했어', '이번 분기도 목표는 같다', '분류기도 다시 돌리자',
                      '일기도 쓰는 앱이다', '원인이기도 하다', '모바일 기기도 지원하자', '송편을 빚고 있어', '우리 집무실은 3층이다',
-                     '우리 집약적 설계가 낫다', '우리 집적 회로 팀'):
+                     '우리 집약적 설계가 낫다', '우리 집적 회로 팀', '우리 집약도 지표가 낮다', '도입시기도 아직 미정이야',
+                     '회식후기도 올려줘', '성공동기도 적어줘', '개인기도 좋지만 팀워크가 먼저다', '선 두께기도 하고 색이기도 하다',
+                     '연구일기도 쓰자', '우선포기도 고려하자'):
             with self.subTest(text=text):
                 self.assertEqual(personal_categories(text), [])
 
@@ -137,7 +139,7 @@ class PersonalLexicon(unittest.TestCase):
                  '40일기도 중이야': 'belief_legal', '매일기도하고 있어': 'belief_legal', '릴레이기도 순서라 빠질게': 'belief_legal',
                  '하나님께기도했어': 'belief_legal', '식전기도': 'belief_legal', '빚고민이 많아': 'money',
                  '빚고 뭐고 다 지쳤어': 'money', '우리 집계약 끝나서 이사해': 'home', '우리집계약금': 'home',
-                 '우리 집적금 깼어': 'home', '우리집약도 보내줄게': 'home', '우리 집무너졌어': 'home'}
+                 '우리 집적금 깼어': 'home', '우리 집무너졌어': 'home'}
         for text, category in cases.items():
             with self.subTest(text=text):
                 self.assertIn(category, personal_categories(text))
@@ -145,6 +147,16 @@ class PersonalLexicon(unittest.TestCase):
     def test_project_topic_still_exempts_prayer_compounds(self):
         self.assertEqual(personal_categories('새벽기도 알림 기능 만들자', allowed='기도 앱'), [])
         self.assertEqual(personal_categories('새벽기도 알림 기능 만들자'), ['belief_legal'])
+
+    def test_lookalike_in_the_topic_does_not_exempt(self):
+        self.assertEqual(personal_categories('병원 예약 화면부터 만들자', allowed='병원 예약 서비스'), [])
+        for topic in ('교회기도앱', '성경기도앱', '청년부기도모임 앱', '40일기도 앱', '매일기도 앱'):
+            with self.subTest(topic=topic):
+                self.assertEqual(personal_categories('기도 제목 등록 화면부터 만들자', allowed=topic), [])
+                self.assertEqual(personal_categories('중보기도 요청 목록 API', allowed=topic), [])
+        for topic in ('경기도 버스 앱', '수원 경기도청 민원 앱', '일기도 분석 서비스'):
+            with self.subTest(topic=topic):
+                self.assertEqual(personal_categories('새벽기도 다녀와서 늦었어', allowed=topic), ['belief_legal'])
 
 
 class SemanticGate(PrivacyFixture):
