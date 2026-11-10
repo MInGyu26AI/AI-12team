@@ -71,15 +71,22 @@ def secret_values(text: str) -> list[str]:
 
 
 # Personal-content lexicon: a safety net beside the model, never a reason to allow.
+# Short words are bounded so common endings do not hold work sentences: '-기도' after a syllable or digit ('크기도',
+# '하기도', '1기도'), the verb '빚다' ('갈등을 빚고', '차질을 빚을'), and Sino-Korean words after '우리 집' ('집계',
+# '집중'). Prayer compounds written without a space still match, and the match stays '기도' so a project topic
+# such as '기도 앱' still exempts it. Other ambiguous forms such as '빚은'·'빚을' still match.
 PERSONAL_TERMS: dict[str, re.Pattern] = {
     'health': re.compile(r'병원|진료|수술|입원|퇴원|처방|복용|약\s*먹|우울|공황|정신과|심리\s*상담|치료\s*받|진단\s*받|임신|출산|생리통'
                          r'|아파서|아프다|아픈\s*(?:데|곳)|몸이\s*안\s*좋|감기|독감|확진|건강\s*검진|투병|통증'),
     'family': re.compile(r'부모님|어머니|아버지|엄마|아빠|할머니|할아버지|가족|장례|결혼식|이혼|육아|아이가\s*아|배우자|아내|남편'),
     'relationship': re.compile(r'남자\s*친구|여자\s*친구|남친|여친|연애|헤어졌|애인|소개팅'),
-    'money': re.compile(r'대출|빚|연체|월급|연봉|카드\s*값|신용\s*점수|파산|생활비|월세'),
-    'belief_legal': re.compile(r'교회|성당|종교|기도|소송|고소|경찰서|성적\s*지향|커밍아웃'),
+    'money': re.compile(r'대출|(?<!차질을 )(?<!갈등을 )(?<!혼선을 )(?<!물의를 )(?<!논란을 )(?<!오해를 )(?<!마찰을 )빚(?![고어었는게습])'
+                        r'|연체|월급|연봉|카드\s*값|신용\s*점수|파산|생활비|월세'),
+    'belief_legal': re.compile(r'교회|성당|종교'
+                               r'|(?:(?<![가-힣0-9])|(?<=새벽|중보|감사|식사|철야|대표|금식|통성|합심|회개|아침|저녁|주일))기도|기도(?=회|문|원)'
+                               r'|소송|고소|경찰서|성적\s*지향|커밍아웃'),
     'crisis': re.compile(r'자살|자해|죽고\s*싶'),
-    'home': re.compile(r'집\s*주소|우리\s*집|자택'),
+    'home': re.compile(r'집\s*주소|우리\s*집(?![계중합단착약적필행권무])|자택'),
 }
 
 

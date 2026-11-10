@@ -21,7 +21,7 @@ from local_fixtures import (FAKE_AUTH, HEALTH, HIDDEN, KEEP, MIXED, SECRETS, Pri
                             private_db, responses, strings)
 from local_privacy import Gate
 from local_rpc import dispatch
-from privacy_rules import apply_rules, secret_values
+from privacy_rules import apply_rules, personal_categories, secret_values
 from storage import connect
 import turn_intake
 
@@ -109,6 +109,34 @@ class KoreanCredentialRule(unittest.TestCase):
         apply_rules('OTP:abc;' * 2500)
         secret_values('OTP:abc;' * 2500)
         self.assertLess(time.monotonic() - started, 1.0)
+
+
+class PersonalLexicon(unittest.TestCase):
+    """The lexicon holds personal words, not common endings that happen to contain them."""
+
+    def test_work_sentences_with_lookalike_endings_are_not_personal(self):
+        for text in ('버튼 크기도 키우자', '폴링 주기도 30초로 줄이자', '동기도 되고 비동기도 지원하자', '캐시를 쓰기도 합니다',
+                     '테스트하기도 했어', '수집기도 다시 켜자', '두 팀이 일정 갈등을 빚고 있어', '마찰을 빚어 일정이 밀렸다',
+                     '혼선을 빚었다', '오해를 빚는 문구는 빼자', '우리 집계 기준은 주간이다', '우리 집중 시간은 오전이다',
+                     '배포 일정에 차질을 빚을 수 있어요', '일정에 차질을 빚게 됐어', '차질을 빚습니다', '혼선을 빚은 부분 정리하자',
+                     '1기도 이 기능 썼어'):
+            with self.subTest(text=text):
+                self.assertEqual(personal_categories(text), [])
+
+    def test_personal_words_still_count(self):
+        cases = {'어제 교회에서 기도했어': 'belief_legal', '새벽기도 다녀와서 늦었어': 'belief_legal',
+                 '기도 제목 있으면 말해줘': 'belief_legal', '대표기도 맡아서 긴장돼': 'belief_legal',
+                 '수요기도회 끝나고 갈게': 'belief_legal', '금식기도 중이라 점심 못 먹어': 'belief_legal',
+                 '주기도문 외워야 해': 'belief_legal', '빚이 너무 많아': 'money', '빚은 다 갚았어': 'money',
+                 '빚을 갚느라 힘들어': 'money', '친구한테 빚지고 있어': 'money', '학비를 빚으로 냈어': 'money',
+                 '우리 집에 오늘 손님 와': 'home', '우리집 고양이가 아파': 'home', '우리 집안 사정이 있어': 'home'}
+        for text, category in cases.items():
+            with self.subTest(text=text):
+                self.assertIn(category, personal_categories(text))
+
+    def test_project_topic_still_exempts_prayer_compounds(self):
+        self.assertEqual(personal_categories('새벽기도 알림 기능 만들자', allowed='기도 앱'), [])
+        self.assertEqual(personal_categories('새벽기도 알림 기능 만들자'), ['belief_legal'])
 
 
 class SemanticGate(PrivacyFixture):
