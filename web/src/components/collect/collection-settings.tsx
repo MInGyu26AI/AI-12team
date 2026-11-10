@@ -55,6 +55,10 @@ export function CollectionSettings({ status, onChange }: { status: ExtStatus; on
           className="ml-3 rounded border p-2"
         />
       </label>
+      {/* 확장의 자동 수집은 팀·주제·이름이 모두 있어야 켜진다 (extension/lib/settings.ts isConfigured) */}
+      {!topic.trim() && (
+        <p className="text-sm text-destructive">프로젝트 주제를 입력하세요. 주제가 비어 있으면 브라우저 확장이 대화를 자동으로 수집하지 않습니다.</p>
+      )}
       <label className="block">
         수집 종료 시각
         <input
