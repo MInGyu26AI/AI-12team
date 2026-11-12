@@ -13,7 +13,7 @@ import {
   type TabToast,
 } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
-import { isConfigured, settingsItem, type Settings } from '@/lib/settings';
+import { isConfigured, sendBlockedReason, settingsItem, type Settings } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForHost, type SiteAdapter } from '@/lib/sites';
 
 type Trigger = Extract<BgRequest, { type: 'collect' }>['trigger'];
@@ -52,9 +52,11 @@ export default defineContentScript({
       settings = s;
     });
 
+    // 수집기가 받지 않을 때는 보내지 않는다. 보냈다가 거절되면 그 메시지가 기준선에 들어가 다시 켠 뒤에도 자동 수집에서 빠진다
     const isReady = () => {
-      if (settings && isConfigured(settings)) return true;
-      overlay.showToast('확장 아이콘을 눌러 먼저 설정해 주세요', 'error');
+      const blocked = settings ? sendBlockedReason(settings) : '확장 아이콘을 눌러 먼저 설정해 주세요';
+      if (!blocked) return true;
+      overlay.showToast(blocked, 'error');
       return false;
     };
     wireSendButtons(site, overlay, isReady, autoCollect.markSeen);

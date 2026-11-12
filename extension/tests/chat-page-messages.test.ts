@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ContentScriptContext } from '#imports';
 import aiChat from '@/entrypoints/ai-chat.content';
+import { settingsItem } from '@/lib/settings';
 
 const invalidated: (() => void)[] = [];
 const ctx = {
@@ -42,5 +43,21 @@ describe('채팅 화면이 받는 메시지', () => {
     expect(returned).toBeUndefined();
     expect(sendResponse).not.toHaveBeenCalled();
     expect(toastText()).toBe('분류 대기함에 저장했어요');
+  });
+});
+
+describe('"싱크업에 보내기" 버튼', () => {
+  it('수집이 꺼져 있으면 보내지 않고 켜라고 안내한다 (거절될 메시지를 기준선에 넣지 않게)', async () => {
+    await settingsItem.setValue({ ...settingsItem.fallback, teamName: '팀', projectTopic: '주제', userName: '나', autoCollect: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const toBackground = vi.spyOn(fakeBrowser.runtime, 'sendMessage');
+    document.body.insertAdjacentHTML(
+      'afterbegin',
+      '<main><div data-message-author-role="user" data-message-id="u1"><div class="whitespace-pre-wrap">발표는 금요일</div></div></main>',
+    );
+    document.querySelector('#syncup-root')!.shadowRoot!.querySelector<HTMLButtonElement>('button.all')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toBackground).not.toHaveBeenCalled();
+    expect(toastText()).toBe('수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요');
   });
 });

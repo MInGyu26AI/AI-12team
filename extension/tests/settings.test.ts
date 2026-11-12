@@ -3,7 +3,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ExtStatus } from '@shared/bridge';
 import { fromLocalInput } from '@/entrypoints/popup/datetime-local';
 import { saveSetup } from '@/entrypoints/popup/save-setup';
-import { clampTurns, settingsFromStatus, settingsItem, type Settings } from '@/lib/settings';
+import { clampTurns, sendBlockedReason, settingsFromStatus, settingsItem, type Settings } from '@/lib/settings';
 
 const ENDED_AT = '2026-11-08T00:00:00+00:00';
 const status: ExtStatus = {
@@ -54,6 +54,21 @@ describe('saveSetup (팝업 설정 저장)', () => {
     const result = await saveSetup({ projectTopic: '주제', enabledSubtopics: [], webUrl: 'http://localhost:3000' });
     expect(result).toEqual({ ok: false, error: '프로젝트 주제 오류' });
     expect((await settingsItem.getValue()).webUrl).toBeUndefined();
+  });
+});
+
+describe('수동 보내기를 막는 이유 (수집기는 수집 중일 때만 받는다)', () => {
+  const now = Date.parse('2026-11-12T12:00:00Z');
+  const ready = stored({ teamName: '팀', projectTopic: '주제', userName: '나', autoCollect: true, endsAt: '2026-11-12T13:00:00Z' });
+
+  it('설정이 끝났고 수집 중이면 보낼 수 있다', () => {
+    expect(sendBlockedReason(ready, now)).toBeNull();
+  });
+
+  it('설정 전 · 종료 시각 지남 · 일시정지 순으로 이유를 알려 준다', () => {
+    expect(sendBlockedReason({ ...ready, projectTopic: ' ' }, now)).toBe('확장 아이콘을 눌러 먼저 설정해 주세요');
+    expect(sendBlockedReason({ ...ready, autoCollect: false, endsAt: '2026-11-12T11:00:00Z' }, now)).toMatch(/^수집 종료 시각이 지났어요/);
+    expect(sendBlockedReason({ ...ready, autoCollect: false }, now)).toBe('수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요');
   });
 });
 

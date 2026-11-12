@@ -21,12 +21,15 @@ export function QueueStatus({ settings, pendingCount }: { settings: Settings; pe
         </p>
         <button
           className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40"
-          disabled={!bufferedTurns || flushing}
+          disabled={!bufferedTurns || flushing || !settings.autoCollect}
           onClick={flush}
         >
           {flushing ? '분류 중…' : '지금 분류하기'}
         </button>
       </div>
+      {!settings.autoCollect && bufferedTurns > 0 && (
+        <p className="text-xs text-gray-500">쌓인 대화는 보관돼 있어요. 수집을 다시 켜면 다음 묶음에 합쳐요.</p>
+      )}
       <p>
         검토 대기 카드 <b className="text-tag-decision">{pendingCount}개</b>
       </p>

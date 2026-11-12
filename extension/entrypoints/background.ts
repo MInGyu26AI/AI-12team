@@ -5,7 +5,7 @@ import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
 import { collectResultToast, type BgRequest, type TabToast } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
-import { settingsItem } from '@/lib/settings';
+import { sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
 import { isTrustedWebOrigin } from '@/lib/web-url';
 
@@ -62,6 +62,8 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
   const site = siteForUrl(url);
   const message = site && selectionMessage(site, info.selectionText ?? '', url, tab?.title ?? '');
   if (!message) return;
+  const blocked = sendBlockedReason(await settingsItem.getValue());
+  if (blocked) return showToast(tab?.id, { type: 'toast', text: blocked, tone: 'error' });
   try {
     showToast(tab?.id, collectResultToast(await appendTurns([message], true)));
   } catch (error) {

@@ -13,7 +13,7 @@ const STATUS: ExtStatus = {
   autoCollect: true,
   turnsPerBatch: 10,
   bufferedTurns: 0,
-  endsAt: '2026-11-10T00:00:00+00:00',
+  endsAt: new Date(Date.now() + 3600_000).toISOString(), // 수집 중 (날짜가 지나도 시험이 깨지지 않게 지금 기준)
   lastCollectedAt: null,
   lastClassifier: null,
   teamName: '팀',
@@ -142,6 +142,18 @@ describe('우클릭 메뉴로 선택한 내용 보내기', () => {
     expect(calledMethods()).toContain('turns.append');
     expect(toast).toHaveBeenCalledTimes(1);
     expect(await lastError()).toBeNull();
+  });
+
+  it('수집이 꺼져 있으면 수집기에 보내지 않고 켜라고 안내한다', async () => {
+    overrides['candidates.list'] = { ok: true, result: { cards: [], status: { ...STATUS, autoCollect: false } } };
+    await send({ type: 'refresh' }, fromPopup());
+    nativeCalls.length = 0;
+    const toast = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined);
+    toast.mockClear(); // 앞 시험이 같은 함수를 spy 해 둔 호출 기록을 비운다
+    menuClicked({ menuItemId: 'syncup-send-selection', selectionText: '팀 결정 내용' }, { id: 7, url: 'https://chatgpt.com/c/c1', title: '대화' });
+    await vi.waitFor(() => expect(toast).toHaveBeenCalled());
+    expect(toast).toHaveBeenCalledExactlyOnceWith(7, { type: 'toast', text: '수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요', tone: 'error' });
+    expect(calledMethods()).not.toContain('turns.append');
   });
 });
 

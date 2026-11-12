@@ -55,6 +55,17 @@ export const isEnded = (s: Settings, now = Date.now()) => {
 
 export const isConfigured = (s: Settings) => !!(s.teamName.trim() && s.projectTopic.trim() && s.userName.trim());
 
+/**
+ * 수동 보내기(싱크업에 보내기·선택 보내기·우클릭·지금 분류하기)를 막아야 하는 이유, 보낼 수 있으면 null.
+ * 수집기는 수집 중(autoCollect = 일시정지도 종료도 아님)일 때만 발화와 분류 요청을 받는다
+ */
+export function sendBlockedReason(s: Settings, now = Date.now()): string | null {
+  if (!isConfigured(s)) return '확장 아이콘을 눌러 먼저 설정해 주세요';
+  if (isEnded(s, now)) return '수집 종료 시각이 지났어요. 확장 팝업에서 종료 시각을 갱신하고 자동 수집을 켜 주세요';
+  if (!s.autoCollect) return '수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요';
+  return null;
+}
+
 // 확장 자신이 로컬 수집기를 부른 마지막 실패. unreachable: 수집기에 닿지 못함, op: 실패한 호출 종류.
 // 언제 지우는지는 collector-status.ts 가 정한다.
 export interface CollectState {

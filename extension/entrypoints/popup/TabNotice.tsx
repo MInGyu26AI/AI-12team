@@ -37,12 +37,13 @@ export function TabNotice({ autoCollect }: { autoCollect: boolean }) {
         {READ_FAIL_GUIDE}. (드래그 후 오른쪽 아래 “선택한 내용 보내기” 또는 우클릭 메뉴)
       </Notice>
     );
-  if (!ping.onConversation) return <Notice tone="info">대화를 시작하면 {autoCollect ? '자동으로' : '“싱크업에 보내기” 버튼으로'} 수집해요.</Notice>;
+  if (!ping.onConversation)
+    return <Notice tone="info">{autoCollect ? '대화를 시작하면 자동으로 수집해요.' : '수집이 꺼져 있어요. 위에서 자동 수집을 켜면 대화를 모아요.'}</Notice>;
   return (
     <Notice tone="ok">
       이 대화에서 메시지 {ping.messageCount}개를 읽을 수 있어요
       {ping.guessedRoles > 0 && ` (그중 ${ping.guessedRoles}개는 누가 말했는지 순서로 추정)`}.
-      {!autoCollect && ' 화면 오른쪽 아래 버튼으로 보낼 수 있어요.'}
+      {!autoCollect && ' 수집이 꺼져 있어 보내지 않아요. 위에서 자동 수집을 켜 주세요.'}
     </Notice>
   );
 }
