@@ -58,7 +58,7 @@ export const isEnded = (s: Settings, now = Date.now()) => {
 export const isConfigured = (s: Settings) => !!(s.teamName.trim() && s.projectTopic.trim() && s.userName.trim());
 
 /**
- * 수동 보내기(싱크업에 보내기·선택 보내기·우클릭·지금 분류하기)를 막아야 하는 이유, 보낼 수 있으면 null.
+ * 수동 보내기(싱크업에 보내기·선택 보내기·우클릭)와 팝업의 '지금 분류하기'를 막아야 하는 이유, 보낼 수 있으면 null.
  * 수집기는 수집 중(autoCollect = 일시정지도 종료도 아님)일 때만 발화와 분류 요청을 받는다
  */
 export function sendBlockedReason(s: Settings, now = Date.now()): string | null {

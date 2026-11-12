@@ -1,5 +1,5 @@
 // entrypoints/background.ts 를 가짜 browser 위에서 띄우고, 로컬 수집기(native host)는 메서드별 가짜 응답으로 바꾼다
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ExtStatus } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
@@ -89,6 +89,8 @@ beforeEach(async () => {
   nativeCalls.length = 0;
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('웹 화면의 수집기 RPC', () => {
   it('설정한 주소가 배포 주소면 localhost:3000 페이지의 요청은 수집기에 닿지 않는다', async () => {
     await useWebUrl(PRODUCTION_WEB_URL);
@@ -149,7 +151,6 @@ describe('우클릭 메뉴로 선택한 내용 보내기', () => {
     await send({ type: 'refresh' }, fromPopup());
     nativeCalls.length = 0;
     const toast = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined);
-    toast.mockClear(); // 앞 시험이 같은 함수를 spy 해 둔 호출 기록을 비운다
     menuClicked({ menuItemId: 'syncup-send-selection', selectionText: '팀 결정 내용' }, { id: 7, url: 'https://chatgpt.com/c/c1', title: '대화' });
     await vi.waitFor(() => expect(toast).toHaveBeenCalled());
     expect(toast).toHaveBeenCalledExactlyOnceWith(7, { type: 'toast', text: '수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요', tone: 'error' });

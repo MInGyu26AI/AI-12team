@@ -107,7 +107,7 @@ export default function CollectPage() {
             </span>
             <button
               className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-              disabled={!st.bufferedTurns}
+              disabled={!st.bufferedTurns || !st.autoCollect}
               onClick={collector.flush}
             >
               지금 수집하기

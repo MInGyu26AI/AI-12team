@@ -47,7 +47,7 @@ describe('채팅 화면이 받는 메시지', () => {
 });
 
 describe('"싱크업에 보내기" 버튼', () => {
-  it('수집이 꺼져 있으면 보내지 않고 켜라고 안내한다 (거절될 메시지를 기준선에 넣지 않게)', async () => {
+  it('수집이 꺼져 있으면 보내지 않고 켜라고 안내한다', async () => {
     await settingsItem.setValue({ ...settingsItem.fallback, teamName: '팀', projectTopic: '주제', userName: '나', autoCollect: false });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const toBackground = vi.spyOn(fakeBrowser.runtime, 'sendMessage');

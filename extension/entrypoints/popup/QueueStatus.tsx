@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { sendToBackground } from '@/lib/messages';
-import { turnsOf, type Settings } from '@/lib/settings';
+import { sendBlockedReason, turnsOf, type Settings } from '@/lib/settings';
 
 // 다음 분류까지 쌓인 대화 · "지금 분류하기" · 검토 대기 카드 수 · 마지막 수집 시각
 export function QueueStatus({ settings, pendingCount }: { settings: Settings; pendingCount: number }) {
@@ -22,7 +22,7 @@ export function QueueStatus({ settings, pendingCount }: { settings: Settings; pe
         </p>
         <button
           className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40"
-          disabled={!bufferedTurns || flushing || !settings.autoCollect}
+          disabled={!bufferedTurns || flushing || !!sendBlockedReason(settings)}
           onClick={flush}
         >
           {flushing ? '분류 중…' : '지금 분류하기'}

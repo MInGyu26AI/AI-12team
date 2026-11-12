@@ -52,9 +52,9 @@ export default defineContentScript({
       settings = s;
     });
 
-    // 수집기가 받지 않을 때는 보내지 않는다. 보냈다가 거절되면 그 메시지가 기준선에 들어가 다시 켠 뒤에도 자동 수집에서 빠진다
+    // 수집기가 거절할 요청은 보내지 않고 이유를 알린다. 설정을 아직 못 읽었으면 설정 전으로 본다
     const isReady = () => {
-      const blocked = settings ? sendBlockedReason(settings) : '확장 아이콘을 눌러 먼저 설정해 주세요';
+      const blocked = sendBlockedReason(settings ?? settingsItem.fallback);
       if (!blocked) return true;
       overlay.showToast(blocked, 'error');
       return false;

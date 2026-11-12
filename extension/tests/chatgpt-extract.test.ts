@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
 // @vitest-environment-options {"url": "https://chatgpt.com/c/test"}
-// ChatGPT 화면 감지 규칙(lib/sites/chatgpt.ts)을 고정 DOM 으로 묶어 둔다. 감지 규칙은 바꾸지 않기로 한 대상이라
-// 결과(메시지·순서·id·화자·제목·시도한 셀렉터)가 달라지면 이 시험이 깨진다. 앞의 6건은 56f49ff 의 추출 코드에서도 같게 나오고,
-// 그 뒤 3건은 화면 알림(로그인 만료 안내 등)을 메시지로 읽지 않는 규칙, 마지막 1건은 2026-11 ChatGPT 화면 구조
-// (실제 탭에서 뽑은 DOM 뼈대를 줄인 것)다.
+// ChatGPT 화면 감지 규칙(lib/sites/chatgpt.ts)을 고정 DOM 으로 묶어 둔다. 화면 구조마다 결과(메시지·순서·id·화자·제목·
+// 시도한 셀렉터)가 달라지면 이 시험이 깨진다. '2026-11 ChatGPT' 는 실제 탭에서 뽑은 DOM 뼈대를 줄인 것이다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CollectedMessage } from '@shared/collector';
 import { chatgpt } from '@/lib/sites/chatgpt';
