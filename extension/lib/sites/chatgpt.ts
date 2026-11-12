@@ -28,7 +28,12 @@ export const SELECTORS = {
   streaming: ['[data-testid="stop-button"]', 'button[aria-label*="Stop"]', 'button[aria-label*="중지"]'],
   messageId: '[data-message-id]',
   title: ['nav a[aria-current="page"]', 'nav [data-active] a'],
+  // 대화가 아닌 알림 영역. 이 안의 요소는 메시지로 읽지 않는다
+  notice: '[role="alert"], [role="alertdialog"]',
 } as const;
+
+// 알림 영역 표시 없이 그려지는 ChatGPT 안내 문구. 글 전체가 이 문구일 때만 뺀다 (같은 말이 섞인 사용자 글은 남긴다)
+const NOTICE_TEXT = /^채팅에 액세스하려면 다시 로그인해야 합니다\.?$/;
 
 // 스크린리더용 머리말 ("You said:" 등) — 화자 추정 + 본문에서 제거
 const USER_HEADING = /^(you said|나의 말|내가 말함)\s*:?\s*$/i;
@@ -167,7 +172,10 @@ export const chatgpt: SiteAdapter = {
   extract(): ExtractResult {
     const tried: ExtractResult['tried'] = [];
     for (const { name, nodes } of STRATEGIES) {
-      const found = nodes().map((el) => ({ el, text: textOf(el) })).filter((x) => x.text.length > 0);
+      const found = nodes()
+        .filter((el) => !el.closest(SELECTORS.notice))
+        .map((el) => ({ el, text: textOf(el) }))
+        .filter((x) => x.text.length > 0 && !NOTICE_TEXT.test(x.text));
       tried.push({ name, count: found.length });
       if (!found.length) continue;
 

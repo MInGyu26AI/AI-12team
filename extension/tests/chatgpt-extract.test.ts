@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // @vitest-environment-options {"url": "https://chatgpt.com/c/test"}
 // ChatGPT 화면 감지 규칙(lib/sites/chatgpt.ts)을 고정 DOM 으로 묶어 둔다. 감지 규칙은 바꾸지 않기로 한 대상이라
-// 결과(메시지·순서·id·화자·제목·시도한 셀렉터)가 달라지면 이 시험이 깨진다. 기대값은 56f49ff 의 추출 코드에서도 같게 나온다.
+// 결과(메시지·순서·id·화자·제목·시도한 셀렉터)가 달라지면 이 시험이 깨진다. 앞의 6건은 56f49ff 의 추출 코드에서도 같게 나오고,
+// 뒤의 3건은 화면 알림(로그인 만료 안내 등)을 메시지로 읽지 않는 규칙이다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CollectedMessage } from '@shared/collector';
 import { chatgpt } from '@/lib/sites/chatgpt';
@@ -135,6 +136,50 @@ const FIXTURES: Fixture[] = [
     tried: [0, 0, 0, 0, 0, 0, 0],
     guessedRoles: 0,
     messages: [],
+  },
+  {
+    name: '로그인 만료 안내만 있는 화면: 안내 문구는 사용자 발화가 아니어서 빈 결과',
+    path: '/',
+    title: 'ChatGPT',
+    html: '<main><article><div>채팅에 액세스하려면 다시 로그인해야 합니다</div></article></main>',
+    conversation: { id: 'new', title: 'ChatGPT' },
+    selector: null,
+    tried: [0, 0, 0, 0, 0, 0, 0],
+    guessedRoles: 0,
+    messages: [],
+  },
+  {
+    name: '알림 영역(role="alert") 안의 글은 빼고 대화만 읽는다',
+    path: '/c/alert1',
+    title: '발표 준비 - ChatGPT',
+    html: `
+      <main>
+        <div class="whitespace-pre-wrap">발표 순서 정하자</div>
+        <div class="markdown"><p>좋아요</p></div>
+        <div role="alert"><div class="whitespace-pre-wrap">네트워크 연결이 끊겼어요. 다시 시도해 주세요</div></div>
+      </main>`,
+    conversation: { id: 'alert1', title: '발표 준비' },
+    selector: 'content-blocks',
+    tried: [0, 0, 0, 0, 0, 2],
+    guessedRoles: 1,
+    messages: [
+      { id: 'chatgpt:alert1:14ibvte', role: 'user', text: '발표 순서 정하자', roleGuessed: true },
+      { id: 'chatgpt:alert1:45furs', role: 'assistant', text: '좋아요' },
+    ],
+  },
+  {
+    name: '안내 문구가 섞인 사용자 글은 그대로 읽는다 (글 전체가 안내 문구일 때만 뺀다)',
+    path: '/c/keep1',
+    title: '로그인 문제 - ChatGPT',
+    html: `
+      <main>
+        <div data-message-author-role="user" data-message-id="u-7"><div class="whitespace-pre-wrap">채팅에 액세스하려면 다시 로그인해야 합니다 라는 알림이 떠요</div></div>
+      </main>`,
+    conversation: { id: 'keep1', title: '로그인 문제' },
+    selector: 'author-role',
+    tried: [1],
+    guessedRoles: 0,
+    messages: [{ id: 'chatgpt:u-7', role: 'user', text: '채팅에 액세스하려면 다시 로그인해야 합니다 라는 알림이 떠요' }],
   },
 ];
 
