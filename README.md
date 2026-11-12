@@ -51,7 +51,7 @@ Node의 환경 파일 옵션을 사용하는 실행 방법과 포트·기간·Cl
 
 ## 저장 위치와 OS 활성화
 
-현재 실행은 **macOS와 Windows를 활성화**했다. Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다. Windows는 Mac에서 대역 검사만 통과했고, 실제 Windows 검사는 `.github/workflows/windows.yml`로 실행한다([호환성 검증](호환성_검증.md)).
+현재 실행은 **macOS와 Windows를 활성화**했다. Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다. Windows는 Mac에서 대역 검사만 통과했고, 실제 Windows 검사는 `.github/workflows/windows.yml`로 실행한다([호환성 검증](호환성_검증.md), 남은 확인 단계는 [Windows 검증 목록](윈도우_검증_목록.md)).
 
 | 항목 | 우선순위 |
 | --- | --- |

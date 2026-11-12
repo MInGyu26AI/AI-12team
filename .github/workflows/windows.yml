@@ -27,6 +27,13 @@ jobs:
           cargo build --release --locked
           New-Item -ItemType Directory -Force bin | Out-Null
           Copy-Item target\release\syncup-collector.exe bin\
+      # The built scanner, for Windows users who cannot build it themselves (Actions run page → Artifacts).
+      - name: Keep the scanner
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncup-collector-windows-x64
+          path: bin/syncup-collector.exe
+          if-no-files-found: error
       # Each check is its own step and runs even after a failure, so that one failure does not hide the others.
       - name: Windows support (real ACLs, launcher through cmd.exe)
         if: always()
