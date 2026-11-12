@@ -53,6 +53,19 @@ jobs:
         env:
           SYNCUP_REQUIRE_BUNDLE: '1'
         run: python check_windows_bundle.py
+      # Stable Chrome no longer loads an unpacked extension from the command line; Chrome for Testing does.
+      - name: Install Chrome for Testing
+        if: always()
+        run: |
+          $out = npx --yes @puppeteer/browsers@2.6.1 install chrome@stable --path "$env:RUNNER_TEMP\cft"
+          $out
+          $exe = ($out | Select-Object -Last 1).Split(' ', 2)[1]
+          "CHROME_PATH=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Real Chrome to the native host (registry, Chrome's command line, answer back)
+        if: always()
+        env:
+          SYNCUP_REQUIRE_CHROME: '1'
+        run: python check_windows_chrome.py
       - name: Windows support (real ACLs, launcher through cmd.exe)
         if: always()
         run: python check_windows_support.py
