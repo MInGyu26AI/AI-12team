@@ -389,8 +389,8 @@ def native_round_trip(case, folder, make_manifest):
     connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{server.server_port}/rpc', token='t' * 43)))
     manifest = json.loads(Path(make_manifest(connection, folder / 'native')).read_text(encoding='utf-8'))
     payload = json.dumps(dict(version=1, method='status', params={})).encode()
-    # As Chrome starts a host: cmd.exe /d /c with the whole command in one more pair of quotes.
-    command = f'cmd.exe /d /c ""{manifest["path"]}" {ORIGIN} --parent-window=0"'
+    # The command line Chrome 157 starts a host with (recorded by check_windows_chrome.py), less its pipe redirection.
+    command = f'cmd.exe /d /s /c ""{manifest["path"]}" {ORIGIN} --parent-window=0"'
     done = subprocess.run(command, input=struct.pack('=I', len(payload)) + payload, capture_output=True, timeout=60)
     case.assertEqual(done.returncode, 0, done.stderr)
     case.assertEqual(struct.unpack('=I', done.stdout[:4])[0], len(done.stdout) - 4, done.stdout[:200])

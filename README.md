@@ -22,7 +22,7 @@ New-Item -ItemType Directory -Force bin
 Copy-Item target\release\syncup-collector.exe bin\
 ```
 
-빌드하지 않고 `windows-collector` 워크플로가 만든 `syncup-collector.exe`(아티팩트 `syncup-collector-windows-x64`)를 `bin\`에 두어도 된다. C 런타임을 넣어 빌드했으므로 Visual C++ 재배포 패키지가 필요 없다(`.cargo/config.toml`). 코드 서명이 없어 처음 실행할 때 SmartScreen 경고가 나올 수 있다. 받은 파일은 [호환성 검증](호환성_검증.md)의 SHA-256과 비교한다.
+빌드하지 않고 `windows-collector` 워크플로가 만든 `syncup-collector.exe`(아티팩트 `syncup-collector-windows-x64`)를 `bin\`에 두어도 된다. C 런타임을 넣어 빌드했으므로 Visual C++ 재배포 패키지가 필요 없다(`.cargo/config.toml`). 코드 서명이 없어 처음 실행할 때 SmartScreen 경고가 나올 수 있다. 빌드마다 SHA-256이 달라지므로 받은 아티팩트가 어느 커밋의 실행에서 나왔는지 Actions 실행 화면에서 확인한다.
 
 실행 파일은 Git에 포함하지 않는다. 다른 위치에 빌드 결과를 저장하도록 `CARGO_TARGET_DIR`를 지정했다면 그 위치에서 실행 파일을 복사한다.
 
