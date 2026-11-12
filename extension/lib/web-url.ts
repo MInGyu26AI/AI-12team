@@ -3,7 +3,7 @@
 import type { Settings } from './settings';
 
 export const LOCAL_WEB_URL = 'http://localhost:3000';
-export const PRODUCTION_WEB_URL = 'https://syncup-ashen.vercel.app'; // Vercel 배포 (soonsim1007/syncup)
+export const PRODUCTION_WEB_URL = 'https://syncup-live-murex.vercel.app'; // Vercel 실제 모드 배포
 export const DEFAULT_WEB_URL: string =
   normalizeWebUrl(import.meta.env.WXT_WEB_URL || PRODUCTION_WEB_URL) ?? PRODUCTION_WEB_URL;
 

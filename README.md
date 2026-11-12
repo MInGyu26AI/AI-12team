@@ -2,8 +2,8 @@
 
 팀원들이 각자 AI와 나눈 대화(ChatGPT 웹, Codex, Claude Code)에서 결정·조사·할 일을 골라, 본인이 승인한 것만 팀 결정 기록에 모으고 결정끼리 어긋나면 알려 주는 서비스. 2026 인공지능학과 대학 연합 해커톤 출품작.
 
-- 웹: https://syncup-ashen.vercel.app
-- 확장 내려받기: https://syncup-ashen.vercel.app/install
+- 웹: https://syncup-live-murex.vercel.app
+- 확장 내려받기: https://syncup-live-murex.vercel.app/install
 
 ## 구성
 

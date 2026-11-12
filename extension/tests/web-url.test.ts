@@ -25,6 +25,7 @@ describe('isTrustedWebOrigin', () => {
   });
 
   it('주소를 설정하지 않았으면 빌드 기본 주소(WXT_WEB_URL, 없으면 배포 주소)만 믿는다', () => {
+    expect(DEFAULT_WEB_URL).toBe('https://syncup-live-murex.vercel.app');
     expect(isTrustedWebOrigin({}, DEFAULT_WEB_URL)).toBe(true);
     expect(isTrustedWebOrigin({}, 'https://other.vercel.app')).toBe(false);
   });
@@ -32,7 +33,7 @@ describe('isTrustedWebOrigin', () => {
 
 describe('bridgeSupported', () => {
   it('web-bridge 콘텐츠 스크립트가 붙는 주소(manifest matches)와 같은 범위다', () => {
-    const supported = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://syncup-ashen.vercel.app'];
+    const supported = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://syncup-live-murex.vercel.app'];
     supported.forEach((origin) => expect(bridgeSupported(origin)).toBe(true));
     ['http://localhost:3001', 'http://x.vercel.app', 'https://example.com'].forEach((origin) => expect(bridgeSupported(origin)).toBe(false));
     expect(WEB_BRIDGE_MATCHES).toEqual(['http://localhost:3000/*', 'http://127.0.0.1:3000/*', 'https://*.vercel.app/*']);
