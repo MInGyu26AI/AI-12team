@@ -55,18 +55,17 @@ def _counts(c, team_id, start, failed, issues):
                 privacyExcluded=c.execute(EXCLUDED_COUNT, (team_id,)).fetchone()[0])
 
 
-def _buffered_turns(c, team_id, start):
-    """Turns stored this session that no batch has taken yet."""
-    return sum(len(group_turns(messages)) for messages in unbatched_turns(c, team_id, start).values())
+def _turn_counts(c, team_id, start):
+    """(bufferedTurns, nextBatchTurns) of this session's turns that no batch has taken yet.
 
-
-def _next_batch_turns(c, team_id, start):
-    """Answered turns of the conversation closest to its next batch: what the next automatic batch counts.
-
-    Batches are cut per conversation and an unanswered last question waits, so this is not bufferedTurns.
+    bufferedTurns: every stored turn. nextBatchTurns: answered turns of the conversation closest to its next batch.
+    Batches are cut per conversation and an unanswered last question waits, so the two differ;
     take_ready_batches with one turn per batch returns exactly the answered turns.
     """
-    return max((len(take_ready_batches(messages, 1)[0]) for messages in unbatched_turns(c, team_id, start).values()), default=0)
+    conversations = unbatched_turns(c, team_id, start).values()
+    buffered = sum(len(group_turns(messages)) for messages in conversations)
+    next_batch = max((len(take_ready_batches(messages, 1)[0]) for messages in conversations), default=0)
+    return buffered, next_batch
 
 
 def _recent_batches(c, team_id):
@@ -90,8 +89,7 @@ def collection_status(pipeline):
         s = dict(c.execute('SELECT * FROM settings').fetchone())
         team_id = bound_team(c)
         options = read_options(c)
-        buffered = _buffered_turns(c, team_id, s['start'])
-        next_batch = _next_batch_turns(c, team_id, s['start'])
+        buffered, next_batch = _turn_counts(c, team_id, s['start'])
         last_collected = c.execute(LAST_COLLECTED, (team_id, s['start'])).fetchone()[0]
         failures = failed_batches(c, team_id)
         issues = [dict(id=i['id'], reason=i['reason'], received=i['received']) for i in unresolved_issues(c, team_id)]
