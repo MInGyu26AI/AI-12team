@@ -5,6 +5,7 @@ replaced by a test double. On Windows itself (.github/workflows/windows.yml) als
 through cmd.exe.
 """
 import http.server
+import io
 import json
 import os
 from pathlib import Path
@@ -22,7 +23,10 @@ import app
 import native_host
 import prepare_native
 import private_files
+import runtime
 from secure_http import LoopbackServer
+import syncup_entry
+import windows_bundle
 import windows_security
 from windows_security import ADMINISTRATORS, LOCAL_SYSTEM, OWNER_RIGHTS, private_acl
 
@@ -182,14 +186,25 @@ class WindowsLauncher(unittest.TestCase):
             self.assertTrue(lines[2].endswith(f' "--extension-id" "{EXTENSION}" %*'))
             self.assertEqual(lines[3:], [''])
 
-    def test_paths_the_code_page_cannot_hold_are_refused_before_writing(self):
+    def test_paths_the_code_page_cannot_hold_switch_the_launcher_to_utf8(self):
         with tempfile.TemporaryDirectory() as temp:
-            output = Path(temp) / '한글'
+            output = Path(temp) / '한글 폴더'
             with patch.object(sys, 'platform', 'win32'), patch.object(prepare_native, 'CMD_ENCODING', 'ascii'), \
                     patch.dict(os.environ, {'USERPROFILE': ''}), patch.object(windows_security, 'restrict_to_current_user'):
-                with self.assertRaisesRegex(ValueError, '영문 경로'):
-                    prepare_native.prepare(EXTENSION, output / 'connection.json', output)
-            self.assertFalse((output / 'syncup-native.cmd').exists())
+                prepare_native.prepare(EXTENSION, output / 'connection.json', output)
+            lines = (output / 'syncup-native.cmd').read_bytes().decode('utf-8').split('\r\n')
+            self.assertEqual(lines[:3], ['@echo off', 'setlocal DisableDelayedExpansion', 'chcp 65001 >nul'])
+            self.assertIn('한글 폴더', lines[3])
+
+    def test_the_packaged_app_runs_the_host_as_its_own_subcommand(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / 'native'
+            with patch.object(sys, 'platform', 'win32'), patch.object(prepare_native, 'CMD_ENCODING', 'cp949'), \
+                    patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', 'C:\\SyncUp\\syncup.exe'), \
+                    patch.object(windows_security, 'restrict_to_current_user'):
+                prepare_native.prepare(EXTENSION, Path(temp) / 'connection.json', output)
+            line = (output / 'syncup-native.cmd').read_bytes().decode('cp949').split('\r\n')[2]
+            self.assertTrue(line.startswith('"C:\\SyncUp\\syncup.exe" "native-host" "--connection" '), line)
 
     def test_registration_is_for_the_current_user(self):
         command = prepare_native.registration_command(Path('native') / 'com.syncup.collector.json')
@@ -219,6 +234,61 @@ class WindowsPython(unittest.TestCase):
             with patch.object(windows_security, 'is_private', return_value=True):
                 client = TeamClient('https://team.invalid', key, user_id='00000000-0000-4000-8000-000000000001')
         self.assertEqual(client.token, 'k' * 43)
+
+
+class PackagedApp(unittest.TestCase):
+    """syncup.exe: one executable whose subcommands stand for the scripts (syncup_entry.py, windows_bundle.py)."""
+
+    def test_scripts_start_the_same_way_from_source_and_packaged(self):
+        source = runtime.script_command('app.py', 'board', '--state', 's')
+        self.assertEqual(source, [sys.executable, str(Path(app.__file__).resolve()), 'board', '--state', 's'])
+        with patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', 'syncup.exe'):
+            self.assertEqual(runtime.script_command('app.py', 'board', '--state', 's'),
+                             ['syncup.exe', 'board', '--state', 's'])
+            self.assertEqual(runtime.script_command('native_host.py', '--connection', 'c'),
+                             ['syncup.exe', 'native-host', '--connection', 'c'])
+
+    def test_each_subcommand_runs_its_script_with_the_script_s_arguments(self):
+        cases = {('run', '--state', 's'): ('app', ['run', '--state', 's']),
+                 ('board', '--state', 's'): ('app', ['board', '--state', 's']),
+                 ('native-host', '--connection', 'c', ORIGIN): ('native_host', ['--connection', 'c', ORIGIN]),
+                 ('native-setup', '--output', 'o'): ('prepare_native', ['--output', 'o'])}
+        modules = dict(app=app, native_host=native_host, prepare_native=prepare_native)
+        for argv, (name, expected) in cases.items():
+            seen = []
+            with self.subTest(argv=argv), patch.object(sys, 'argv', ['syncup.exe', *argv]), \
+                    patch.object(modules[name], 'main', lambda: seen.append(sys.argv[1:])):
+                syncup_entry.main()
+            self.assertEqual(seen, [expected])
+        with patch.object(sys, 'argv', ['syncup.exe']), self.assertRaisesRegex(SystemExit, 'syncup.exe run'):
+            syncup_entry.main()
+
+    def test_output_to_a_pipe_is_utf8(self):
+        piped = io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+        with patch.object(sys, 'stdout', piped), patch.object(sys, 'argv', ['syncup.exe', 'run']), \
+                patch.object(app, 'main', lambda: print('검토함')):
+            syncup_entry.main()
+        piped.flush()
+        self.assertEqual(piped.buffer.getvalue().decode('utf-8').strip(), '검토함')
+
+    def test_the_bundle_takes_the_scanner_and_prompts_and_leaves_the_team_server_out(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch.object(windows_bundle, 'ROOT', root):
+                with self.assertRaisesRegex(SystemExit, 'bin/syncup-collector.exe'):
+                    windows_bundle.pyinstaller_arguments()
+                for source, _ in windows_bundle.DATA:
+                    (root / source).parent.mkdir(parents=True, exist_ok=True)
+                    (root / source).write_text('')
+                arguments = windows_bundle.pyinstaller_arguments()
+        self.assertIn(f'--add-data={root / "bin/syncup-collector.exe"}{os.pathsep}bin', arguments)
+        self.assertIn(f'--add-data={root / "ai/prompts"}{os.pathsep}ai/prompts', arguments)
+        self.assertIn('--exclude-module=psycopg', arguments)
+        self.assertIn('--onedir', arguments)
+        self.assertEqual(arguments[-1], str(root / 'syncup_entry.py'))
+        # Every prompt the AI module reads is in the folder the bundle takes.
+        prompts = {p.name for p in (Path(__file__).parent / 'ai' / 'prompts').iterdir()}
+        self.assertTrue({'classify_system.md', 'conflict_system.md', 'decisions_criteria.md'} <= prompts)
 
 
 class NativeHostArguments(unittest.TestCase):
@@ -295,23 +365,36 @@ class RealWindows(unittest.TestCase):
             private_files.make_private_directory(self.state)
 
     def test_chrome_runs_the_launcher_through_cmd_exe(self):
-        server = LoopbackServer(('127.0.0.1', 0), Answer)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        private_files.make_private_directory(self.state)
-        connection = self.state / 'connection.json'
-        connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{server.server_port}/rpc', token='t' * 43)))
-        manifest = json.loads(prepare_native.prepare(EXTENSION, connection, self.folder / 'native').read_text())
-        payload = json.dumps(dict(version=1, method='status', params={})).encode()
-        # As Chrome starts a host: cmd.exe /d /c with the whole command in one more pair of quotes.
-        command = f'cmd.exe /d /c ""{manifest["path"]}" {ORIGIN} --parent-window=0"'
-        done = subprocess.run(command, input=struct.pack('=I', len(payload)) + payload, capture_output=True, timeout=30)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        size = struct.unpack('=I', done.stdout[:4])[0]
-        self.assertEqual(size, len(done.stdout) - 4)
-        # The host read the private connection file and relayed the collector's answer, nothing else on stdout.
-        self.assertEqual(json.loads(done.stdout[4:]), {})
+        # The second folder name is outside the console code page of English Windows, so its launcher is UTF-8.
+        for name in ('a & b 100%', '한글 폴더'):
+            with self.subTest(folder=name):
+                answer = native_round_trip(self, self.folder.parent / name,
+                                           lambda connection, output: prepare_native.prepare(EXTENSION, connection, output))
+                self.assertEqual(answer, {})
+
+
+def native_round_trip(case, folder, make_manifest):
+    """One request through the native host launcher, started the way Chrome starts it, to a collector that answers {}.
+
+    make_manifest(connection file, output folder) writes the launcher and returns the manifest's path. The answer the
+    host frames back is returned; case checks that nothing but that frame reached stdout.
+    """
+    server = LoopbackServer(('127.0.0.1', 0), Answer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    case.addCleanup(server.server_close)
+    case.addCleanup(server.shutdown)
+    state = folder / 'state'
+    private_files.make_private_directory(state)
+    connection = state / 'connection.json'
+    connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{server.server_port}/rpc', token='t' * 43)))
+    manifest = json.loads(Path(make_manifest(connection, folder / 'native')).read_text(encoding='utf-8'))
+    payload = json.dumps(dict(version=1, method='status', params={})).encode()
+    # As Chrome starts a host: cmd.exe /d /c with the whole command in one more pair of quotes.
+    command = f'cmd.exe /d /c ""{manifest["path"]}" {ORIGIN} --parent-window=0"'
+    done = subprocess.run(command, input=struct.pack('=I', len(payload)) + payload, capture_output=True, timeout=60)
+    case.assertEqual(done.returncode, 0, done.stderr)
+    case.assertEqual(struct.unpack('=I', done.stdout[:4])[0], len(done.stdout) - 4, done.stdout[:200])
+    return json.loads(done.stdout[4:])
 
 
 if __name__ == '__main__':

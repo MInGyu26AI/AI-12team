@@ -21,7 +21,7 @@ from demo_board import Board
 from diagnostics import failure
 from private_files import make_private_directory
 from review_page import Review
-from runtime import child_environment, require_platform, storage_paths
+from runtime import child_environment, require_platform, script_command, storage_paths
 from secure_http import LoopbackServer
 from storage import connect, initialize, runtime_lock
 from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, TeamClient
@@ -173,7 +173,7 @@ def _serve_with_demo_board(srv, args, parser):
         if c.execute('SELECT 1 FROM sharing').fetchone():
             parser.error('이 상태 폴더는 팀 서버에 연결되어 있습니다. 기존 팀 연결 설정을 지정하세요.')
     srv.board_url = f"http://127.0.0.1:{args.board_port}/"
-    child = subprocess.Popen([sys.executable, __file__, "board", "--state", str(args.state), "--board-port", str(args.board_port)],
+    child = subprocess.Popen(script_command("app.py", "board", "--state", str(args.state), "--board-port", str(args.board_port)),
                              env=child_environment(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8")
     try:
         child.stdin.write(srv.secret + "\n")

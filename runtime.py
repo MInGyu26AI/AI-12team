@@ -27,7 +27,20 @@ def child_environment():
 
 
 def collector_binary():
+    # In the packaged Windows app this folder is the bundle's, where windows_bundle.py puts bin/.
     return Path(__file__).resolve().parent / "bin" / ("syncup-collector.exe" if sys.platform == "win32" else "syncup-collector")
+
+
+# The packaged Windows app (syncup_entry.py) runs each script as a subcommand of one executable; app.py's own
+# modes, run and board, are already its first argument.
+BUNDLED_SUBCOMMANDS = {"app.py": [], "native_host.py": ["native-host"], "prepare_native.py": ["native-setup"]}
+
+
+def script_command(script, *args):
+    """The command that runs one of this folder's scripts with args, from source or in the packaged app."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *BUNDLED_SUBCOMMANDS[script], *args]
+    return [sys.executable, str(Path(__file__).resolve().with_name(script)), *args]
 
 
 def storage_paths(args):

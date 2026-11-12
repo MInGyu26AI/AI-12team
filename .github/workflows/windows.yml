@@ -36,7 +36,23 @@ jobs:
           name: syncup-collector-windows-x64
           path: bin/syncup-collector.exe
           if-no-files-found: error
+      # The whole app as dist/syncup/syncup.exe, for Windows users without Python (windows_bundle.py).
+      - name: Package the app
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python windows_bundle.py
+      - name: Keep the packaged app
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncup-windows-x64
+          path: dist/syncup/
+          if-no-files-found: error
       # Each check is its own step and runs even after a failure, so that one failure does not hide the others.
+      - name: Packaged app (run, bundled scanner, board, native host through cmd.exe)
+        if: always()
+        env:
+          SYNCUP_REQUIRE_BUNDLE: '1'
+        run: python check_windows_bundle.py
       - name: Windows support (real ACLs, launcher through cmd.exe)
         if: always()
         run: python check_windows_support.py

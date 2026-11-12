@@ -12,7 +12,7 @@ import sys
 
 from native_host import EXTENSION_ID
 from private_files import make_private_directory
-from runtime import ENABLED_PLATFORMS
+from runtime import ENABLED_PLATFORMS, script_command
 
 HOST_NAME = 'com.syncup.collector'
 WINDOWS_REGISTRY_KEY = 'HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\' + HOST_NAME
@@ -45,12 +45,13 @@ def _windows_launcher(output, command):
     """A .cmd file: Chrome on Windows starts the host through cmd.exe and cannot pass it arguments of ours."""
     profile = os.environ.get('USERPROFILE', '').rstrip('\\')
     line = ' '.join(cmd_argument(part, profile) for part in command) + ' %*'
-    text = '@echo off\r\nsetlocal DisableDelayedExpansion\r\n' + line + '\r\n'
+    head = '@echo off\r\nsetlocal DisableDelayedExpansion\r\n'
     try:
-        data = text.encode(CMD_ENCODING)
+        data = (head + line + '\r\n').encode(CMD_ENCODING)
     except UnicodeEncodeError:
-        raise ValueError('경로에 이 PC의 명령 프롬프트가 읽지 못하는 문자가 있습니다. '
-                         '저장소와 상태 폴더를 영문 경로로 옮겨 주세요.') from None
+        # A path the code page cannot hold, such as a Korean folder on English Windows: cmd.exe reads each line just
+        # before running it, so after chcp 65001 the command line is read as UTF-8.
+        data = (head + 'chcp 65001 >nul\r\n' + line + '\r\n').encode('utf-8')
     launcher = output / 'syncup-native.cmd'
     with launcher.open('xb') as f:
         f.write(data)
@@ -64,8 +65,7 @@ def prepare(extension_id, connection, output):
         raise ValueError('이 운영체제에서는 아직 연결을 지원하지 않습니다 (macOS·Windows).')
     # Chrome runs the launcher as this user, so on Windows no other account may replace it or the manifest.
     make_private_directory(output)
-    command = [sys.executable, str(Path(__file__).with_name('native_host.py').resolve()),
-               '--connection', str(connection.resolve()), '--extension-id', extension_id]
+    command = script_command('native_host.py', '--connection', str(connection.resolve()), '--extension-id', extension_id)
     launcher = (_windows_launcher if sys.platform == 'win32' else _posix_launcher)(output, command)
     manifest = output / f'{HOST_NAME}.json'
     with manifest.open('x') as f:
@@ -79,7 +79,7 @@ def registration_command(manifest):
     return f'reg add "{WINDOWS_REGISTRY_KEY}" /ve /t REG_SZ /d "{manifest.resolve()}" /f'
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--extension-id', required=True)
     parser.add_argument('--connection', type=Path, required=True)
@@ -90,3 +90,7 @@ if __name__ == '__main__':
     if sys.platform == 'win32':
         print('Chrome에 등록하려면 다음 명령을 실행하세요:')
         print(registration_command(manifest))
+
+
+if __name__ == '__main__':
+    main()
