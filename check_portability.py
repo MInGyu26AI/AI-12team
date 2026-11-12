@@ -1,5 +1,6 @@
 """Real local scanner/configuration checks; Windows API checks below use a test double."""
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import errno
 import json
@@ -132,11 +133,12 @@ class PortabilityChecks(unittest.TestCase):
                    event("response_item", dict(type="message", role="assistant", phase="final_answer", content=[dict(type="output_text", text="조사 결과입니다.")])),
                    event("event_msg", dict(type="task_complete", turn_id="turn"))]
         log.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8")
-        with sqlite3.connect(index / "state_12.sqlite") as c:
+        # closing(): a connection's own `with` only commits, and Windows cannot delete a file left open.
+        with closing(sqlite3.connect(index / "state_12.sqlite")) as c, c:
             c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,source TEXT)")
             c.execute("INSERT INTO threads VALUES(?,?,?,?,0,'cli')", ("main", str(log), int((start+1)*1000), str(project)))
         # An older incompatible DB must not be used instead of the current index.
-        with sqlite3.connect(index / "state_5.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_5.sqlite")) as c, c:
             c.execute("CREATE TABLE obsolete(value TEXT)")
         session = str(uuid.uuid4())
         messages = [dict(type="user", uuid="u", parentUuid=None, message=dict(role="user", content="새 Claude 경로 확인.")),
@@ -154,7 +156,7 @@ class PortabilityChecks(unittest.TestCase):
             rows = c.execute("SELECT evidence FROM jobs").fetchall()
             self.assertEqual(len(rows), 2)
             self.assertTrue(any("claude-code" in row[0] for row in rows))
-        with sqlite3.connect(index / "state_13.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_13.sqlite")) as c, c:
             c.execute("CREATE TABLE unknown(value TEXT)")
         with self.assertRaises(ValueError):
             collector.scan(db, codex, None, index)
@@ -194,14 +196,14 @@ class PortabilityChecks(unittest.TestCase):
         alias.symlink_to(project, target_is_directory=True)
         log = codex / "sessions" / "main.jsonl"
         log.write_text(log.read_text(encoding="utf-8").replace(str(project), str(alias)), encoding="utf-8")
-        with sqlite3.connect(index / "state_12.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_12.sqlite")) as c, c:
             c.execute("UPDATE threads SET cwd=?", (str(alias),))
         collector.scan(db, codex, None, index)
         with connect(db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 1)
         outside = self.root / "outside.jsonl"
         outside.write_bytes(log.read_bytes().replace(b'"main"', b'"outside"'))
-        with sqlite3.connect(index / "state_12.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_12.sqlite")) as c, c:
             c.execute("INSERT INTO threads SELECT 'outside',?,created_at_ms,cwd,0,source FROM threads", (str(outside),))
         collector.scan(db, codex, None, index)
         with connect(db) as c:

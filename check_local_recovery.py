@@ -71,7 +71,7 @@ class LocalRecovery(PipelineFixture):
         original = self.pipeline.client.me
         calls = []
         def probe():
-            with sqlite3.connect(self.db, timeout=.01) as c:
+            with contextlib.closing(sqlite3.connect(self.db, timeout=.01)) as c, c:
                 c.execute('BEGIN IMMEDIATE')
                 calls.append(True)
             return original()

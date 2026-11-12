@@ -8,7 +8,7 @@ personal sentence leaked. Never real conversations.
     python check_local_privacy_model.py --model gemma3:12b --output eval.json   # another model, also writes every row
 """
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 import json
 from pathlib import Path
 import socket
@@ -135,7 +135,7 @@ def main():
     with ExitStack() as stack, tempfile.TemporaryDirectory() as tmp:
         stack.enter_context(patch('socket.socket.connect', loopback_only))
         db = Path(tmp) / 'eval.sqlite'
-        with sqlite3.connect(db) as c:
+        with closing(sqlite3.connect(db)) as c, c:
             local_privacy.initialize(c)
         gate = Gate(classifier)
         # Unload first so the first call measures a cold start (the model stays installed).

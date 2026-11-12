@@ -1,4 +1,5 @@
 """Real SQLite checks with deterministic AI; no external calls."""
+from contextlib import closing
 from datetime import datetime, timezone
 import http.server
 import io
@@ -176,7 +177,8 @@ class PipelineTest(PipelineFixture):
             return result[0]
         with self.pipeline.write():
             self.assertFalse(lock_free(),'another thread must wait for pipeline.lock')
-            with sqlite3.connect(self.db,timeout=0) as other, self.assertRaises(sqlite3.OperationalError):
+            # closing(): a connection's own `with` does not close it, and Windows cannot delete a file left open.
+            with closing(sqlite3.connect(self.db,timeout=0)) as other, self.assertRaises(sqlite3.OperationalError):
                 other.execute('BEGIN IMMEDIATE')
         self.assertTrue(lock_free())
 
