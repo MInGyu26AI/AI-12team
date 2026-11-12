@@ -26,6 +26,17 @@ Copy-Item target\release\syncup-collector.exe bin\
 
 실행 파일은 Git에 포함하지 않는다. 다른 위치에 빌드 결과를 저장하도록 `CARGO_TARGET_DIR`를 지정했다면 그 위치에서 실행 파일을 복사한다.
 
+### Windows: Python 없이 쓰기 (`syncup.exe`)
+
+`windows-collector` 워크플로는 앱 전체를 PyInstaller로 묶은 `syncup-windows-x64` 아티팩트도 만든다(`windows_bundle.py`). 안에는 `syncup.exe`와 `_internal` 폴더가 있고, Rust 수집기와 AI 프롬프트가 들어 있어 Python·Rust 설치가 필요 없다. 둘을 함께 `%LOCALAPPDATA%\SyncUp`처럼 옮기지 않을 위치에 푼다. 나중에 폴더를 옮기면 native 설정을 다시 만든다.
+
+| 원본으로 실행 | 묶음으로 실행 |
+|---|---|
+| `python app.py run ...` | `syncup.exe run ...` |
+| `python prepare_native.py ...` | `syncup.exe native-setup ...` |
+
+옵션은 같다. Chrome이 실행하는 `native-host`와 앱이 스스로 띄우는 `board`는 직접 쓰지 않는다. 키는 `set OPENAI_API_KEY=...`처럼 환경 변수로 주고 명령 인수에 넣지 않는다. 코드 서명이 없어 처음 실행할 때 SmartScreen 경고가 나올 수 있다. 한 파일이 아니라 폴더인 것은 Chrome이 요청마다 native host를 새로 시작하기 때문이다(한 파일 방식은 실행할 때마다 압축을 푼다).
+
 ## 실행
 
 실행 환경에 `OPENAI_API_KEY`를 준비한 뒤, 수집할 프로젝트와 새 상태 폴더를 지정한다. 키를 소스나 명령 인수에 직접 넣지 않는다.
