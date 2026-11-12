@@ -2,13 +2,14 @@
 // @vitest-environment-options {"url": "https://chatgpt.com/c/test"}
 // ChatGPT 화면 감지 규칙(lib/sites/chatgpt.ts)을 고정 DOM 으로 묶어 둔다. 감지 규칙은 바꾸지 않기로 한 대상이라
 // 결과(메시지·순서·id·화자·제목·시도한 셀렉터)가 달라지면 이 시험이 깨진다. 앞의 6건은 56f49ff 의 추출 코드에서도 같게 나오고,
-// 뒤의 3건은 화면 알림(로그인 만료 안내 등)을 메시지로 읽지 않는 규칙이다.
+// 그 뒤 3건은 화면 알림(로그인 만료 안내 등)을 메시지로 읽지 않는 규칙, 마지막 1건은 2026-11 ChatGPT 화면 구조
+// (실제 탭에서 뽑은 DOM 뼈대를 줄인 것)다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CollectedMessage } from '@shared/collector';
 import { chatgpt } from '@/lib/sites/chatgpt';
 
 const NOW = '2026-11-10T03:00:00.000Z';
-const STRATEGY_NAMES = ['author-role', 'turn-attr', 'conversation-turn', 'message-id', 'article', 'content-blocks', 'repeated-blocks'];
+const STRATEGY_NAMES = ['author-role', 'turn-attr', 'conversation-turn', 'message-id', 'search-unit', 'article', 'content-blocks', 'repeated-blocks'];
 
 interface Fixture {
   name: string;
@@ -99,7 +100,7 @@ const FIXTURES: Fixture[] = [
       </main>`,
     conversation: { id: 'jkl', title: '자료 조사' },
     selector: 'content-blocks',
-    tried: [0, 0, 0, 0, 0, 2],
+    tried: [0, 0, 0, 0, 0, 0, 2],
     guessedRoles: 1,
     messages: [
       { id: 'chatgpt:jkl:3hdj9d', role: 'user', text: '경쟁 서비스 찾아줘', roleGuessed: true },
@@ -117,7 +118,7 @@ const FIXTURES: Fixture[] = [
       </main>`,
     conversation: { id: 'new', title: '새 채팅' },
     selector: 'repeated-blocks',
-    tried: [0, 0, 0, 0, 0, 0, 4],
+    tried: [0, 0, 0, 0, 0, 0, 0, 4],
     guessedRoles: 4,
     messages: [
       { id: 'chatgpt:new:1toc67k', role: 'user', text: '첫 질문', roleGuessed: true },
@@ -133,7 +134,7 @@ const FIXTURES: Fixture[] = [
     html: '<main><div></div><ul><li>새 채팅</li><li>검색</li><li>라이브러리</li></ul></main>',
     conversation: { id: 'empty', title: '빈 대화' },
     selector: null,
-    tried: [0, 0, 0, 0, 0, 0, 0],
+    tried: [0, 0, 0, 0, 0, 0, 0, 0],
     guessedRoles: 0,
     messages: [],
   },
@@ -144,7 +145,7 @@ const FIXTURES: Fixture[] = [
     html: '<main><article><div>채팅에 액세스하려면 다시 로그인해야 합니다</div></article></main>',
     conversation: { id: 'new', title: 'ChatGPT' },
     selector: null,
-    tried: [0, 0, 0, 0, 0, 0, 0],
+    tried: [0, 0, 0, 0, 0, 0, 0, 0],
     guessedRoles: 0,
     messages: [],
   },
@@ -160,7 +161,7 @@ const FIXTURES: Fixture[] = [
       </main>`,
     conversation: { id: 'alert1', title: '발표 준비' },
     selector: 'content-blocks',
-    tried: [0, 0, 0, 0, 0, 2],
+    tried: [0, 0, 0, 0, 0, 0, 2],
     guessedRoles: 1,
     messages: [
       { id: 'chatgpt:alert1:14ibvte', role: 'user', text: '발표 순서 정하자', roleGuessed: true },
@@ -180,6 +181,37 @@ const FIXTURES: Fixture[] = [
     tried: [1],
     guessedRoles: 0,
     messages: [{ id: 'chatgpt:u-7', role: 'user', text: '채팅에 액세스하려면 다시 로그인해야 합니다 라는 알림이 떠요' }],
+  },
+  {
+    name: '2026-11 ChatGPT: data-chatgpt-search-unit-key 의 화자와 실제 메시지 id, 위젯까지 답변 하나로',
+    path: '/c/6af577cc-fd28',
+    title: '해커톤 MVP 범위 정리 - ChatGPT',
+    html: `
+      <main>
+        <div class="group flex flex-col" data-talvt-turn-state="complete">
+          <div data-chatgpt-search-unit-key="fallback-turn-2:0:user" data-chatgpt-search-message-ids="69278da2-a1c8-450d-b948-afe9adec8149">
+            <div class="w-full" data-content-search-unit-key="fallback-turn-2:0:user">
+              <div data-user-message-bubble="true"><div class="text-size-chat whitespace-pre-wrap">할 일로 정리해줘</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="group flex flex-col">
+          <div data-chatgpt-search-unit-key="fallback-turn-2:2:assistant" data-chatgpt-search-message-ids="7acdcd84-d08d-4639-bf08-71b9a647f260 7acdcd84-d08d-4639-bf08-71b9a647f260">
+            <h6 class="sr-only">ChatGPT 답변:</h6>
+            <div data-markdown-text-style="assistant-message" class="MarkdownRoot-rZKhxa">
+              <div class="my-4" data-chatgpt-copy-reference="0"><div class="[--entity-prose-inset:0px]"><div data-dil-response="" data-dil-message-id="7acdcd84-d08d-4639-bf08-71b9a647f260"><h2>해커톤 MVP 할 일 목록</h2><div data-d-component="badge">김민규</div></div></div></div><div class="my-4" data-chatgpt-copy-reference="1"><div class="[--entity-prose-inset:0px]"><p>두 작업 모두 16일 이전 완료 목표야.</p></div></div>
+            </div>
+          </div>
+        </div>
+      </main>`,
+    conversation: { id: '6af577cc-fd28', title: '해커톤 MVP 범위 정리' },
+    selector: 'search-unit',
+    tried: [0, 0, 0, 0, 2],
+    guessedRoles: 0,
+    messages: [
+      { id: 'chatgpt:69278da2-a1c8-450d-b948-afe9adec8149', role: 'user', text: '할 일로 정리해줘' },
+      { id: 'chatgpt:7acdcd84-d08d-4639-bf08-71b9a647f260', role: 'assistant', text: '해커톤 MVP 할 일 목록\n김민규\n두 작업 모두 16일 이전 완료 목표야.' },
+    ],
   },
 ];
 

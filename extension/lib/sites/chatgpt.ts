@@ -14,19 +14,24 @@ export const SELECTORS = {
     { name: 'turn-attr', selector: 'article[data-turn], [data-turn]' }, // 최근 ChatGPT: <article data-turn="user">
     { name: 'conversation-turn', selector: '[data-testid^="conversation-turn"]' },
     { name: 'message-id', selector: '[data-message-id]' },
+    // 2026-11 ChatGPT: 메시지마다 data-chatgpt-search-unit-key="…:user" / "…:assistant" 와 data-chatgpt-search-message-ids 가 붙는다
+    { name: 'search-unit', selector: '[data-chatgpt-search-unit-key]' },
     { name: 'article', selector: 'main article' },
     { name: 'content-blocks', selector: 'main .whitespace-pre-wrap, main .markdown, main [class*="prose"]' },
     // 마지막 수단: main 안에서 같은 태그가 가장 많이 반복되는 블록들 (repeatedBlocks 함수)
   ],
   // 화자를 알려주는 속성 (요소 자신 → 안쪽 → 바깥쪽 순으로 찾음)
-  roleAttrs: ['data-message-author-role', 'data-turn', 'data-role', 'data-author'],
+  // data-chatgpt-search-unit-key 는 "fallback-turn-2:0:user" 처럼 화자가 맨 뒤에 붙는다
+  roleAttrs: ['data-message-author-role', 'data-turn', 'data-role', 'data-author', 'data-chatgpt-search-unit-key'],
   // 메시지 안의 본문 (없으면 요소 전체 텍스트)
-  body: ['.markdown', '.whitespace-pre-wrap', '[data-message-content]', '[class*="prose"]'],
+  // [data-markdown-text-style]: 2026-11 AI 답변 루트. 블록·위젯(할 일 목록 등)이 모두 이 안에 있다
+  body: ['[data-markdown-text-style]', '.markdown', '.whitespace-pre-wrap', '[data-message-content]', '[class*="prose"]'],
   // AI 답변 본문에만 쓰이는 표시 (화자 추정용)
-  assistantHint: '.markdown, [class*="prose"]',
+  assistantHint: '[data-markdown-text-style="assistant-message"], .markdown, [class*="prose"]',
   // 답변 생성 중에만 보이는 정지 버튼
   streaming: ['[data-testid="stop-button"]', 'button[aria-label*="Stop"]', 'button[aria-label*="중지"]'],
-  messageId: '[data-message-id]',
+  // 사이트 메시지 id 를 담는 속성 (요소 자신 → 안쪽 순). data-chatgpt-search-message-ids 는 공백으로 나뉜 id 목록이라 첫 id 를 쓴다
+  messageIdAttrs: ['data-message-id', 'data-chatgpt-search-message-ids'],
   title: ['nav a[aria-current="page"]', 'nav [data-active] a'],
   // 대화가 아닌 알림 영역. 이 안의 요소는 메시지로 읽지 않는다
   notice: '[role="alert"], [role="alertdialog"]',
@@ -36,8 +41,8 @@ export const SELECTORS = {
 const NOTICE_TEXT = /^채팅에 액세스하려면 다시 로그인해야 합니다\.?$/;
 
 // 스크린리더용 머리말 ("You said:" 등) — 화자 추정 + 본문에서 제거
-const USER_HEADING = /^(you said|나의 말|내가 말함)\s*:?\s*$/i;
-const AI_HEADING = /^(chatgpt said|chatgpt의 말|chatgpt가 말함)\s*:?\s*$/i;
+const USER_HEADING = /^(you said|나의 말|내가 말함|내가 한 말)\s*:?\s*$/i;
+const AI_HEADING = /^(chatgpt said|chatgpt의 말|chatgpt가 말함|chatgpt 답변)\s*:?\s*$/i;
 const CONVERSATION_PATH = /\/c\/([\w-]+)/;
 
 type Role = CollectedMessage['role'];
@@ -51,7 +56,7 @@ const first = (root: ParentNode, selectors: readonly string[]) => {
 };
 
 const toRole = (v: string | null | undefined): Role | null => {
-  const s = v?.toLowerCase();
+  const s = v?.toLowerCase().split(':').pop(); // "fallback-turn-2:0:user" → "user"
   if (!s) return null;
   if (s === 'user' || s === 'human') return 'user';
   if (s === 'assistant' || s === 'ai' || s === 'bot' || s === 'model') return 'assistant';
@@ -126,6 +131,15 @@ const conversationIdOf = (url: string) => new URL(url).pathname.match(CONVERSATI
 const titleOf = (title: string) => title.replace(/\s*[-|]\s*ChatGPT$/, '').trim() || '(제목 없음)';
 const conversationTitle = () => titleOf(first(document, SELECTORS.title)?.textContent?.trim() || document.title);
 
+const siteIdOf = (el: HTMLElement) => {
+  for (const attr of SELECTORS.messageIdAttrs) {
+    const value = el.getAttribute(attr) ?? el.querySelector(`[${attr}]`)?.getAttribute(attr);
+    const id = value?.trim().split(/\s+/)[0];
+    if (id) return id;
+  }
+  return undefined;
+};
+
 // 글이 있는 요소들 → 수집 메시지. 생성 중인 마지막 AI 답변은 완료된 뒤에 다시 읽는다
 function toMessages(found: { el: HTMLElement; text: string }[]) {
   const { roles, guessed } = fillRoles(found.map((x) => roleOf(x.el)));
@@ -136,7 +150,7 @@ function toMessages(found: { el: HTMLElement; text: string }[]) {
   const messages: CollectedMessage[] = [];
   found.forEach(({ el, text }, i) => {
     if (streaming && i === found.length - 1 && roles[i] === 'assistant') return;
-    const siteId = el.getAttribute('data-message-id') ?? el.querySelector(SELECTORS.messageId)?.getAttribute('data-message-id');
+    const siteId = siteIdOf(el);
     messages.push({
       id: `chatgpt:${siteId ?? `${convId}:${hash(text)}`}`,
       site: 'chatgpt',
