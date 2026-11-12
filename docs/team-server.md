@@ -127,7 +127,7 @@ docker build -f Dockerfile.cloud .
 python3 server/team_admin.py migrate-integration
 ```
 
-`syncup.conflict_checks`가 없으면 `team_integration.sql`을 적용하고, 그다음 늘 `team_upgrades.sql`을 적용한다. 한 트랜잭션이라 중간에 실패하면 아무것도 바뀌지 않는다. 두 번 실행해도 되고, 승인 카드·검사 상태·RLS는 그대로 둔다.
+`syncup.conflict_checks`가 없으면 `team_decisions.sql`을 적용하고, 그다음 늘 `team_upgrades.sql`을 적용한다. 한 트랜잭션이라 중간에 실패하면 아무것도 바뀌지 않는다. 두 번 실행해도 되고, 승인 카드·검사 상태·RLS는 그대로 둔다.
 
 ## 백업과 복구
 

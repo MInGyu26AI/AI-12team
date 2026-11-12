@@ -31,7 +31,7 @@ fn main() {
     let args: Vec<_> = std::env::args_os().collect();
     if !(3..=6).contains(&args.len()) {
         eprintln!(
-            "Usage: syncup-collector PRIVATE_DB CODEX_DIRECTORY [CLAUDE_DIRECTORY [CODEX_SQLITE_DIRECTORY [CLAUDE_PROJECT_NAME]]]"
+            "Usage: syncup-scanner PRIVATE_DB CODEX_DIRECTORY [CLAUDE_DIRECTORY [CODEX_SQLITE_DIRECTORY [CLAUDE_PROJECT_NAME]]]"
         );
         std::process::exit(2);
     }

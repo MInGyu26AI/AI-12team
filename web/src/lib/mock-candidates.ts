@@ -4,20 +4,20 @@
 // 개인 내용은 개수만 남기고 문장은 저장하지 않는다. 실제 모드의 붙여넣기는 로컬 수집기 후보가 된다.
 import { useCallback } from "react";
 import type { Card, RelatedCard } from "@shared/types";
-import { useLocal } from "./local-store";
+import { useLocal } from "./browser-store";
 
 const KEY = "syncup:local-candidates:v1";
 
-export interface LocalCandidates {
+export interface MockCandidates {
   cards: RelatedCard[];
   personal: number;
   label: string; // "붙여넣은 대화" / "ChatGPT 내보내기 파일"
 }
 
-const EMPTY: LocalCandidates = { cards: [], personal: 0, label: "" };
+const EMPTY: MockCandidates = { cards: [], personal: 0, label: "" };
 
-export function useLocalCandidates() {
-  const [value, set] = useLocal<LocalCandidates>(KEY, EMPTY);
+export function useMockCandidates() {
+  const [value, set] = useLocal<MockCandidates>(KEY, EMPTY);
 
   /** 새 분류 결과로 교체 */
   const replace = useCallback(

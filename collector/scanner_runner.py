@@ -3,14 +3,14 @@ from pathlib import Path
 import subprocess
 
 from collection_session import active, config
-from runtime import child_environment, collector_binary, require_platform
+from runtime import child_environment, scanner_binary, require_platform
 
 
 def scan(db, codex, claude=None, codex_sqlite=None, claude_project=None):
     require_platform()
     if not active(config(db)):
         return
-    binary = collector_binary()
+    binary = scanner_binary()
     command = [str(binary), str(Path(db).resolve()), str(Path(codex).resolve())]
     command.extend([str(Path(claude).resolve()) if claude is not None else "",
                     str(Path(codex_sqlite or codex).resolve()), claude_project or ""])

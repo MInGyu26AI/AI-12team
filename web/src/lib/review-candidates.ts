@@ -1,7 +1,7 @@
 // 승인함에 보일 후보를 모으고(수집기 후보 + 목업 붙여넣기 후보) 체크 상태를 계산한다. 화면 상태가 없는 순수 함수만 둔다.
 import { LOW_CONFIDENCE, isShareable } from "@shared/labels";
 import type { RelatedCard } from "@shared/types";
-import type { LocalCandidates } from "./local-candidates";
+import type { MockCandidates } from "./mock-candidates";
 
 const ORDER = { decision: 0, research: 1, todo: 2, none: 3 } as const;
 
@@ -9,7 +9,7 @@ const ORDER = { decision: 0, research: 1, todo: 2, none: 3 } as const;
  * pasted = 이 브라우저에서 붙여넣기로 분류한 후보. 목업 모드만 넘긴다(실제 모드의 붙여넣기는 수집기 후보로 들어온다).
  * boardKeys = 팀 보드의 세부 주제. 수집기는 팀 보드를 모르므로 "새 주제" 여부를 이것으로 다시 판단한다.
  */
-export function mergeCandidates(collected: RelatedCard[], pasted: LocalCandidates | null, boardKeys: Set<string> | null) {
+export function mergeCandidates(collected: RelatedCard[], pasted: MockCandidates | null, boardKeys: Set<string> | null) {
   const fromCollector = collected.map((c) => ({
     ...c,
     is_new_topic: boardKeys && c.topic_key ? !boardKeys.has(c.topic_key) : c.is_new_topic,

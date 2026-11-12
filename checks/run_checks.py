@@ -19,7 +19,7 @@ PY = sys.executable
 
 # (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`, which only runs on macOS),
 # Python 3 and Node with `npm ci` in web/ and extension/ (check_local_bridge starts Next from web/node_modules; the unit
-# tests run with each project's own runner); rust = macOS and the built scanner (bin/syncup-collector); team = macOS (it starts the collector), Docker and
+# tests run with each project's own runner); rust = macOS and the built scanner (bin/syncup-scanner); team = macOS (it starts the collector), Docker and
 # server/requirements.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
@@ -40,8 +40,8 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('local', ['npm', '--prefix', 'web', 'test', '--silent'], '웹 단위 시험 (공유 폴러·승인함·/api/local 실패 응답)'),
     ('local', ['npm', '--prefix', 'extension', 'test', '--silent'], '확장 단위 시험 (메시지 응답·신뢰 주소·자동 수집·ChatGPT 추출)'),
     ('local', [PY, '-m', 'unittest', 'discover', '-s', 'tests', '-t', '.'], 'AI 모듈 (가림 공용 사례 Python 쪽 포함)'),
-    ('rust', [PY, 'checks/check_scanner.py'], 'Rust 스캐너: Codex 로그'),
-    ('rust', [PY, 'checks/check_claude.py'], 'Rust 스캐너: Claude Code 로그'),
+    ('rust', [PY, 'checks/check_scanner_codex.py'], 'Rust 스캐너: Codex 로그'),
+    ('rust', [PY, 'checks/check_scanner_claude.py'], 'Rust 스캐너: Claude Code 로그'),
     ('rust', [PY, 'checks/check_portability.py'], 'Rust 스캐너: 경로·OS 이식성'),
     # ServerRecovery inherits TeamIntegration (check_team_integration.py), which inherits TeamIsolation (check_teams.py),
     # so this one file runs all three suites once. Every other team file runs only its own tests (check_teams.own_tests).

@@ -64,7 +64,7 @@ python3 checks/run_checks.py --list     # 검사마다 다루는 범위만 출�
 | 묶음 | 필요 환경 |
 |---|---|
 | `local` | macOS, Python 3.11 이상, Node, `web/`·`extension/`에서 각각 `npm ci` |
-| `rust` | macOS, 빌드한 스캐너 실행 파일 `bin/syncup-collector` |
+| `rust` | macOS, 빌드한 스캐너 실행 파일 `bin/syncup-scanner` |
 | `team` | macOS (수집기와 확장 연결도 함께 띄움), Docker, `python3 -m pip install -r server/requirements.txt` |
 | `model` | Ollama와 기본 개인정보 모델 (`gemma4:e4b-it-qat`). 실제 모델 측정이라 느리고 `all`에 들어가지 않음 |
 

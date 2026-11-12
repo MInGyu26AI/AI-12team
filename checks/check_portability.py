@@ -72,9 +72,9 @@ class PortabilityChecks(unittest.TestCase):
                                     "OPENAI_API_KEY": "synthetic-only", "HOME": "private-home"}, clear=True):
             self.assertEqual(runtime.child_environment(),
                 {"SystemRoot": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools", "PYTHONUTF8": "1"})
-        for host, binary in (("darwin", "syncup-collector"), ("linux", "syncup-collector"), ("win32", "syncup-collector.exe")):
+        for host, binary in (("darwin", "syncup-scanner"), ("linux", "syncup-scanner"), ("win32", "syncup-scanner.exe")):
             with patch.object(sys, "platform", host):
-                self.assertEqual(runtime.collector_binary().name, binary)
+                self.assertEqual(runtime.scanner_binary().name, binary)
 
     def test_windows_lock_contract_simulated(self):
         calls = []

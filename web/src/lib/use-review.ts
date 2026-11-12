@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RelatedCard } from "@shared/types";
 import { boardTopicKeys, USE_MOCK } from "./api";
-import { useLocalCandidates } from "./local-candidates";
+import { useMockCandidates } from "./mock-candidates";
 import { useLocalCollector } from "./local-collector";
 import { isChecked, mergeCandidates, selectionOf, type Overrides } from "./review-candidates";
 
@@ -23,7 +23,7 @@ function useBoardTopicKeys() {
 
 export function useReviewCandidates() {
   const collector = useLocalCollector();
-  const local = useLocalCandidates();
+  const local = useMockCandidates();
   const boardKeys = useBoardTopicKeys();
   const pasted = USE_MOCK ? local : null;
   const collectedIds = new Set(collector.cards.map((c) => c.id));

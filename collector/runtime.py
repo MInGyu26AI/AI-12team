@@ -26,8 +26,8 @@ def child_environment():
     return {**{k: v for k, v in os.environ.items() if k.upper() in allowed}, "PYTHONUTF8": "1"}
 
 
-def collector_binary():
-    return Path(__file__).resolve().parents[1] / "bin" / ("syncup-collector.exe" if sys.platform == "win32" else "syncup-collector")
+def scanner_binary():
+    return Path(__file__).resolve().parents[1] / "bin" / ("syncup-scanner.exe" if sys.platform == "win32" else "syncup-scanner")
 
 
 def storage_paths(args):

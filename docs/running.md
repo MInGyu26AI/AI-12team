@@ -18,10 +18,10 @@ Codex·Claude Code 기록은 Rust 스캐너가 읽는다. 실행 파일은 Git�
 ```sh
 cargo build --release --locked --manifest-path scanner/Cargo.toml
 mkdir -p bin
-cp scanner/target/release/syncup-collector bin/
+cp scanner/target/release/syncup-scanner bin/
 ```
 
-수집기는 스캐너 실행 파일 `bin/syncup-collector`를 실행한다. 스캐너 코드가 바뀌면 다시 빌드해서 복사한다.
+수집기는 스캐너 실행 파일 `bin/syncup-scanner`를 실행한다. 스캐너 코드가 바뀌면 다시 빌드해서 복사한다.
 
 ## 개인정보 모델 준비
 
@@ -133,7 +133,7 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 ### 수집·분류
 
 - 일시중지·종료는 새 기록 읽기와 새 외부 AI 요청을 막는다. 이미 보낸 요청은 취소하지 못한다.
-- 스캐너가 실패하거나 스캐너 실행 파일 `bin/syncup-collector`가 없으면 검토함에 `대화 기록 확인 실패`가 보이고, 다음 확인 때 다시 시도한다.
+- 스캐너가 실패하거나 스캐너 실행 파일 `bin/syncup-scanner`가 없으면 검토함에 `대화 기록 확인 실패`가 보이고, 다음 확인 때 다시 시도한다.
 - 통합 분류가 실패해도 발화는 로컬에 남는다. 수집 중일 때 웹의 **분류 재시도**나 Python 검토함의 **다시 시도**로 다시 보낸다.
 - 보류된 발췌는 [privacy.md](privacy.md#3-사용자-제외와-보류)를 따른다.
 
