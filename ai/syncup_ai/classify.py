@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 from . import config
 from .decide import relabel
@@ -17,7 +16,9 @@ from .mask import mask, mask_text
 from .evidence import locate_evidence
 from .schema import SUBTOPICS, normalize_card
 
-KST = ZoneInfo("Asia/Seoul")
+# A fixed UTC+9: Korea has kept no daylight saving time since 1988, and Windows has no time zone database for
+# zoneinfo without the extra tzdata package.
+KST = timezone(timedelta(hours=9), "KST")
 # 발화 site → 카드 출처 이름(shared/labels.ts SITE_LABEL 과 같다). manual 은 대화 붙여넣기와 수집기에서 고친 입력
 # (intake.retry), chatgpt-export 는 내보내기 파일이다.
 SITE_LABEL = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "codex": "Codex", "claude-code": "Claude Code",

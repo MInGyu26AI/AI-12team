@@ -1,6 +1,6 @@
 # SyncUp local collector
 
-Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 Mac 프로그램이다. 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버는 클라우드 이미지(`Dockerfile.cloud`)로도 실행할 수 있다.
+Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 macOS·Windows 프로그램이다(Windows는 실제 기기 검증 전, [호환성 검증](호환성_검증.md)). 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버는 클라우드 이미지(`Dockerfile.cloud`)로도 실행할 수 있다.
 
 `--integrated`를 붙이면 ChatGPT Chrome 확장, 팀 웹(`web/`), AI 분류 모듈(`ai/`)을 함께 쓰는 통합 모드로 실행한다. 통합 모드에는 팀 서버 연결(`--team-api`)이 필요하다. 실행 절차는 [통합 사용법](통합_사용법.md), 당시 검증 결과는 [통합 검증](통합_검증.md)에 있다. 설계와 최근 검증 근거는 [docs/README.md](docs/README.md)에서 시작한다.
 
@@ -12,6 +12,14 @@ Python 3.11 이상과 Rust 2024 edition을 지원하는 도구 모음이 필요�
 cargo build --release --locked
 mkdir -p bin
 cp target/release/syncup-collector bin/syncup-collector
+```
+
+Windows에서는 PowerShell에서 다음을 실행한다. Rust는 rustup의 MSVC 도구 모음을 쓰고, 번들 SQLite를 컴파일하도록 Visual Studio Build Tools의 C++ 빌드 도구가 필요하다. 이 문서의 `python3`는 Windows에서 `python`으로 바꿔 실행한다.
+
+```powershell
+cargo build --release --locked
+New-Item -ItemType Directory -Force bin
+Copy-Item target\release\syncup-collector.exe bin\
 ```
 
 실행 파일은 Git에 포함하지 않는다. 다른 위치에 빌드 결과를 저장하도록 `CARGO_TARGET_DIR`를 지정했다면 그 위치에서 실행 파일을 복사한다.
@@ -43,7 +51,7 @@ Node의 환경 파일 옵션을 사용하는 실행 방법과 포트·기간·Cl
 
 ## 저장 위치와 OS 활성화
 
-현재 실행은 **macOS만 활성화**되어 있다. Windows·Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 두 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다.
+현재 실행은 **macOS와 Windows를 활성화**했다. Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다. Windows는 Mac에서 대역 검사만 통과했고, 실제 Windows 검사는 `.github/workflows/windows.yml`로 실행한다([호환성 검증](호환성_검증.md)).
 
 | 항목 | 우선순위 |
 | --- | --- |
@@ -63,6 +71,8 @@ python3 app.py run --project /프로젝트 --state /새-상태 \
 ```
 
 Windows용 실행 파일명은 `syncup-collector.exe`, macOS·Linux는 `syncup-collector`다. OS별 네이티브 빌드가 필요하다. Windows 잠금은 `msvcrt`, macOS·Linux 잠금은 `fcntl`을 사용한다. 검증한 실행 파일은 Apple Silicon Mac에서 빌드했다.
+
+비공개 파일 보호도 OS마다 다르다. macOS는 umask 077과 권한 600으로, Windows는 ACL로 지킨다. Windows에서는 비어 있는 상태 폴더에 현재 사용자와 SYSTEM만 들어오는 ACL을 설정하고 안의 파일이 이를 물려받는다. 이미 파일이 있는 상태 폴더는 ACL을 바꾸지 않으며, 다른 계정이 접근할 수 있으면 시작을 거절한다. 연결 키 파일과 `connection.json`을 읽을 때는 현재 사용자 소유인지, 현재 사용자·SYSTEM·Administrators 외의 계정이 접근할 수 없는지 확인한다(`windows_security.py`). 사용자 폴더(`C:\Users\이름`) 안의 파일은 기본 ACL로 이 검사를 통과한다. 상태 폴더는 ACL을 지원하는 NTFS 드라이브에 둔다.
 
 ## 검사
 

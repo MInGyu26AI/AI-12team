@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import sqlite3
 import struct
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -220,6 +222,9 @@ class NativeHostConnection(unittest.TestCase):
         config=dict(url=f'http://127.0.0.1:{self.server.server_port}/rpc',token='t'*43)
         path.write_text(json.dumps(dict(config,**changes)))
         path.chmod(mode)
+        if sys.platform=='win32' and mode&0o077:
+            # Windows ignores the mode bits; let the Users group read, as group or other permission does on POSIX.
+            subprocess.run(['icacls',str(path),'/grant','*S-1-5-32-545:(R)'],check=True,capture_output=True)
         return path
 
     def test_a_private_connection_file_reaches_the_service(self):

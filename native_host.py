@@ -22,7 +22,7 @@ RPC_URL = re.compile(r'http://127\.0\.0\.1:\d+/rpc')
 def read_connection(path):
     """(url, token) from connection.json, checked like the web bridge does (web/src/app/api/local/route.ts): a regular
     file, not a link, owned and readable by the current user only, at most 4096 bytes, a loopback /rpc URL and a
-    43-character token."""
+    43-character token. On Windows only this side checks the owner, the ACL and links so far; the web bridge skips them."""
     data = read_private_file(path, CONNECTION_LIMIT + 1, '연결 파일은 현재 사용자만 읽을 수 있어야 합니다.')
     if len(data) > CONNECTION_LIMIT:
         raise ValueError('연결 파일이 너무 큽니다.')
@@ -65,6 +65,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--connection',type=Path,required=True)
     parser.add_argument('--extension-id',required=True)
+    # Chrome on Windows also passes the calling window's handle; the host has no window to parent.
+    parser.add_argument('--parent-window')
     parser.add_argument('origin')
     args = parser.parse_args()
     if not EXTENSION_ID.fullmatch(args.extension_id) or args.origin != f'chrome-extension://{args.extension_id}/':

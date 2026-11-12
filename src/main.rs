@@ -14,18 +14,17 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 /// How long a SQLite call waits for another process's lock before it fails.
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Must match `ENABLED_PLATFORMS` in runtime.py; 호환성_검증.md records what each OS was checked on.
 const ENABLED_OS: &[&str] = &[
     "macos",
-    // Windows 네이티브·Linux x64·WSL·Intel Mac 미검증. Linux ARM64는 컨테이너 검사 통과.
-    // 실제 계정/외부 AI 흐름·전체 로그 버전 호환은 미검증이며 호환성_검증.md에 범위를 기록한다.
-    // User-requested rollout: keep these connections disabled after compatibility checks.
-    // "windows",
+    "windows",
+    // Linux stays off until it is checked on a real install.
     // "linux",
 ];
 
 fn main() {
     if !ENABLED_OS.contains(&std::env::consts::OS) {
-        eprintln!("SyncUp connections are currently enabled on macOS only.");
+        eprintln!("SyncUp connections are currently enabled on macOS and Windows only.");
         std::process::exit(2);
     }
     let args: Vec<_> = std::env::args_os().collect();

@@ -5,7 +5,6 @@
 the loopback demo board (demo_board).
 """
 import argparse
-import http.server
 import json
 import os
 from pathlib import Path
@@ -20,8 +19,10 @@ from collection_loop import send_approved, watch
 from collection_session import bind_sharing
 from demo_board import Board
 from diagnostics import failure
+from private_files import make_private_directory
 from review_page import Review
 from runtime import child_environment, require_platform, storage_paths
+from secure_http import LoopbackServer
 from storage import connect, initialize, runtime_lock
 from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, TeamClient
 from turn_pipeline import TurnPipeline
@@ -68,7 +69,10 @@ def main():
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, terminate)
     os.umask(0o077)
-    args.state.mkdir(parents=True, exist_ok=True)
+    try:
+        make_private_directory(args.state)
+    except OSError:
+        raise SystemExit("상태 폴더를 현재 사용자 전용으로 만들 수 없습니다. 사용자 폴더 안의 새 폴더를 지정하세요.") from None
     with runtime_lock(args.state / (args.mode + ".lock")):
         if args.mode == "board":
             serve_board(args)
@@ -77,7 +81,7 @@ def main():
 
 
 def serve_board(args):
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", args.board_port), Board)
+    srv = LoopbackServer(("127.0.0.1", args.board_port), Board)
     srv.db = args.state / "board.sqlite"
     srv.secret = sys.stdin.readline().strip()
     if not srv.secret:
@@ -96,7 +100,7 @@ def serve_board(args):
 def _open_review_server(args, parser):
     if not args.project or not args.project.is_dir() or not 1 <= args.minutes <= MAX_MINUTES:
         parser.error("프로젝트 폴더와 1~1440분의 기간을 확인해 주세요.")
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), Review)
+    srv = LoopbackServer(("127.0.0.1", args.port), Review)
     srv.db = args.state / "private.sqlite"
     initialize(srv.db)
     project = str(args.project.resolve())

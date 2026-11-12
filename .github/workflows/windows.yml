@@ -1,0 +1,48 @@
+# The local collector on a real Windows machine, which the Mac checks cannot be: the Rust scanner's .exe build,
+# file ACLs, the native host launcher through cmd.exe, msvcrt locking and the app itself. Nothing is deployed.
+name: windows-collector
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['*.py', 'ai/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['*.py', 'ai/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/windows.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  collector:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    # No PYTHONUTF8: users start app.py in the console's own encoding, so the checks do too.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build the Rust scanner
+        run: |
+          cargo build --release --locked
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item target\release\syncup-collector.exe bin\
+      # Each check is its own step and runs even after a failure, so that one failure does not hide the others.
+      - name: Windows support (real ACLs, launcher through cmd.exe)
+        if: always()
+        run: python check_windows_support.py
+      - name: Local pipeline and native host connection file
+        if: always()
+        run: python check_pipeline.py
+      - name: Scanner paths, msvcrt lock and OS gates
+        if: always()
+        run: python check_portability.py
+      - name: Codex scanner
+        if: always()
+        run: python check_scanner.py
+      - name: Claude Code scanner
+        if: always()
+        run: python check_claude.py
+      - name: Local app regression (app.py run, child board, HTTP)
+        if: always()
+        run: python check_integrity.py

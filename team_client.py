@@ -32,8 +32,8 @@ class TeamClient:
                 or (parsed.scheme == 'http' and parsed.hostname != '127.0.0.1')):
             raise ValueError('팀 API는 HTTPS 주소 또는 로컬 127.0.0.1 주소여야 합니다.')
         self.api_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '/', '', ''))
-        key = read_private_file(Path(token_file), 256, '연결 키 파일은 현재 사용자만 읽을 수 있어야 합니다 (권한 600).')
-        self.token = key.decode('utf-8').strip()
+        key = read_private_file(Path(token_file), 256, '연결 키 파일은 현재 사용자만 읽을 수 있어야 합니다 (macOS 권한 600, Windows는 사용자 폴더 안).')
+        self.token = key.decode('utf-8-sig').strip()  # Windows editors may save a byte order mark
         if not SECRET_TOKEN.fullmatch(self.token):
             raise ValueError('연결 키 파일을 확인하세요.')
         # A previously bound identity enables local recovery, never remote authorization.

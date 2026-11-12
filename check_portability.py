@@ -69,8 +69,9 @@ class PortabilityChecks(unittest.TestCase):
     def test_child_environment_and_binary_names(self):
         with patch.dict(os.environ, {"SystemRoot": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools",
                                     "OPENAI_API_KEY": "synthetic-only", "HOME": "private-home"}, clear=True):
-            self.assertEqual(runtime.child_environment(),
-                {"SystemRoot": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools", "PYTHONUTF8": "1"})
+            # Windows upper-cases environment names, so compare them that way.
+            self.assertEqual({k.upper(): v for k, v in runtime.child_environment().items()},
+                {"SYSTEMROOT": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools", "PYTHONUTF8": "1"})
         for host, binary in (("darwin", "syncup-collector"), ("linux", "syncup-collector"), ("win32", "syncup-collector.exe")):
             with patch.object(sys, "platform", host):
                 self.assertEqual(runtime.collector_binary().name, binary)
@@ -207,18 +208,18 @@ class PortabilityChecks(unittest.TestCase):
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 1)
 
     def test_disabled_connections_before_state_creation(self):
-        self.assertEqual(runtime.ENABLED_PLATFORMS, {"darwin"})
-        for host in ("win32", "linux"):
-            code = "import app,sys; sys.platform=sys.argv.pop(1); app.main()"
-            state = self.root / host
-            result = subprocess.run([sys.executable, "-c", code, host, "board", "--state", str(state)],
-                                    capture_output=True, text=True, encoding="utf-8", env=runtime.child_environment(), timeout=5)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("macOS", result.stderr)
-            self.assertFalse(state.exists())
+        self.assertEqual(runtime.ENABLED_PLATFORMS, {"darwin", "win32"})
+        code = "import app,sys; sys.platform=sys.argv.pop(1); app.main()"
+        state = self.root / "linux"
+        result = subprocess.run([sys.executable, "-c", code, "linux", "board", "--state", str(state)],
+                                capture_output=True, text=True, encoding="utf-8", env=runtime.child_environment(), timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("macOS와 Windows", result.stderr)
+        self.assertFalse(state.exists())
+        # The Rust scanner enables the same systems as Python.
         source = (Path(__file__).parent / "src" / "main.rs").read_text(encoding="utf-8")
         entries = re.search(r"ENABLED_OS: &\[&str\] = &\[(.*?)\];", source, re.S).group(1)
-        self.assertEqual(re.findall(r'^\s*"(\w+)"', entries, re.M), ["macos"])
+        self.assertEqual(re.findall(r'^\s*"(\w+)"', entries, re.M), ["macos", "windows"])
 
 
 if __name__ == "__main__":

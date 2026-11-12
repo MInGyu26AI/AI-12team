@@ -9,15 +9,15 @@ import tomllib
 # 검증 범위: 호환성_검증.md
 ENABLED_PLATFORMS = {
     "darwin",
-    # User-requested rollout: keep these connections disabled after compatibility checks.
-    # "win32",
+    "win32",
+    # Linux stays off until it is checked on a real install.
     # "linux",
 }
 
 
 def require_platform():
     if sys.platform not in ENABLED_PLATFORMS:
-        raise SystemExit("현재 SyncUp 연결은 macOS에서만 활성화되어 있습니다.")
+        raise SystemExit("현재 SyncUp 연결은 macOS와 Windows에서만 활성화되어 있습니다.")
 
 
 def child_environment():

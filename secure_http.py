@@ -1,7 +1,8 @@
 """Strict HTTP for SyncUp. Server side: the handler base of the local review page, the demo board and the team API
-(strict response headers, an exact Host check, bounded request bodies). Client side: an opener handler that refuses
-redirects."""
+(strict response headers, an exact Host check, bounded request bodies) and the loopback server that owns its port.
+Client side: an opener handler that refuses redirects."""
 import http.server
+import sys
 import urllib.request
 
 FORM_LIMIT = 64 * 1024
@@ -16,6 +17,16 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, *args, **kwargs):
         return None
+
+
+class LoopbackServer(http.server.ThreadingHTTPServer):
+    """The review page and demo board server. A second server on a port in use fails to start, as on POSIX: on Windows
+    SO_REUSEADDR would let it bind the same port, and Windows needs no option to rebind a port after a restart."""
+
+    def server_bind(self):
+        if sys.platform == 'win32':
+            self.allow_reuse_address = False
+        super().server_bind()
 
 
 class SecureHandler(http.server.BaseHTTPRequestHandler):
