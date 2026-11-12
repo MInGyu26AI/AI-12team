@@ -1,6 +1,6 @@
 # SyncUp local collector
 
-Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 macOS·Windows 프로그램이다(Windows는 실제 기기 검증 전, [호환성 검증](호환성_검증.md)). 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버는 클라우드 이미지(`Dockerfile.cloud`)로도 실행할 수 있다.
+Codex·Claude Code의 새 대화를 Rust로 읽고, Python으로 AI 분류·초안 작성과 개인 검토를 처리하는 macOS·Windows 프로그램이다(Windows는 자동 검사만 통과, 실제 Chrome 연결 확인 전, [호환성 검증](호환성_검증.md)). 팀 보드에는 사용자가 승인한 문구와 근거만 전송한다. 기본 실행은 기존 로컬 시연 보드이며, 선택적으로 사용자 인증과 PostgreSQL 팀 접근 정책이 있는 공유 서버에 연결할 수 있다. 공유 서버는 클라우드 이미지(`Dockerfile.cloud`)로도 실행할 수 있다.
 
 `--integrated`를 붙이면 ChatGPT Chrome 확장, 팀 웹(`web/`), AI 분류 모듈(`ai/`)을 함께 쓰는 통합 모드로 실행한다. 통합 모드에는 팀 서버 연결(`--team-api`)이 필요하다. 실행 절차는 [통합 사용법](통합_사용법.md), 당시 검증 결과는 [통합 검증](통합_검증.md)에 있다. 설계와 최근 검증 근거는 [docs/README.md](docs/README.md)에서 시작한다.
 
@@ -21,6 +21,8 @@ cargo build --release --locked
 New-Item -ItemType Directory -Force bin
 Copy-Item target\release\syncup-collector.exe bin\
 ```
+
+빌드하지 않고 `windows-collector` 워크플로가 만든 `syncup-collector.exe`(아티팩트 `syncup-collector-windows-x64`)를 `bin\`에 두어도 된다. C 런타임을 넣어 빌드했으므로 Visual C++ 재배포 패키지가 필요 없다(`.cargo/config.toml`). 코드 서명이 없어 처음 실행할 때 SmartScreen 경고가 나올 수 있다. 받은 파일은 [호환성 검증](호환성_검증.md)의 SHA-256과 비교한다.
 
 실행 파일은 Git에 포함하지 않는다. 다른 위치에 빌드 결과를 저장하도록 `CARGO_TARGET_DIR`를 지정했다면 그 위치에서 실행 파일을 복사한다.
 
@@ -51,7 +53,7 @@ Node의 환경 파일 옵션을 사용하는 실행 방법과 포트·기간·Cl
 
 ## 저장 위치와 OS 활성화
 
-현재 실행은 **macOS와 Windows를 활성화**했다. Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다. Windows는 Mac에서 대역 검사만 통과했고, 실제 Windows 검사는 `.github/workflows/windows.yml`로 실행한다([호환성 검증](호환성_검증.md), 남은 확인 단계는 [Windows 검증 목록](윈도우_검증_목록.md)).
+현재 실행은 **macOS와 Windows를 활성화**했다. Linux용 처리는 소스에 보존했지만 `runtime.py`의 `ENABLED_PLATFORMS`와 `src/main.rs`의 `ENABLED_OS`에서 연결 항목을 주석 처리했다. Python 앱과 Rust 수집기 모두 비활성 OS에서 데이터 접근 전에 종료한다. 환경 변수로 활성화하는 우회 옵션은 없다. Windows는 `.github/workflows/windows.yml`의 실제 Windows 검사(windows-2022 x64)를 통과했다. 실제 Chrome·Codex·Claude Code 연결은 아직 직접 확인하지 않았다([호환성 검증](호환성_검증.md), 남은 확인 단계는 [Windows 검증 목록](윈도우_검증_목록.md)).
 
 | 항목 | 우선순위 |
 | --- | --- |
