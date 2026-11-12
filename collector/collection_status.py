@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 import json
 
-from ai.syncup_ai.batch import group_turns
+from ai.syncup_ai.batch import group_turns, take_ready_batches
 from collection_settings import local_profile, read_options
 from batch_classification import failed_batches
 from batch_queue import unbatched_turns
@@ -60,6 +60,15 @@ def _buffered_turns(c, team_id, start):
     return sum(len(group_turns(messages)) for messages in unbatched_turns(c, team_id, start).values())
 
 
+def _next_batch_turns(c, team_id, start):
+    """Answered turns of the conversation closest to its next batch: what the next automatic batch counts.
+
+    Batches are cut per conversation and an unanswered last question waits, so this is not bufferedTurns.
+    take_ready_batches with one turn per batch returns exactly the answered turns.
+    """
+    return max((len(take_ready_batches(messages, 1)[0]) for messages in unbatched_turns(c, team_id, start).values()), default=0)
+
+
 def _recent_batches(c, team_id):
     recent = []
     for row in c.execute(RECENT_BATCHES, (team_id,)).fetchall():
@@ -82,6 +91,7 @@ def collection_status(pipeline):
         team_id = bound_team(c)
         options = read_options(c)
         buffered = _buffered_turns(c, team_id, s['start'])
+        next_batch = _next_batch_turns(c, team_id, s['start'])
         last_collected = c.execute(LAST_COLLECTED, (team_id, s['start'])).fetchone()[0]
         failures = failed_batches(c, team_id)
         issues = [dict(id=i['id'], reason=i['reason'], received=i['received']) for i in unresolved_issues(c, team_id)]
@@ -96,6 +106,7 @@ def collection_status(pipeline):
         state=session_state(s),
         turnsPerBatch=options['turnsPerBatch'],
         bufferedTurns=buffered,
+        nextBatchTurns=next_batch,
         endsAt=_iso(s['end']),
         lastCollectedAt=_iso(last_collected) if last_collected is not None else None,
         teamId=team_id,

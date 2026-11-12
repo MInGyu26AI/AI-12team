@@ -103,7 +103,7 @@ export default function CollectPage() {
         {connected && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
             <span>
-              다음 수집까지 대화 <b>{st.bufferedTurns}</b>/{st.turnsPerBatch}회
+              다음 수집까지 대화 <b>{st.nextBatchTurns ?? st.bufferedTurns}</b>/{st.turnsPerBatch}회
             </span>
             <button
               className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium disabled:opacity-40"

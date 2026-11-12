@@ -31,7 +31,8 @@ export interface ExtStatus {
   configured: boolean;
   autoCollect: boolean; // false = 수집 일시정지
   turnsPerBatch: number;
-  bufferedTurns: number; // 아직 분류에 안 보낸 대화 수
+  bufferedTurns: number; // 아직 분류에 안 보낸 대화 수 (모든 대화 합계, '지금 분류하기'로 보낼 것이 있는지)
+  nextBatchTurns?: number; // 다음 자동 분류에 가장 가까운 대화의 답을 받은 턴 수 (turnsPerBatch 가 되면 분류). 옛 수집기는 없음
   endsAt: string; // 수집 종료 시각 (ISO)
   lastCollectedAt: string | null;
   lastClassifier: "native" | null;

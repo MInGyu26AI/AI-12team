@@ -20,6 +20,7 @@ export interface Settings {
   turnsPerBatch?: number;
   endsAt?: string | null; // 수집 종료 시각 (ISO). 지나면 수집기가 새 수집과 AI 요청을 멈춘다
   bufferedTurns?: number;
+  nextBatchTurns?: number; // 다음 자동 분류까지 센 턴 (대화별, 답을 받은 턴만)
   lastCollectedAt?: string | null;
 }
 
@@ -39,6 +40,7 @@ export const settingsFromStatus = (previous: Settings, status: ExtStatus): Setti
   turnsPerBatch: status.turnsPerBatch,
   endsAt: status.endsAt,
   bufferedTurns: status.bufferedTurns,
+  nextBatchTurns: status.nextBatchTurns,
   lastCollectedAt: status.lastCollectedAt,
 });
 

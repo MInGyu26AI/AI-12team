@@ -6,6 +6,7 @@ import { turnsOf, type Settings } from '@/lib/settings';
 export function QueueStatus({ settings, pendingCount }: { settings: Settings; pendingCount: number }) {
   const [flushing, setFlushing] = useState(false);
   const bufferedTurns = settings.bufferedTurns ?? 0;
+  const nextBatchTurns = settings.nextBatchTurns ?? bufferedTurns; // 옛 수집기는 합계만 준다
   const flush = async () => {
     setFlushing(true);
     const result = await sendToBackground({ type: 'flush' }).catch(() => null);
@@ -17,7 +18,7 @@ export function QueueStatus({ settings, pendingCount }: { settings: Settings; pe
     <section className="space-y-1 rounded-lg bg-gray-50 p-3">
       <div className="flex items-center justify-between gap-2">
         <p>
-          다음 분류까지 대화 <b>{bufferedTurns}</b>/{turnsOf(settings)}회
+          다음 분류까지 대화 <b>{nextBatchTurns}</b>/{turnsOf(settings)}회
         </p>
         <button
           className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40"
