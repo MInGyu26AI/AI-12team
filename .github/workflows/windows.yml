@@ -5,9 +5,9 @@ name: windows-collector
 on:
   workflow_dispatch:
   push:
-    paths: ['*.py', 'ai/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/windows.yml']
+    paths: ['*.py', 'ai/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '.cargo/**', '.github/workflows/windows.yml']
   pull_request:
-    paths: ['*.py', 'ai/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/windows.yml']
+    paths: ['*.py', 'ai/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '.cargo/**', '.github/workflows/windows.yml']
 
 permissions:
   contents: read
@@ -27,6 +27,8 @@ jobs:
           cargo build --release --locked
           New-Item -ItemType Directory -Force bin | Out-Null
           Copy-Item target\release\syncup-collector.exe bin\
+          # .cargo/config.toml links the C runtime in; a VCRUNTIME import would need the Visual C++ Redistributable.
+          if (Select-String -Path bin\syncup-collector.exe -Pattern 'VCRUNTIME' -SimpleMatch -Quiet) { throw 'syncup-collector.exe still imports VCRUNTIME' }
       # The built scanner, for Windows users who cannot build it themselves (Actions run page → Artifacts).
       - name: Keep the scanner
         uses: actions/upload-artifact@v4
