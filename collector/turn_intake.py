@@ -23,10 +23,14 @@ UNRESOLVED_ISSUES = '''SELECT * FROM intake_issues WHERE team_id=? AND id NOT IN
     ORDER BY received'''
 # Jobs the Rust scanner queued that intake has not taken yet; every batch job has a job_context row.
 SCANNED_JOBS = "SELECT * FROM jobs WHERE state='new' AND id NOT IN (SELECT job FROM job_context)"
-# A screen-path answer stored after a given row of the same conversation. Params: team, conversation, rowid, session.
-SCREEN_ANSWER_AFTER = '''SELECT 1 FROM intake WHERE team_id=? AND conversation=? AND rowid>?
-    AND json_extract(message,'$.session')=? AND json_extract(message,'$.role')='assistant'
-    AND coalesce(json_extract(message,'$.origin'),'screen')='screen' LIMIT 1'''
+# A screen-path answer to a stored question: after it, with no screen-path question of the conversation in between.
+SCREEN_ANSWER = '''SELECT 1 FROM intake a WHERE a.team_id=:team AND a.conversation=:conversation AND a.rowid>:question
+    AND json_extract(a.message,'$.session')=:session AND json_extract(a.message,'$.role')='assistant'
+    AND coalesce(json_extract(a.message,'$.origin'),'screen')='screen'
+    AND NOT EXISTS (SELECT 1 FROM intake u WHERE u.team_id=:team AND u.conversation=:conversation
+        AND u.rowid>:question AND u.rowid<a.rowid AND json_extract(u.message,'$.session')=:session
+        AND json_extract(u.message,'$.role')='user' AND coalesce(json_extract(u.message,'$.origin'),'screen')='screen')
+    LIMIT 1'''
 
 
 def created_at(message):
@@ -132,19 +136,29 @@ def _in_window(turn, windows):
     return any(start <= min(times) and max(times) < end for start, end in windows)
 
 
-def _screen_has_turn(c, team_id, start, conversation, turn_id):
+def _on_screen(c, identifier):
+    """Whether the screen path stored the intake row with this id."""
+    row = c.execute('SELECT message FROM intake WHERE id=?', (identifier,)).fetchone()
+    return bool(row) and json.loads(row[0]).get('origin', 'screen') == 'screen'
+
+
+def _screen_has_turn(c, team_id, start, turn):
     """C4-b: True when this sync turn must not be taken because the screen path already has it.
 
-    Its question (chatgpt:<turnId>) is stored and a screen answer follows it in the conversation, or the question is
-    already batched: taking the turn would repeat it or add answers without their question. A stored question still
-    waiting for its answer gets the turnId (text unchanged), so batch.group_turns pairs it with the sync answer.
+    Without a stored question (chatgpt:<turnId>): one of the turn's answers is a screen row. The screen question had a
+    hash id or was quarantined, and taking the turn would add a question without its answer or classify it twice.
+    With a stored question: a screen answer follows it before the conversation's next screen question (a later turn's
+    answer is not this turn's), or the question is already batched. Taking the turn would repeat it or add answers
+    without their question. A stored question still waiting for its answer gets the turnId (text unchanged), so
+    batch.group_turns pairs it with the sync answer.
     """
+    conversation, turn_id = _sync_turn(turn[0])
     identifier = intake_id(team_id, start, dict(site='chatgpt', conversationId=conversation, id='chatgpt:' + turn_id))
     question = c.execute('SELECT rowid,job,message FROM intake WHERE id=?', (identifier,)).fetchone()
     if not question:
-        return False
-    if question['job'] is not None or c.execute(
-            SCREEN_ANSWER_AFTER, (team_id, 'chatgpt:' + conversation, question['rowid'], start)).fetchone():
+        return any(_on_screen(c, intake_id(team_id, start, m)) for m in turn if m['role'] == 'assistant')
+    if question['job'] is not None or c.execute(SCREEN_ANSWER, dict(
+            team=team_id, conversation='chatgpt:' + conversation, question=question['rowid'], session=start)).fetchone():
         return True
     saved = json.loads(question['message'])
     if 'turnId' not in saved:
@@ -178,7 +192,7 @@ def append(pipeline, messages, flush=False):
         issues = [quarantine(c, m, team_id, s['start'], 'invalid_message') for m in rejected]
         windows = sync_windows(c, s)
         outside = {key for key, turn in turns.items() if not _in_window(turn, windows)}
-        skipped = {key for key in turns.keys() - outside if _screen_has_turn(c, team_id, s['start'], *key)}
+        skipped = {key for key in turns.keys() - outside if _screen_has_turn(c, team_id, s['start'], turns[key])}
         dropped, stored = outside | skipped, []
         for m in clean:
             if _sync_turn(m) not in dropped and store_messages(c, [m], team_id, s['start'], issues):
