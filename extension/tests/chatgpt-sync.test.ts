@@ -750,6 +750,12 @@ describe('syncNow (싱크 맞추기)', () => {
     expect(calledMethods()).not.toContain('collection.configure');
   });
 
+  it('팝업의 updateSettings 에 accountSync 가 있으면 수집기로 넘기지 않는다 (켬·끔은 syncSet 만)', async () => {
+    const response = await send({ type: 'updateSettings', patch: { accountSync: { enabled: false } } }, fromPopup());
+    expect(response).toEqual({ ok: false, error: '동기화 켬·끔은 확장 팝업에서만 바꿀 수 있어요' });
+    expect(calledMethods()).not.toContain('collection.configure');
+  });
+
   it('웹의 다른 collection.configure 는 그대로 수집기로 넘긴다', async () => {
     await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
     const response = await send({ type: 'rpc', method: 'collection.configure', params: { projectTopic: '새 주제' } }, fromPage('http://localhost:3000/collect'));

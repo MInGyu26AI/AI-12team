@@ -80,6 +80,8 @@ async function handleRequest(message: BgRequest, sender: Browser.runtime.Message
       await clearErrorAndRefresh();
       return { ok: true };
     case 'updateSettings':
+      // 동기화 켬·끔은 syncSet 만 바꾼다 (확장 상태·켬 시각 규칙을 거치지 않는 길을 막는다)
+      if (setsAccountSync('collection.configure', message.patch)) return { ok: false, error: SYNC_SET_POPUP_ONLY };
       await rpc('collection.configure', message.patch);
       await clearError();
       // flush 와 달리 뒤따르는 새로 고침의 실패도 실패로 돌려준다: 처음 설정 화면은 팝업 오류를 보여 주지 않으므로 저장 화면이 알려야 한다
