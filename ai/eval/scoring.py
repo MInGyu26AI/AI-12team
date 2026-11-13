@@ -28,8 +28,12 @@ def classify_positions(request: dict, llm, decider) -> tuple[list[tuple[int, dic
 
 
 def judge(new: dict, existing: list[dict], llm, decider) -> tuple[list[dict], list[dict], str | None]:
-    """새 결정 하나의 (판정 목록, 경고 목록, 실패 이유). 실패하면 ([], [], failureReason)."""
-    result = conflict.handle_request({"newCards": [new], "existing": existing}, llm, decider)
+    """새 결정 하나의 (판정 목록, 경고 목록, 실패 이유). 실패하면 ([], [], failureReason).
+
+    AI 로 잴 때는 팀 worker 처럼 규칙 대체를 끈다. 빠진 답은 미완료가 되어 AI 정확도에 규칙 판정이 섞이지 않는다.
+    llm·decider 가 모두 없을 때(--rule 기준선)만 규칙으로 판정한다."""
+    rule_only = llm is None and decider is None
+    result = conflict.handle_request({"newCards": [new], "existing": existing}, llm, decider, allow_rules=rule_only)
     if not result["ok"]:
         return [], [], result["failureReason"]
     return result["results"][0]["judgements"], result["conflicts"], None

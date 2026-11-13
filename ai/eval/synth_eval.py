@@ -80,12 +80,15 @@ def run_e2e(convs, llm, decider) -> dict:
         failed += f
         msgs += c["msgs"]
         gold += c["gold"]
-        rows += eval_e2e(p, c["pairs"], llm, decider)["rows"]  # 충돌 비교는 팀 안에서만
+        failed_here = {x["session"] for x in f}
+        unclassified = {m["id"] for m in c["msgs"] if m["conversationId"] in failed_here}
+        rows += eval_e2e(p, c["pairs"], llm, decider, unclassified)["rows"]  # 충돌 비교는 팀 안에서만
     failed_ids = {f["session"] for f in failed}
     acc, _ = score_classify([m for m in msgs if m["conversationId"] not in failed_ids], gold, preds)
     acc["incomplete_sessions"] = len(failed)
-    outcomes = [(should_alert(r["want"]), bool(r["alerts"])) for r in rows]
-    return {"classify": acc, "e2e": alert_rates(outcomes), "pair_rows": rows, "failed_sessions": failed}
+    outcomes = [(should_alert(r["want"]), bool(r["alerts"])) for r in rows if not r["incomplete"]]
+    e2e = {**alert_rates(outcomes), "incomplete_pairs": sum(r["incomplete"] for r in rows)}
+    return {"classify": acc, "e2e": e2e, "pair_rows": rows, "failed_sessions": failed}
 
 
 def main() -> int:
