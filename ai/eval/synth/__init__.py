@@ -75,7 +75,7 @@ def _answer(u: tuple, speaker: str) -> list:
     if tag == "P":
         return [text, "개인", "", "", "", "", "", "", masked]
     sub, topic, owner, due, change = (list(u[2:7]) + [None] * 5)[:5]
-    return [text, "관련", SUBTOPIC[sub], TAG[tag], topic or "", owner or "", due or "",
+    return [text, "관련", SUBTOPIC[sub], TAG[tag], topic or "", owner or "", (due or "") if tag == "T" else "",  # 기한은 할 일에만 (classification.md)
             "" if tag != "D" else int(bool(change)), masked]
 
 
