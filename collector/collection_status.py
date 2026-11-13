@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import json
 
 from ai.syncup_ai.batch import group_turns, take_ready_batches
-from collection_settings import local_profile, read_options
+from collection_settings import local_profile, read_options, sync_windows
 from batch_classification import failed_batches
 from batch_queue import unbatched_turns
 from collection_session import active, bound_team, session_state
@@ -78,6 +78,13 @@ def _recent_batches(c, team_id):
     return recent
 
 
+def _account_sync(state):
+    """{enabled, account, since} with since as ISO; None when account sync was never turned on."""
+    if not state:
+        return None
+    return dict(state, since=_iso(state['since']) if state['since'] is not None else None)
+
+
 def _privacy_state(gate):
     state = gate.last_state
     return dict(policy=local_privacy.POLICY_VERSION, model=state['model'], available=state['available'], reason=state['reason'])
@@ -96,6 +103,7 @@ def collection_status(pipeline):
         counts = _counts(c, team_id, s['start'], len(failures), len(issues))
         legacy = c.execute(LEGACY_CANDIDATE_COUNT).fetchone()[0]
         recent = _recent_batches(c, team_id)
+        windows = sync_windows(c, s)
     team = next((t for t in profile['teams'] if t['id'] == team_id), None)
     return dict(
         version='1',
@@ -121,4 +129,6 @@ def collection_status(pipeline):
         intakeIssues=issues,
         privacy=_privacy_state(pipeline.privacy),
         counts=counts,
+        syncWindows=[dict(start=_iso(start), end=_iso(end)) for start, end in windows],
+        accountSync=_account_sync(options.get('accountSync')),
     )

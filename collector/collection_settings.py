@@ -2,15 +2,18 @@
 from datetime import datetime
 import json
 import math
+import re
 import time
 
 from ai.syncup_ai.schema import SUBTOPICS
 from collection_session import bind_sharing, set_paused
 
-CONFIGURABLE = {'teamId', 'projectTopic', 'enabledSubtopics', 'turnsPerBatch', 'endsAt', 'autoCollect'}
+CONFIGURABLE = {'teamId', 'projectTopic', 'enabledSubtopics', 'turnsPerBatch', 'endsAt', 'autoCollect', 'accountSync'}
 MAX_TOPIC = 1200
 MAX_BATCH_TURNS = 50
 MAX_COLLECTION_SECONDS = 86400
+# The ChatGPT account hash the extension sends: sha256 of the user id, lower-case hex (sync-contract.md 4).
+SYNC_ACCOUNT = re.compile('[0-9a-f]{64}')
 
 
 def read_options(c):
@@ -65,6 +68,49 @@ def _apply_options(options, patch):
         options['enabledSubtopics'] = patch['enabledSubtopics']
 
 
+def _apply_account_sync(options, value):
+    """accountSync {enabled, account?}, kept in the options as {enabled, account, since}.
+
+    Turning on stores the account and the consent time (since), which stays when it is already on.
+    Turning off clears since and keeps the account. The extension checks the account; the collector only stores it.
+    """
+    if not isinstance(value, dict) or set(value) - {'enabled', 'account'} or type(value.get('enabled')) is not bool:
+        raise ValueError('동기화 설정 오류')
+    state = options.get('accountSync')
+    if not value['enabled']:
+        if state:  # never turned on: stays None
+            state.update(enabled=False, since=None)
+        return
+    if not isinstance(value.get('account'), str) or not SYNC_ACCOUNT.fullmatch(value['account']):
+        raise ValueError('동기화 계정 오류')
+    since = state['since'] if state and state['enabled'] else time.time()
+    options['accountSync'] = dict(enabled=True, account=value['account'], since=since)
+
+
+def _whole_ms(seconds, up):
+    """seconds moved to a whole millisecond (up or down), the precision of the ISO times the extension compares."""
+    micro = round(seconds * 1_000_000)
+    return (-(-micro // 1000) if up else micro // 1000) / 1000
+
+
+def sync_windows(c, session):
+    """The account sync windows, (start, end) Unix seconds in start order, each half-open [start, end).
+
+    [max(session start, since), settings end) minus every pause (one without an end runs on); [] while sync is off.
+    Bounds move inward to whole milliseconds, so the tab and turns.append judge a turn at a boundary alike.
+    """
+    state = read_options(c).get('accountSync')
+    if not state or not state['enabled']:
+        return []
+    pieces = [(max(session['start'], state['since']), session['end'])]
+    for pause_start, pause_end in c.execute('SELECT start,end FROM pauses ORDER BY start').fetchall():
+        pause_end = math.inf if pause_end is None else pause_end
+        pieces = [(a, b) for start, end in pieces
+                  for a, b in ((start, min(end, pause_start)), (max(start, pause_end), end)) if a < b]
+    windows = [(_whole_ms(start, True), _whole_ms(end, False)) for start, end in sorted(pieces)]
+    return [(start, end) for start, end in windows if start < end]
+
+
 def _set_end(c, value):
     """New end time within 24 hours; time spent after an earlier end is recorded as a pause."""
     end = datetime.fromisoformat(str(value).replace('Z', '+00:00')).timestamp()
@@ -89,6 +135,8 @@ def configure(pipeline, patch):
             bind_sharing(c, pipeline.client, patch['teamId'], profile)
             options['profile'] = profile
         _apply_options(options, patch)
+        if 'accountSync' in patch:
+            _apply_account_sync(options, patch['accountSync'])
         if 'endsAt' in patch:
             _set_end(c, patch['endsAt'])
         if 'autoCollect' in patch:
