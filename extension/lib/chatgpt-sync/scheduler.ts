@@ -136,6 +136,19 @@ const disableSync = () =>
 /** BgRequest 'syncSet' (팝업에서만). 켬 결과는 { ok: true, result: SyncState } */
 export const setSync = (enabled: boolean, project?: SyncProject) => (enabled ? enableSync(project) : disableSync());
 
+// 동기화로 고른 프로젝트의 대화에서는 화면 수집을 하지 않는다 (약속 8-1 R3).
+// 화면 수집은 대화 주인을 모르지만 동기화는 주인을 확인해 내 대화만 가져오기 때문이다(공유 프로젝트의 팀원 대화)
+export const SYNCED_PROJECT_SCREEN_ERROR = '이 프로젝트 대화는 동기화가 가져와요. 싱크 맞추기를 눌러 주세요';
+const PROJECT_IN_URL = /\/g\/(g-p-[0-9a-f]{32})/;
+
+/** 이 chatgpt.com 주소가 동기화가 켜진 채 고른 프로젝트의 화면인지 (/g/g-p-<32자리 16진수>-<slug>/c/<uuid>) */
+export async function isSyncedProjectPage(url: string | undefined) {
+  const gizmoId = url ? PROJECT_IN_URL.exec(url)?.[1] : undefined;
+  if (!gizmoId) return false;
+  const state = await syncStateItem.getValue();
+  return state.enabled && state.project?.gizmoId === gizmoId;
+}
+
 /** BgRequest 'syncProjects' (팝업에서만): 켜기 전에 고를 프로젝트 목록. 동기화가 꺼져 있어도 된다 */
 export async function listSyncProjects(): Promise<BgResponse> {
   const projects = await askTab<SyncProject[]>({ type: 'sync.projects' });

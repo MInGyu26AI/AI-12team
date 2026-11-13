@@ -16,7 +16,8 @@ import { LOCAL_WEB_URL } from '@/lib/web-url';
 const MIN = 60_000;
 const ACCOUNT = 'a'.repeat(64);
 const OTHER_ACCOUNT = 'b'.repeat(64);
-const PROJECT = { gizmoId: 'g-p-team', name: '해커톤' };
+const PROJECT = { gizmoId: `g-p-${'a1'.repeat(16)}`, name: '해커톤' }; // 실제 꼴: g-p-<32자리 16진수>
+const OTHER_PROJECT_ID = `g-p-${'b2'.repeat(16)}`;
 
 let clock = 0;
 const at = (minutes: number) => new Date(clock + minutes * MIN).toISOString();
@@ -176,6 +177,8 @@ const detailIds = () => tabCalls.filter((c) => c.request.type === 'sync.conversa
 const pageCalls = () => tabCalls.filter((c) => c.request.type === 'sync.projectPage');
 const state = () => syncStateItem.getValue();
 let sleeps: number[] = [];
+// fakeBrowser 에 contextMenus.onClicked 가 없어서 등록된 처리기를 직접 받아 둔다
+let menuClicked: (info: object, tab: object) => void = () => {};
 
 /** 켜져 있는 상태를 바로 저장한다 (syncSet 을 거치지 않는 패스 시험용) */
 const enabled = (patch: Partial<SyncState> = {}) =>
@@ -192,7 +195,7 @@ beforeEach(async () => {
   outsideWindowPerAppend = 0;
   nativeOverrides = {};
   collectorSync = { enabled: true, account: ACCOUNT, since: at(-120) };
-  tabs = [{ id: 11, active: true, url: 'https://chatgpt.com/g/g-p-team/project' }];
+  tabs = [{ id: 11, active: true, url: `https://chatgpt.com/g/${PROJECT.gizmoId}-hackathon/project` }];
   tabAccount = ACCOUNT;
   projectPages = [[ref('c1', -10)]];
   conversationTurns = {};
@@ -207,7 +210,7 @@ beforeEach(async () => {
   vi.spyOn(fakeBrowser.tabs, 'query').mockImplementation((async () => tabs) as never);
   vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockImplementation(fakeTabMessage as never);
   vi.spyOn(fakeBrowser.runtime.onMessage, 'addListener').mockImplementation((listener) => void (onMessage = listener as never));
-  vi.spyOn(fakeBrowser.contextMenus.onClicked, 'addListener').mockImplementation(() => {});
+  vi.spyOn(fakeBrowser.contextMenus.onClicked, 'addListener').mockImplementation((listener) => void (menuClicked = listener as never));
   background.main();
   await settle(); // 시작할 때 하는 상태 새로 고침이 끝나게 둔다
   nativeCalls.length = 0;
@@ -951,6 +954,66 @@ describe('teamRecord (팀 기록 불러오기)', () => {
     await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
     expect(await teamRecord(fromPage('http://localhost:3000/board'))).toEqual({ ok: false, error: '허용되지 않은 연결 화면' });
     expect(calledMethods()).not.toContain('team.board');
+  });
+});
+
+describe('동기화로 고른 프로젝트에서는 화면 수집을 하지 않는다 (약속 8-1 R3)', () => {
+  const uuid = 'c0ffee00-0000-4000-8000-000000000001';
+  const syncedPage = `https://chatgpt.com/g/${PROJECT.gizmoId}-hackathon/c/${uuid}`;
+  const otherProjectPage = `https://chatgpt.com/g/${OTHER_PROJECT_ID}-notes/c/${uuid}`;
+  const plainPage = `https://chatgpt.com/c/${uuid}`;
+  const screenMessages: CollectedMessage[] = [
+    { id: 'chatgpt:m1', site: 'chatgpt', role: 'user', text: '팀원 질문', conversationId: uuid, collectedAt: at(0) },
+    { id: 'chatgpt:m2', site: 'chatgpt', role: 'assistant', text: '답변', conversationId: uuid, collectedAt: at(0) },
+  ];
+  const collect = (trigger: 'auto' | 'manual' | 'selection', url: string) =>
+    send({ type: 'collect', trigger, messages: screenMessages }, fromPage(url));
+  const toasts = () => tabCalls.filter((c) => (c.request as { type: string }).type === 'toast').map((c) => c.request);
+  const rightClick = (url: string) => menuClicked({ menuItemId: 'syncup-send-selection', selectionText: '팀 결정 내용' }, { id: 7, url, title: '대화' });
+
+  beforeEach(() => enabled());
+
+  it('같은 프로젝트의 자동 수집은 수집기로 보내지 않고 조용히 넘긴다', async () => {
+    expect(await collect('auto', syncedPage)).toEqual({ ok: true, newMessages: 0, intakeIssues: 0 });
+    expect(appendCalls()).toHaveLength(0);
+  });
+
+  it.each(['manual', 'selection'] as const)('같은 프로젝트의 %s 보내기는 거절하고 싱크 맞추기를 안내한다', async (trigger) => {
+    expect(await collect(trigger, syncedPage)).toEqual({ ok: false, error: '이 프로젝트 대화는 동기화가 가져와요. 싱크 맞추기를 눌러 주세요' });
+    expect(appendCalls()).toHaveLength(0);
+  });
+
+  it('프로젝트 홈 화면도 같은 프로젝트로 본다', async () => {
+    expect(await collect('manual', `https://chatgpt.com/g/${PROJECT.gizmoId}-hackathon/project`)).toMatchObject({ ok: false });
+  });
+
+  it.each([
+    ['다른 프로젝트', otherProjectPage],
+    ['일반 대화', plainPage],
+  ])('%s 은 지금처럼 화면 수집을 한다', async (_name, url) => {
+    expect(await collect('manual', url)).toEqual({ ok: true, newMessages: 2, intakeIssues: 0 });
+    expect(await collect('auto', url)).toMatchObject({ ok: true });
+    expect(appendCalls().map((c) => c.params.flush)).toEqual([true, false]);
+  });
+
+  it('동기화가 꺼져 있으면 같은 프로젝트에서도 화면 수집을 한다', async () => {
+    await syncStateItem.setValue({ ...(await state()), enabled: false, mode: 'off' });
+    expect(await collect('auto', syncedPage)).toEqual({ ok: true, newMessages: 2, intakeIssues: 0 });
+    expect(appendCalls()).toHaveLength(1);
+  });
+
+  it('우클릭 선택 보내기도 같은 프로젝트면 보내지 않고 안내한다', async () => {
+    rightClick(syncedPage);
+    await vi.waitFor(() => expect(toasts()).toHaveLength(1));
+    expect(toasts()[0]).toEqual({ type: 'toast', text: '이 프로젝트 대화는 동기화가 가져와요. 싱크 맞추기를 눌러 주세요', tone: 'error' });
+    expect(appendCalls()).toHaveLength(0);
+  });
+
+  it('우클릭 선택 보내기는 다른 프로젝트에서는 보낸다', async () => {
+    rightClick(otherProjectPage);
+    await vi.waitFor(() => expect(toasts()).toHaveLength(1));
+    expect(appendCalls()).toHaveLength(1);
+    expect(toasts()[0]).toMatchObject({ tone: 'ok' });
   });
 });
 

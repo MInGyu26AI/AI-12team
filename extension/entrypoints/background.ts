@@ -4,11 +4,19 @@ import type { Browser } from 'wxt/browser';
 import { EXT_SYNC_NOW, type SyncNowParams } from '@shared/bridge';
 import { appendTurns } from '@/lib/append-turns';
 import { runSyncPass } from '@/lib/chatgpt-sync/pass';
-import { listSyncProjects, retryCollectorOff, setSync, startSyncScheduler, syncNow } from '@/lib/chatgpt-sync/scheduler';
+import {
+  SYNCED_PROJECT_SCREEN_ERROR,
+  isSyncedProjectPage,
+  listSyncProjects,
+  retryCollectorOff,
+  setSync,
+  startSyncScheduler,
+  syncNow,
+} from '@/lib/chatgpt-sync/scheduler';
 import { SYNC_ALARM } from '@/lib/chatgpt-sync/state';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
-import { collectResultToast, type BgRequest, type BgResponse, type TabToast, type TeamRecordRaw } from '@/lib/messages';
+import { collectResultToast, type BgRequest, type BgResponse, type CollectResult, type TabToast, type TeamRecordRaw } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
 import { sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
@@ -29,6 +37,10 @@ async function syncNowFromExtension(params: SyncNowParams) {
   return { ok: true, result };
 }
 
+// 동기화로 고른 프로젝트의 화면 수집은 수집기로 보내지 않는다(약속 8-1 R3). 자동 수집은 조용히 넘기고, 수동·선택 보내기는 알린다
+const syncedProjectResult = (trigger: Extract<BgRequest, { type: 'collect' }>['trigger']): CollectResult =>
+  trigger === 'auto' ? { ok: true, newMessages: 0, intakeIssues: 0 } : { ok: false, error: SYNCED_PROJECT_SCREEN_ERROR };
+
 // 팀 기록 불러오기(채팅 화면·팝업): 수집기 team.board·team.conflicts 응답 그대로. 실패 문구도 그대로 부른 화면에 돌려준다(웹 rpc 처럼)
 async function teamRecord(): Promise<BgResponse> {
   try {
@@ -45,6 +57,7 @@ async function teamRecord(): Promise<BgResponse> {
 // 싱크 맞추기(syncNow)는 채팅 화면·팝업·웹 모두 보낼 수 있다
 async function handleRequest(message: BgRequest, sender: Browser.runtime.MessageSender) {
   const fromChat = !!sender.url && !!siteForUrl(sender.url);
+  if (message.type === 'collect' && fromChat && (await isSyncedProjectPage(sender.url))) return syncedProjectResult(message.trigger);
   if (message.type === 'collect' && fromChat) return appendTurns(message.messages, message.trigger !== 'auto');
   if (message.type === 'syncNow' && fromChat) return syncNowFromExtension(message.params);
   if (message.type === 'teamRecord' && fromChat) return teamRecord();
@@ -111,6 +124,7 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
   if (!message) return;
   const blocked = sendBlockedReason(await settingsItem.getValue());
   if (blocked) return showToast(tab?.id, { type: 'toast', text: blocked, tone: 'error' });
+  if (await isSyncedProjectPage(url)) return showToast(tab?.id, collectResultToast(syncedProjectResult('selection')));
   try {
     showToast(tab?.id, collectResultToast(await appendTurns([message], true)));
   } catch (error) {
