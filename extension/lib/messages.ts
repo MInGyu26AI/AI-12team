@@ -79,6 +79,7 @@ export type TabSyncResult<T> =
 export interface SyncProjectPage {
   items: SyncConversationRef[]; // update_time 최신 순
   nextCursor: string | null;
+  skippedItems: number; // 필드가 빠져 건너뛴 항목 수 (진단용)
 }
 
 export interface SyncConversationData {
