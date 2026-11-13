@@ -11,7 +11,7 @@ import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
 import { canSyncNow, useLocalCollector } from "@/lib/local-collector";
-import { syncNowSummary } from "@/lib/rpc";
+import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
 import { cn } from "@/lib/utils";
 
 // 피그마 3번: 대화 자동 수집 (브라우저 확장 상태·수집 기준·최근 수집)
@@ -29,7 +29,8 @@ export default function CollectPage() {
       const { tone, text } = syncNowSummary(await collector.syncNow("button"));
       toast[tone](text);
     } catch (error) {
-      toast.error((error as Error).message);
+      const { tone, text } = syncNowErrorNotice(error);
+      toast[tone](text);
     } finally {
       setSyncing(false);
     }

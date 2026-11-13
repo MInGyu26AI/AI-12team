@@ -11,8 +11,9 @@ import { LOCAL_RPC_VERSION } from "@shared/collector";
 // 확장 경유 응답을 기다리는 시간. native host 가 수집기를 기다리는 20초(native_host.py)보다 길게 둬서
 // 수집기 쪽 시간 초과 오류가 먼저 도착하게 한다.
 const EXTENSION_TIMEOUT_MS = 25000;
-// 싱크 맞추기는 확장이 ChatGPT 대화를 최대 20건 받는 동안(요청 사이 1~2초) 끝나지 않으므로 더 오래 기다린다
-const SYNC_NOW_TIMEOUT_MS = 90000;
+// 싱크 맞추기는 확장이 ChatGPT 대화를 최대 20건 받는 동안(건마다 1~2초, 탭 요청마다 최대 20초) 끝나지 않으므로 더 오래 기다린다
+// (docs/sync-contract.md 5장 '웹의 대기 시간')
+const SYNC_NOW_TIMEOUT_MS = 150000;
 // 확장이 요청을 받았다는 신호(rpc-ack)를 기다리는 시간. 확장은 받자마자 보내므로 이 안에 없으면 확장이 없다고 본다
 const EXTENSION_ACK_MS = 2000;
 
@@ -20,6 +21,20 @@ const EXTENSION_ACK_MS = 2000;
 export class ExtensionMissing extends Error {
   constructor() {
     super("확장 프로그램이 설치되지 않았습니다. 설치했다면 팝업의 개인 검토함 주소가 이 페이지 주소인지 확인하세요.");
+  }
+}
+
+/** 싱크 맞추기가 대기 시간을 넘김: 연결 오류가 아니다. 확장의 패스와 flush 는 끝까지 간다 */
+export class SyncStillRunning extends Error {
+  constructor() {
+    super("동기화가 아직 진행 중이에요. 잠시 뒤 다시 확인해 주세요");
+  }
+}
+
+// 확장은 받았지만 정해진 시간 안에 답이 없음 (확장 없음 ExtensionMissing 과 구분)
+class RpcTimeout extends Error {
+  constructor() {
+    super("확장 프로그램과 로컬 수집기의 연결을 확인하세요.");
   }
 }
 
@@ -36,7 +51,11 @@ export async function rpc<T>(method: string, params: Record<string, unknown> = {
  */
 export async function syncNow(reason: SyncNowParams["reason"]): Promise<SyncNowResult> {
   if (process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return flushOnly();
-  return rpc<SyncNowResult>(EXT_SYNC_NOW, { reason }, SYNC_NOW_TIMEOUT_MS);
+  try {
+    return await rpc<SyncNowResult>(EXT_SYNC_NOW, { reason }, SYNC_NOW_TIMEOUT_MS);
+  } catch (error) {
+    throw error instanceof RpcTimeout ? new SyncStillRunning() : error;
+  }
 }
 
 async function flushOnly(): Promise<SyncNowResult> {
@@ -63,6 +82,11 @@ const SYNC_HEAD: Record<SyncNowResult["sync"], { tone: SyncTone; text: (newTurns
   busy: { tone: "info", text: () => "이미 맞추는 중이에요" },
   failed: { tone: "error", text: () => "싱크를 맞추지 못했어요. 확장 팝업에서 상태를 확인하세요" },
 };
+
+/** 싱크 맞추기가 던진 오류를 화면에 알릴 문구와 토스트 종류로 바꾼다: 대기 시간을 넘긴 것은 오류가 아니라 안내다 */
+export function syncNowErrorNotice(error: unknown): { tone: SyncTone; text: string } {
+  return { tone: error instanceof SyncStillRunning ? "info" : "error", text: (error as Error).message };
+}
 
 /** 싱크 맞추기 결과를 화면에 알릴 짧은 문구와 토스트 종류로 바꾼다 */
 export function syncNowSummary(result: SyncNowResult): { tone: SyncTone; text: string } {
@@ -108,7 +132,7 @@ function viaExtension<T>(payload: object, timeoutMs: number): Promise<T> {
     }, EXTENSION_ACK_MS);
     const timer = setTimeout(() => {
       stop();
-      reject(new Error("확장 프로그램과 로컬 수집기의 연결을 확인하세요."));
+      reject(new RpcTimeout());
     }, timeoutMs);
     function receive(event: MessageEvent) {
       if (isFromExtension(event, id, "rpc-ack")) {

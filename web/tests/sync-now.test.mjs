@@ -28,7 +28,7 @@ globalThis.window = {
 };
 
 const { BRIDGE_FROM_EXT, EXT_SYNC_NOW } = load("@shared/bridge");
-const { ExtensionMissing, syncNow, syncNowSummary } = load("@/lib/rpc");
+const { ExtensionMissing, SyncStillRunning, rpc, syncNow, syncNowErrorNotice, syncNowSummary } = load("@/lib/rpc");
 const { canSyncNow, syncAndRefresh, watchCollector } = load("@/lib/local-collector");
 const { useSyncOnOpen } = load("@/lib/use-review");
 const React = createRequire(import.meta.url)("react");
@@ -109,27 +109,40 @@ test("확장이 없으면 ExtensionMissing 으로 끝난다", async (t) => {
   await assert.rejects(answer, (error) => error instanceof ExtensionMissing);
 });
 
-test("싱크 맞추기는 일반 요청의 25초를 넘어서도 기다리고, 90초에 끝낸다 (패스가 대화를 20건 받는 동안)", async (t) => {
+test("싱크 맞추기는 일반 요청의 25초를 넘어서도 기다린다 (패스가 대화를 20건 받는 동안)", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let release;
   extension = () => new Promise((resolve) => (release = resolve)); // 확장이 패스를 도는 중
   const answer = syncNow("button");
   await settle(); // 확장이 받았다는 신호 도착
-  t.mock.timers.tick(25000);
+  t.mock.timers.tick(149999);
   await settle();
   release(RAN);
   assert.deepEqual(await answer, RAN);
+});
 
+test("150초를 넘기면 연결 오류가 아니라 '아직 진행 중' 안내가 된다. 일반 요청의 시간 초과는 그대로 연결 오류다", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  extension = () => new Promise(() => {}); // 확장은 받았지만 패스가 아직 끝나지 않음
   let done = false;
   const slow = syncNow("button");
-  const ended = assert.rejects(slow, (error) => !(error instanceof ExtensionMissing) && /로컬 수집기/.test(error.message));
+  const ended = assert.rejects(slow, (error) => error instanceof SyncStillRunning && !(error instanceof ExtensionMissing));
   slow.then(() => (done = true), () => (done = true));
   await settle();
-  t.mock.timers.tick(89999);
+  t.mock.timers.tick(149999);
   await settle();
   assert.equal(done, false);
   t.mock.timers.tick(1);
   await ended;
+
+  const notice = syncNowErrorNotice(await slow.catch((error) => error));
+  assert.deepEqual(notice, { tone: "info", text: "동기화가 아직 진행 중이에요. 잠시 뒤 다시 확인해 주세요" });
+  assert.deepEqual(syncNowErrorNotice(new Error("연결 실패")), { tone: "error", text: "연결 실패" });
+
+  const plain = rpc("collection.status"); // 싱크 맞추기가 아닌 요청은 25초에 연결 오류
+  await settle();
+  t.mock.timers.tick(25000);
+  await assert.rejects(plain, (error) => !(error instanceof SyncStillRunning) && !(error instanceof ExtensionMissing) && /로컬 수집기/.test(error.message));
 });
 
 test("LOCAL_BRIDGE: 수집 중이면 collection.flush 만 부르고 sync 는 off 다", async () => {
@@ -257,5 +270,11 @@ test("승인함 자동 맞추기는 실패하거나 확장이 없어도 조용�
   extension = null; // 확장 없음: 안내 대화상자는 주기 읽기가 띄운다
   renderHook({ current: false })();
   t.mock.timers.tick(2000);
+  await idle();
+
+  extension = () => new Promise(() => {}); // 150초를 넘겨도 승인함은 아무것도 띄우지 않는다
+  renderHook({ current: false })();
+  await idle();
+  t.mock.timers.tick(150000);
   await idle();
 });
