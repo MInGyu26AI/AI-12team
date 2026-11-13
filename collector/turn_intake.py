@@ -1,6 +1,7 @@
 """Turn intake: validate turns from the extension and the scanner, store them privately, quarantine what cannot be used."""
 from datetime import datetime, timezone
 import json
+import re
 import time
 
 from ai.syncup_ai.mask import mask
@@ -19,6 +20,9 @@ INTAKE_SITES = ('chatgpt', 'manual', 'chatgpt-export')
 # the extension, the end line after it (sync-contract.md 8장). Pasted back into a chat, it is not the user's own words.
 TEAM_RECORD_HEAD = '# 싱크업 팀 기록'
 TEAM_RECORD_END = '<!-- 싱크업 팀 기록 끝 -->'
+# A ChatGPT message id: the same message in whatever conversation it is sent with, unlike a hash id
+# chatgpt:<conversation>:<hash> (sync-contract.md 8-1 R2).
+CHATGPT_MESSAGE_ID = re.compile('chatgpt:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
 MAX_MESSAGE_TEXT = 20000
 MAX_MESSAGE_FIELD = 1200
 MAX_APPEND = 200
@@ -35,6 +39,9 @@ SCREEN_ANSWER = '''SELECT 1 FROM intake a WHERE a.team_id=:team AND a.conversati
         AND u.rowid>:question AND u.rowid<a.rowid AND json_extract(u.message,'$.session')=:session
         AND json_extract(u.message,'$.role')='user' AND coalesce(json_extract(u.message,'$.origin'),'screen')='screen')
     LIMIT 1'''
+# The conversations of a team and session that stored the given message ids. Params: team, session, the ids.
+STORED_IN = '''SELECT json_extract(message,'$.id') AS id,conversation FROM intake WHERE team_id=?
+    AND json_extract(message,'$.session')=? AND json_extract(message,'$.id') IN ({})'''
 # The screen-path row of the conversation just before a given row.
 SCREEN_ROW_BEFORE = '''SELECT rowid,id,job,message FROM intake WHERE team_id=:team AND conversation=:conversation
     AND rowid<:row AND json_extract(message,'$.session')=:session
@@ -240,11 +247,32 @@ def _own_words(messages):
     return kept, skipped
 
 
+def _not_elsewhere(c, team_id, start, messages):
+    """(messages, how many were left out): a ChatGPT message id stored in another conversation of this session is that
+    message sent under the wrong conversation (8-1 R2), whatever the origin. Not stored again, not quarantined."""
+    ids = sorted({m['id'] for m in messages if CHATGPT_MESSAGE_ID.fullmatch(m['id'])})
+    stored = {}
+    if ids:
+        for row in c.execute(STORED_IN.format(','.join('?' * len(ids))), (team_id, start, *ids)):
+            stored.setdefault(row['id'], set()).add(row['conversation'])
+    kept, left_out = [], 0
+    for m in messages:
+        if CHATGPT_MESSAGE_ID.fullmatch(m['id']):
+            conversation, where = m['site'] + ':' + m['conversationId'], stored.setdefault(m['id'], set())
+            if where - {conversation}:
+                left_out += 1
+                continue
+            where.add(conversation)  # a later message of this call with the same id meets it
+        kept.append(m)
+    return kept, left_out
+
+
 def append(pipeline, messages, flush=False):
     """turns.append: store valid turns, quarantine invalid ones, queue every batch that is ready.
 
     Account sync turns (origin 'sync') are kept only inside the sync windows and when the screen path has not
-    already taken them; pasted team records leave every user message before storing (sync-contract.md 3-3).
+    already taken them; pasted team records leave every user message, and a ChatGPT message already stored in another
+    conversation is not stored again (sync-contract.md 3-3, 8-1 R2).
     Screen-path calls answer 0 for the three turn counts.
     """
     if not isinstance(messages, list) or not 0 < len(messages) <= MAX_APPEND:
@@ -270,6 +298,7 @@ def append(pipeline, messages, flush=False):
         skipped = {key for key, kind in overlap.items() if kind == SKIP}
         dropped = outside | {key for key, kind in overlap.items() if kind != TAKE}
         kept, team_records = _own_words([m for m in clean if _sync_turn(m) not in dropped])
+        kept, elsewhere = _not_elsewhere(c, team_id, s['start'], kept)
         stored = []
         for m in kept:
             if store_messages(c, [m], team_id, s['start'], issues):
@@ -277,7 +306,7 @@ def append(pipeline, messages, flush=False):
         batch_queue.queue_ready_batches(c, team_id, context, flush)
     return dict(newMessages=len(stored), queued=bool(clean), intakeIssues=issues, outsideWindow=len(outside),
                 skippedTurns=len(skipped), newTurns=len({_sync_turn(m) for m in stored} - {None}),
-                teamRecordSkipped=team_records)
+                teamRecordSkipped=team_records, elsewhereDuplicates=elsewhere)
 
 
 def _scanned_messages(job):

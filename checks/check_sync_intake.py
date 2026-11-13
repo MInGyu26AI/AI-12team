@@ -19,7 +19,7 @@ import turn_intake
 
 ACCOUNT = '0123456789abcdef' * 4
 OTHER_ACCOUNT = 'f' * 64
-COUNTS = ('outsideWindow', 'skippedTurns', 'newTurns', 'teamRecordSkipped')
+COUNTS = ('outsideWindow', 'skippedTurns', 'newTurns', 'teamRecordSkipped', 'elsewhereDuplicates')
 # Keys a screen-path message is stored with, before and after this change.
 SCREEN_KEYS = set(turn_intake.MESSAGE_FIELDS) | {'roleGuessed', 'session', 'masked'}
 
@@ -93,7 +93,7 @@ class ScreenPath(SyncFixture):
                                                       self.screen('a', 'assistant', conversationTitle='제목')])
         self.assertEqual(set(response), {'newMessages', 'queued', 'intakeIssues', *COUNTS})
         self.assertEqual((response['newMessages'], response['queued'], response['intakeIssues']), (2, True, []))
-        self.assertEqual([response[k] for k in COUNTS], [0, 0, 0, 0])
+        self.assertEqual([response[k] for k in COUNTS], [0, 0, 0, 0, 0])
         stored = self.stored()
         for message, job in stored.values():
             self.assertEqual(set(message), SCREEN_KEYS, 'no origin, createdAt, turnId or other extra field')
@@ -523,6 +523,57 @@ class TeamRecords(SyncFixture):
         self.assertEqual([i['reason'] for i in changed['intakeIssues']], ['message_changed'])
 
 
+class ElsewhereDuplicates(SyncFixture):
+    """8-1 R2: a ChatGPT message id (chatgpt:<uuid>) stored in one conversation is not stored in another."""
+    M = '0e5c2f9a-1b2c-4d3e-8f90-0123456789ab'
+    N = '7a1d0c3b-5e6f-4a8b-9c0d-fedcba987654'
+
+    def setUp(self):
+        super().setUp()
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        turn_intake.append(self.pipeline, [self.screen(self.M, 'user', 'A')])
+
+    def conversations(self, identifier):
+        with connect(self.db) as c:
+            return sorted(r[0] for r in c.execute("SELECT conversation FROM intake WHERE json_extract(message,'$.id')=?",
+                                                  ('chatgpt:' + identifier,)))
+
+    def test_screen_path_under_another_conversation(self):
+        # A hidden message of conversation A sent with conversation B's id, next to B's own message.
+        response = turn_intake.append(self.pipeline, [self.screen(self.M, 'user', 'B', text='다른 대화로 붙은 본문'),
+                                                      self.screen(self.N, 'user', 'B')])
+        self.assertEqual((response['newMessages'], response['elsewhereDuplicates'], response['intakeIssues']), (1, 1, []))
+        self.assertEqual(self.conversations(self.M), ['chatgpt:A'])
+        self.assertEqual(self.conversations(self.N), ['chatgpt:B'])
+
+    def test_sync_under_another_conversation(self):
+        self.turn_on(self.base)
+        turn = [self.sync(self.N, 'user', self.base + 900, self.N, 'B'),
+                self.sync(self.M, 'assistant', self.base + 901, self.N, 'B')]
+        response = turn_intake.append(self.pipeline, turn)
+        self.assertEqual((response['newMessages'], response['elsewhereDuplicates'], response['newTurns']), (1, 1, 1))
+        self.assertEqual(self.conversations(self.M), ['chatgpt:A'], 'whatever the origin, the row stored first stays')
+
+    def test_one_call_with_the_message_in_two_conversations(self):
+        response = turn_intake.append(self.pipeline, [self.screen(self.N, 'user', 'B'), self.screen(self.N, 'user', 'C')])
+        self.assertEqual((response['newMessages'], response['elsewhereDuplicates']), (1, 1))
+        self.assertEqual(self.conversations(self.N), ['chatgpt:B'])
+
+    def test_the_same_conversation_is_left_to_the_change_check(self):
+        same = turn_intake.append(self.pipeline, [self.screen(self.M, 'user', 'A')])
+        self.assertEqual((same['newMessages'], same['elsewhereDuplicates'], same['intakeIssues']), (0, 0, []))
+        changed = turn_intake.append(self.pipeline, [self.screen(self.M, 'user', 'A', text='바뀐 본문')])
+        self.assertEqual(changed['elsewhereDuplicates'], 0)
+        self.assertEqual([i['reason'] for i in changed['intakeIssues']], ['message_changed'])
+
+    def test_hash_ids_and_other_ids_are_per_conversation(self):
+        hashed, other = 'A:5f3a9c', 'not-a-uuid'
+        turn_intake.append(self.pipeline, [self.screen(hashed, 'user', 'A'), self.screen(other, 'user', 'A')])
+        response = turn_intake.append(self.pipeline, [self.screen(hashed, 'user', 'B'), self.screen(other, 'user', 'B')])
+        self.assertEqual((response['newMessages'], response['elsewhereDuplicates']), (2, 0))
+        self.assertEqual(self.conversations(hashed), ['chatgpt:A', 'chatgpt:B'])
+
+
 class Response(SyncFixture):
     def test_counts_of_one_mixed_call(self):
         configure(self.pipeline, dict(turnsPerBatch=10))
@@ -534,7 +585,8 @@ class Response(SyncFixture):
                     + [bad])
         response = dispatch(self.pipeline, 'turns.append', dict(messages=messages))
         self.assertEqual({k: v for k, v in response.items() if k != 'intakeIssues'},
-                         dict(newMessages=4, queued=True, outsideWindow=1, skippedTurns=1, newTurns=2, teamRecordSkipped=0))
+                         dict(newMessages=4, queued=True, outsideWindow=1, skippedTurns=1, newTurns=2, teamRecordSkipped=0,
+                              elsewhereDuplicates=0))
         self.assertEqual([i['reason'] for i in response['intakeIssues']], ['invalid_message'])
 
     def test_every_turn_outside_still_answers_queued(self):
