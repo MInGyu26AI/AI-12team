@@ -49,6 +49,12 @@ export type TeamRecordLoad = { ok: true; markdown: string; cardCount: number } |
 export const EMPTY_RECORD_GUIDE = '팀 결정 기록이 아직 없어요. 개인 검토함에서 카드를 승인하면 불러올 수 있어요';
 const LOAD_FAIL_GUIDE = '팀 기록을 불러오지 못했어요';
 
+/**
+ * 채워 넣는 팀 기록의 끝 표시. 수집기(turn_intake)가 머리 `# 싱크업 팀 기록`부터 이 줄까지를 지워,
+ * 팀 기록을 채워 보낸 메시지가 다시 분류되지 않고 사용자가 덧붙인 질문만 남는다. 웹 '팀 기록 복사'와 boardToMarkdown 은 이 줄이 없다.
+ */
+export const TEAM_RECORD_END = '<!-- 싱크업 팀 기록 끝 -->';
+
 export async function loadTeamRecord(source: TeamRecordSource): Promise<TeamRecordLoad> {
   let data: TeamRecordData;
   try {
@@ -58,7 +64,8 @@ export async function loadTeamRecord(source: TeamRecordSource): Promise<TeamReco
   }
   if (!Array.isArray(data?.cards)) return { ok: false, error: LOAD_FAIL_GUIDE };
   if (!data.cards.length) return { ok: false, error: EMPTY_RECORD_GUIDE };
-  return { ok: true, markdown: boardToMarkdown(data.cards, Array.isArray(data.conflicts) ? data.conflicts : []), cardCount: data.cards.length };
+  const board = boardToMarkdown(data.cards, Array.isArray(data.conflicts) ? data.conflicts : []);
+  return { ok: true, markdown: `${board}\n\n${TEAM_RECORD_END}`, cardCount: data.cards.length };
 }
 
 // ChatGPT 입력창: 지금은 ProseMirror 편집기(div#prompt-textarea, contenteditable)이고, 예전 화면은 textarea 다.

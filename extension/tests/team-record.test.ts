@@ -16,6 +16,7 @@ import {
   findComposer,
   loadTeamRecord,
   teamRecordFromRaw,
+  TEAM_RECORD_END,
 } from '@/lib/team-record';
 
 const card = (patch: Partial<RelatedCard>): RelatedCard => ({
@@ -119,9 +120,9 @@ describe('백그라운드에서 팀 기록 받기 (fetchTeamRecord)', () => {
 });
 
 describe('팀 기록 만들기 (loadTeamRecord)', () => {
-  it('웹의 "팀 기록 복사"와 같은 글을 만든다', async () => {
+  it('웹의 "팀 기록 복사"와 같은 글(boardToMarkdown)에 끝 표시만 붙여 만든다', async () => {
     const result = await loadTeamRecord(async () => ({ cards, conflicts }));
-    expect(result).toEqual({ ok: true, markdown: boardToMarkdown(cards, conflicts), cardCount: 3 });
+    expect(result).toEqual({ ok: true, markdown: `${boardToMarkdown(cards, conflicts)}\n\n${TEAM_RECORD_END}`, cardCount: 3 });
     expect(result.ok && result.markdown).toContain('- [결정] MVP 범위: 브라우저 확장 = MVP 포함 (결정 이서준)');
     expect(result.ok && result.markdown).toContain('## 아직 정리되지 않은 충돌');
   });
@@ -141,7 +142,22 @@ describe('팀 기록 만들기 (loadTeamRecord)', () => {
 
   it('충돌 목록이 빠져 있어도 카드는 만든다', async () => {
     const result = await loadTeamRecord((async () => ({ cards })) as never);
-    expect(result.ok && result.markdown).toBe(boardToMarkdown(cards, []));
+    expect(result.ok && result.markdown).toBe(`${boardToMarkdown(cards, [])}\n\n${TEAM_RECORD_END}`);
+  });
+
+  it('끝 표시: 머리 `# 싱크업 팀 기록`으로 시작하고 빈 줄 하나 뒤 마지막 줄이 <!-- 싱크업 팀 기록 끝 --> 이다', async () => {
+    const result = await loadTeamRecord(async () => ({ cards, conflicts }));
+    const markdown = result.ok ? result.markdown : '';
+    expect(TEAM_RECORD_END).toBe('<!-- 싱크업 팀 기록 끝 -->');
+    expect(markdown.startsWith('# 싱크업 팀 기록 (')).toBe(true);
+    expect(markdown.endsWith('\n\n<!-- 싱크업 팀 기록 끝 -->')).toBe(true);
+    expect(markdown.split('\n').at(-2)).toBe(''); // 끝 표시 바로 앞은 빈 줄
+    expect(markdown.split(TEAM_RECORD_END)).toHaveLength(2); // 표시는 한 번만
+  });
+
+  it('boardToMarkdown 자체와 웹 복사본에는 끝 표시가 없다 (출력은 그대로)', () => {
+    expect(boardToMarkdown(cards, conflicts)).not.toContain('싱크업 팀 기록 끝');
+    expect(boardToMarkdown(cards, conflicts).endsWith('vs "브라우저 확장은 MVP 제외"')).toBe(true);
   });
 });
 
