@@ -204,6 +204,20 @@ class DecisionsTest(unittest.TestCase):
         self.assertEqual(b["confidence"], 0.8)
         self.assertEqual(len(d.calls[0][1]), 8)  # 문장 2개 × 질문 4개
 
+    def test_card_without_sentence_does_not_drop_decisions_labels(self):
+        # sentence 가 빠진 카드 한 장 때문에 다른 카드까지 chat 라벨로 돌아가지 않는다 (코드 지도 지적)
+        llm = FakeLLM({"cards": [
+            {"msg": 1, "relevance": "related", "tag": "none", "content": "문장 없음"},
+            {"msg": 1, "relevance": "related", "sentence": "DB는 SQLite로 하자.", "tag": "research", "subtopic": "기타",
+             "topic_key": "DB", "content": "DB = SQLite"},
+        ]})
+        d = FakeDecider(lambda q: {"type": "choice", "name": q["name"], "choice": "decision", "confidence": 0.9}
+                        if q["name"] == "u2_tag" else None)
+        cards = classify({"context": CTX, "messages": [msg(1, "DB는 SQLite로 하자.")]}, llm, d)
+        decided = [c for c in cards if c.get("sentence") == "DB는 SQLite로 하자."]
+        self.assertEqual((decided[0]["tag"], decided[0]["classificationMethod"]), ("decision", "decisions"))
+        self.assertEqual(len(d.calls[0][1]), 4)  # sentence 있는 카드 1장 × 질문 4개
+
     def test_personal_relabel_keeps_zero_confidence(self):
         llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": "오늘 피곤하다", "tag": "research",
                                   "subtopic": "기타", "topic_key": "컨디션", "content": "피곤"}]})

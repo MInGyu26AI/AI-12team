@@ -72,16 +72,17 @@ def relabel(cards: list[dict], conversation: str, decider: Decider, enabled: lis
     criteria = (config.PROMPTS / "decisions_criteria.md").read_text(encoding="utf-8")
     # 꺼 둔 소주제 내용은 기타로 가야 하므로 기타는 꺼 두었어도 고를 수 있게 둔다 (schema 도 기타로 바꾼다)
     subtopics = [s for s in SUBTOPICS if not enabled or s in enabled or s == "기타"]
-    units, questions = [], []
+    units, questions, asked = [], [], set()
     for k, c in enumerate(cards, start=1):
-        if c.get("relevance") == "related":
+        # sentence 가 없는 카드는 묻지 않고 그대로 둔다. 한 장 때문에 모든 카드가 chat 라벨로 돌아가지 않게 (코드 지도 지적)
+        if c.get("relevance") == "related" and isinstance(c.get("sentence"), str) and c["sentence"].strip():
             units.append(f"u{k} (발화 {c['_msg']}): {c['sentence']}")
             questions += _label_questions(f"u{k}", subtopics)
+            asked.add(k)
     if not questions:
         return cards
     answers = decider.decide(mask_text(f"{criteria}\n\n{conversation}\n\n# 판정할 문장\n" + "\n".join(units)), questions)
-    return [_apply_labels(c, answers, f"u{k}") if c.get("relevance") == "related" else c
-            for k, c in enumerate(cards, start=1)]
+    return [_apply_labels(c, answers, f"u{k}") if k in asked else c for k, c in enumerate(cards, start=1)]
 
 
 def _answer(answers: dict[str, dict], name: str, field: str) -> dict:
