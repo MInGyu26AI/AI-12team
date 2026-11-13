@@ -11,6 +11,7 @@ import { RepoStatus } from '@/entrypoints/popup/RepoStatus';
 import { StructureWarning } from '@/entrypoints/popup/StructureWarning';
 import { ConsentText, SyncSwitch } from '@/entrypoints/popup/SyncSwitch';
 import { runSyncNow, setProjectSync } from '@/entrypoints/popup/sync-actions';
+import { loadSyncProjects } from '@/entrypoints/popup/sync-projects';
 import { syncNowBlockedReason, syncNowNotice, syncStatusLine } from '@/entrypoints/popup/sync-status';
 import { formatAgo, formatClock } from '@/entrypoints/popup/time-format';
 
@@ -155,6 +156,26 @@ describe('백그라운드에 보내는 요청', () => {
   it('싱크 맞추기 요청이 거절되면 받은 문구를 보여 준다', async () => {
     backendAnswers({ ok: false, error: '수집기에 연결하지 못했어요' });
     expect(await runSyncNow()).toEqual({ tone: 'error', text: '수집기에 연결하지 못했어요' });
+  });
+});
+
+describe('프로젝트 목록 (syncProjects)', () => {
+  it('백그라운드에 syncProjects 를 보내 목록을 받는다 (동기화가 꺼져 있어도 부른다)', async () => {
+    const sendMessage = backendAnswers({ ok: true, result: [PROJECT] });
+    expect(await loadSyncProjects()).toEqual({ ok: true, projects: [PROJECT] });
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'syncProjects' });
+  });
+
+  it('실패하면 받은 문구를 그대로 돌려준다', async () => {
+    backendAnswers({ ok: false, error: 'ChatGPT에 로그인하세요' });
+    expect(await loadSyncProjects()).toEqual({ ok: false, error: 'ChatGPT에 로그인하세요' });
+  });
+
+  it('백그라운드가 답하지 않거나 목록이 아닌 값을 주면 안내 문구를 만든다', async () => {
+    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockRejectedValueOnce(new Error('Receiving end does not exist'));
+    expect(await loadSyncProjects()).toEqual({ ok: false, error: '프로젝트 목록을 못 불러왔어요' });
+    backendAnswers({ ok: true, result: null });
+    expect(await loadSyncProjects()).toEqual({ ok: false, error: '프로젝트 목록을 받지 못했어요' });
   });
 });
 
