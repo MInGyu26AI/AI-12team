@@ -16,6 +16,11 @@ import { isTrustedWebOrigin } from '@/lib/web-url';
 
 const SELECTION_MENU_ID = 'syncup-send-selection';
 const REFRESH_ALARM = 'refresh';
+const SYNC_SET_POPUP_ONLY = '동기화 켬·끔은 확장 팝업에서만 바꿀 수 있어요';
+
+// 동기화 동의는 팝업에서만 받는다: rpc 로 수집기 accountSync 를 바꾸는 요청(웹의 collection.configure)은 넘기지 않는다
+const setsAccountSync = (method: string, params: unknown) =>
+  method === 'collection.configure' && !!params && typeof params === 'object' && 'accountSync' in params;
 
 // 확장 화면(팝업·채팅 화면)의 싱크 맞추기: '지금 분류하기'처럼 실패는 팝업 오류로 남기고, flush 뒤 상태를 다시 읽는다
 async function syncNowFromExtension(params: SyncNowParams) {
@@ -50,6 +55,7 @@ async function handleRequest(message: BgRequest, sender: Browser.runtime.Message
     case 'rpc':
       // 웹 화면 요청의 실패는 웹 화면이 직접 알린다. 팝업의 연결 오류 표시는 확장 자신의 호출 결과만 따른다.
       // 웹의 싱크 맞추기(EXT_SYNC_NOW)는 수집기로 넘기지 않고 확장이 처리한다
+      if (setsAccountSync(message.method, message.params)) return { ok: false, error: SYNC_SET_POPUP_ONLY };
       try {
         const sync = message.method === EXT_SYNC_NOW;
         return { ok: true, result: sync ? await syncNow(message.params as SyncNowParams) : await rpc(message.method, message.params) };

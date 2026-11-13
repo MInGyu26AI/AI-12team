@@ -42,7 +42,7 @@ type PassEnd =
   | { kind: 'done' } // 끝까지 돎 (대화별 남김은 있을 수 있음)
   | { kind: 'stop'; reason: SyncStopReason }
   | { kind: 'rest'; reason: 'rate_limited' | 'forbidden'; until: number }
-  | { kind: 'error' }; // 일시 오류: 수집기 실패, 세션·목록의 network·not_found, 대표 탭 끊김
+  | { kind: 'error' }; // 일시 오류: 수집기 실패, 세션·목록의 network, 세션의 not_found, 대표 탭 끊김
 
 type TabFailure = Extract<TabSyncResult<unknown>, { ok: false }>;
 
@@ -53,6 +53,7 @@ interface AppendResult {
 }
 
 const MINUTE = 60_000;
+const STALE_RUNNING_MINUTES = 3; // 서비스 워커가 시작할 때 이보다 오래된 'running' 은 패스 도중 워커가 죽은 흔적이다
 const iso = (ms: number) => new Date(ms).toISOString();
 const detailGap = () => SYNC_DETAIL_GAP_MS[0] + syncTiming.random() * (SYNC_DETAIL_GAP_MS[1] - SYNC_DETAIL_GAP_MS[0]);
 
@@ -95,7 +96,10 @@ class PassRun {
     await syncStateItem.setValue({ ...latest, ...fields });
   }
 
+  /** stats.skippedConversations 는 누적하지 않고 지금 건너뛰는(실패 수가 상한에 닿은) 대화 수로 다시 센다 */
   progress(): Partial<SyncState> {
+    const skippedConversations = Object.values(this.failures).filter((n) => n >= SYNC_MAX_CONVERSATION_FAILURES).length;
+    this.stats = { ...this.stats, skippedConversations };
     return { pending: this.pending, pendingPassStartedAt: this.pendingPassStartedAt, failures: this.failures, stats: this.stats };
   }
 
@@ -117,16 +121,14 @@ class PassRun {
   }
 
   /**
-   * 대화별 실패(network·그 대화의 shape_changed·turns.append 거절). 실패 수를 늘리고 남김으로 둔다.
+   * 대화별 실패(그 대화 상세의 network·shape_changed·forbidden, turns.append 거절). 실패 수를 늘리고 남김으로 둔다.
    * SYNC_MAX_CONVERSATION_FAILURES 번째부터는 건너뜀: 남김이 아니라 커서를 붙잡지 않는다. 실패 수는 받을 때까지 남긴다
    */
   async conversationFailed(id: string, code: TabSyncError | 'collector') {
     this.fail(code);
     const count = (this.failures[id] ?? 0) + 1;
     this.failures[id] = count;
-    const skip = count >= SYNC_MAX_CONVERSATION_FAILURES;
-    if (skip) this.stats.skippedConversations += 1;
-    await this.finishConversation(id, !skip);
+    await this.finishConversation(id, count < SYNC_MAX_CONVERSATION_FAILURES);
   }
 
   async append(messages: CollectedMessage[]) {
@@ -218,7 +220,7 @@ function tabFailureEnd(run: PassRun, failure: TabFailure): PassEnd {
       const ms = sec && sec > 0 ? sec * 1000 : SYNC_REST_DEFAULT_MINUTES * MINUTE;
       return { kind: 'rest', reason: 'rate_limited', until: now + ms };
     }
-    case 'forbidden':
+    case 'forbidden': // 세션·목록의 403 만 여기로 온다 (대화 상세의 403 은 대화별 실패)
       return { kind: 'rest', reason: 'forbidden', until: now + SYNC_FORBIDDEN_REST_MINUTES * MINUTE };
     case 'logged_out':
     case 'shape_changed': // 세션·목록 응답의 모양 오류만 여기로 온다 (대화 상세는 대화별 실패)
@@ -243,6 +245,10 @@ async function listTargets(run: PassRun, leader: LeaderTab, gizmoId: string, sin
     if (page > 0) await syncTiming.sleep(detailGap()); // 목록 429 가 가장 아프므로 쪽 사이에도 간격을 둔다
     const response: TabSyncResult<SyncProjectPage> = await leader.request({ type: 'sync.projectPage', gizmoId, cursor });
     await run.ensureCurrent();
+    if (!response.ok && response.error === 'not_found') {
+      run.fail('not_found');
+      return { kind: 'stop', reason: 'project_missing' }; // 고른 프로젝트를 지웠거나 접근할 수 없게 됨
+    }
     const end = tabEnd(run, response, account);
     if (end || !response.ok) return end ?? { kind: 'error' };
     let reachedOld = false;
@@ -267,7 +273,7 @@ async function fetchDetails(run: PassRun, leader: LeaderTab, windows: SyncWindow
       await run.settled(id, false); // 지운 대화: 건너뜀
       continue;
     }
-    if (!response.ok && (response.error === 'network' || response.error === 'shape_changed')) {
+    if (!response.ok && (response.error === 'network' || response.error === 'shape_changed' || response.error === 'forbidden')) {
       await run.conversationFailed(id, response.error);
       if (leader.lost) return { kind: 'error' }; // 탭이 사라졌으면 남은 대화는 다음 패스에 (요청마다 20초씩 기다리지 않게)
       continue;
@@ -327,6 +333,7 @@ async function runSteps(run: PassRun, state: SyncState): Promise<PassEnd> {
 
 const SYNC_OF: Record<PassEnd['kind'], SyncNowResult['sync']> = { done: 'ran', stop: 'failed', rest: 'resting', error: 'failed' };
 
+// lastError 는 이번 패스가 만난 마지막 오류다. 오류 없이 끝난 패스는 지운다(대화별 실패만 있었어도 남긴다)
 async function finish(run: PassRun, end: PassEnd): Promise<PassResult> {
   const fields: Partial<SyncState> = {
     ...run.progress(),
@@ -377,6 +384,18 @@ export function runSyncPass(): Promise<PassResult> {
   if (running) return Promise.resolve({ sync: 'busy', newTurns: 0 });
   running = pass().finally(() => (running = null));
   return running;
+}
+
+/**
+ * 서비스 워커가 시작할 때: 저장된 mode 가 'running' 인데 lastPassStartedAt 이 3분보다 오래됐으면 패스 도중 워커가 죽은 것이다.
+ * mode 만 'idle' 로 되돌린다(커서·pending 은 저장돼 있다). 이 워커에서 패스가 돌고 있으면 건드리지 않는다
+ */
+export async function recoverInterruptedPass() {
+  const state = await syncStateItem.getValue();
+  if (running || state.mode !== 'running') return;
+  const startedAt = state.lastPassStartedAt ? Date.parse(state.lastPassStartedAt) : NaN;
+  if (syncTiming.now() - startedAt <= STALE_RUNNING_MINUTES * MINUTE) return;
+  await syncStateItem.setValue({ ...state, mode: 'idle' }); // 읽은 뒤 await 없이 바로 써서 그사이 패스가 끼지 않는다
 }
 
 /** 돌고 있는 패스가 있으면 끝날 때까지 기다린다 (켬 직후 패스용) */
