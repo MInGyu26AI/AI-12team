@@ -1,6 +1,11 @@
 // 백그라운드: 확장 화면들의 요청을 로컬 수집기로 넘기고, 30초마다 수집기 상태를 확장 저장소에 옮긴다.
+// 프로젝트만 수집(계정 동기화)이 켜져 있으면 5분마다 동기화 패스를 돈다 (lib/chatgpt-sync).
 import type { Browser } from 'wxt/browser';
+import { EXT_SYNC_NOW, type SyncNowParams } from '@shared/bridge';
 import { appendTurns } from '@/lib/append-turns';
+import { runSyncPass } from '@/lib/chatgpt-sync/pass';
+import { ensureSyncAlarm, setSync, syncNow } from '@/lib/chatgpt-sync/scheduler';
+import { SYNC_ALARM } from '@/lib/chatgpt-sync/state';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
 import { collectResultToast, type BgRequest, type TabToast } from '@/lib/messages';
@@ -10,22 +15,39 @@ import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
 import { isTrustedWebOrigin } from '@/lib/web-url';
 
 const SELECTION_MENU_ID = 'syncup-send-selection';
+const REFRESH_ALARM = 'refresh';
 
-// 콘텐츠 스크립트는 채팅 화면 출처만, 팝업과 설정한 개인 검토함 웹은 나머지 요청까지 보낼 수 있다
+// 확장 화면(팝업·채팅 화면)의 싱크 맞추기: '지금 분류하기'처럼 실패는 팝업 오류로 남기고, flush 뒤 상태를 다시 읽는다
+async function syncNowFromExtension(params: SyncNowParams) {
+  const result = await syncNow(params);
+  if (result.flushed) await clearErrorAndRefresh();
+  return { ok: true, result };
+}
+
+// 콘텐츠 스크립트는 채팅 화면 출처만, 팝업과 설정한 개인 검토함 웹은 나머지 요청까지 보낼 수 있다.
+// 단, 동기화 켬·끔(syncSet)은 팝업만, 싱크 맞추기(syncNow)는 채팅 화면·팝업·웹 모두 보낼 수 있다
 async function handleRequest(message: BgRequest, sender: Browser.runtime.MessageSender) {
   const fromChat = !!sender.url && !!siteForUrl(sender.url);
   if (message.type === 'collect' && fromChat) return appendTurns(message.messages, message.trigger !== 'auto');
+  if (message.type === 'syncNow' && fromChat) return syncNowFromExtension(message.params);
   const fromPopup = !sender.tab && sender.id === browser.runtime.id;
   const fromWeb = !!sender.url && isTrustedWebOrigin(await settingsItem.getValue(), new URL(sender.url).origin);
   if (!fromPopup && !fromWeb) throw new Error('허용되지 않은 연결 화면');
   switch (message.type) {
     case 'rpc':
-      // 웹 화면 요청의 실패는 웹 화면이 직접 알린다. 팝업의 연결 오류 표시는 확장 자신의 호출 결과만 따른다
+      // 웹 화면 요청의 실패는 웹 화면이 직접 알린다. 팝업의 연결 오류 표시는 확장 자신의 호출 결과만 따른다.
+      // 웹의 싱크 맞추기(EXT_SYNC_NOW)는 수집기로 넘기지 않고 확장이 처리한다
       try {
-        return { ok: true, result: await rpc(message.method, message.params) };
+        const sync = message.method === EXT_SYNC_NOW;
+        return { ok: true, result: sync ? await syncNow(message.params as SyncNowParams) : await rpc(message.method, message.params) };
       } catch (error) {
         return { ok: false, error: errorText(error) };
       }
+    case 'syncNow':
+      return syncNowFromExtension(message.params);
+    case 'syncSet':
+      if (!fromPopup) throw new Error('허용되지 않은 연결 화면');
+      return setSync(message.enabled, message.project);
     case 'flush':
       await rpc('collection.flush');
       await clearErrorAndRefresh();
@@ -73,8 +95,13 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 
 export default defineBackground(() => {
   void refreshStatusOrRecordFailure();
-  browser.alarms.create('refresh', { periodInMinutes: 0.5 });
-  browser.alarms.onAlarm.addListener(() => void refreshStatusOrRecordFailure());
+  browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 0.5 });
+  void ensureSyncAlarm();
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === REFRESH_ALARM) void refreshStatusOrRecordFailure();
+    if (alarm.name === SYNC_ALARM) void runSyncPass();
+  });
+  browser.runtime.onStartup.addListener(() => void runSyncPass());
   // 리스너가 Promise 를 돌려주는 응답은 Chrome 148 부터라 그 전 버전에서는 보낸 쪽이 undefined 를 받는다.
   // 그래서 sendResponse 로 답하고, true 를 돌려 답할 때까지 채널을 열어 둔다
   browser.runtime.onMessage.addListener((message: BgRequest, sender, sendResponse) => {
