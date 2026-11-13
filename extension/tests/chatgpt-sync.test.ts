@@ -653,6 +653,60 @@ describe('syncSet (프로젝트만 수집 켬·끔)', () => {
   });
 });
 
+describe('syncProjects (프로젝트 고르기)', () => {
+  const syncProjects = (sender: object = fromPopup()) => send({ type: 'syncProjects' }, sender);
+
+  it('대표 탭의 sync.projects 를 그대로 돌려주고, 동기화가 꺼져 있어도 된다', async () => {
+    expect((await state()).enabled).toBe(false);
+    expect(await syncProjects()).toEqual({ ok: true, result: [PROJECT] });
+    expect(tabCalls.map((c) => c.request)).toEqual([{ type: 'sync.projects' }]);
+    expect(calledMethods()).toEqual([]);
+  });
+
+  it('탭이 없거나 로그아웃이면 syncSet 과 같은 문구', async () => {
+    tabs = [];
+    expect(await syncProjects()).toEqual({ ok: false, error: 'chatgpt.com 탭을 하나 열어 두세요' });
+    tabs = [{ id: 11, active: true, url: 'https://chatgpt.com/' }];
+    tabOverrides['sync.projects'] = tabError('logged_out');
+    expect(await syncProjects()).toEqual({ ok: false, error: 'ChatGPT에 로그인하세요' });
+  });
+
+  it('채팅 화면과 웹에서 온 요청은 거절한다', async () => {
+    expect(await syncProjects(chatPage)).toEqual({ ok: false, error: '허용되지 않은 연결 화면' });
+    await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
+    expect(await syncProjects(fromPage('http://localhost:3000/review'))).toEqual({ ok: false, error: '허용되지 않은 연결 화면' });
+    expect(tabCalls).toHaveLength(0);
+  });
+});
+
+describe('teamRecord (팀 기록 불러오기)', () => {
+  const teamRecord = (sender: object) => send({ type: 'teamRecord' }, sender);
+  const board = { items: [{ id: 'card-1' }] };
+  const conflicts = { conflicts: [{ id: 'conflict-1' }] };
+
+  beforeEach(() => {
+    nativeOverrides['team.board'] = { ok: true, result: board };
+    nativeOverrides['team.conflicts'] = { ok: true, result: conflicts };
+  });
+
+  it('채팅 화면과 팝업에서 수집기 응답을 그대로 {board, conflicts} 로 돌려준다', async () => {
+    expect(await teamRecord(chatPage)).toEqual({ ok: true, result: { board, conflicts } });
+    expect(await teamRecord(fromPopup())).toEqual({ ok: true, result: { board, conflicts } });
+    expect(calledMethods().sort()).toEqual(['team.board', 'team.board', 'team.conflicts', 'team.conflicts']);
+  });
+
+  it('수집기 오류 문구는 그대로 넘긴다', async () => {
+    nativeOverrides['team.conflicts'] = { ok: false, error: '팀 서버에 연결할 수 없습니다.' };
+    expect(await teamRecord(chatPage)).toEqual({ ok: false, error: '팀 서버에 연결할 수 없습니다.' });
+  });
+
+  it('웹에서 온 요청은 거절한다', async () => {
+    await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
+    expect(await teamRecord(fromPage('http://localhost:3000/board'))).toEqual({ ok: false, error: '허용되지 않은 연결 화면' });
+    expect(calledMethods()).not.toContain('team.board');
+  });
+});
+
 describe('알람과 시작', () => {
   it('refresh 알람은 상태만 새로 고치고 패스를 돌지 않는다', async () => {
     await enabled();

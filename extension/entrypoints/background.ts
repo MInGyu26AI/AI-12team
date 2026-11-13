@@ -4,11 +4,11 @@ import type { Browser } from 'wxt/browser';
 import { EXT_SYNC_NOW, type SyncNowParams } from '@shared/bridge';
 import { appendTurns } from '@/lib/append-turns';
 import { runSyncPass } from '@/lib/chatgpt-sync/pass';
-import { ensureSyncAlarm, setSync, syncNow } from '@/lib/chatgpt-sync/scheduler';
+import { ensureSyncAlarm, listSyncProjects, setSync, syncNow } from '@/lib/chatgpt-sync/scheduler';
 import { SYNC_ALARM } from '@/lib/chatgpt-sync/state';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
-import { collectResultToast, type BgRequest, type TabToast } from '@/lib/messages';
+import { collectResultToast, type BgRequest, type BgResponse, type TabToast, type TeamRecordRaw } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
 import { sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
@@ -24,12 +24,25 @@ async function syncNowFromExtension(params: SyncNowParams) {
   return { ok: true, result };
 }
 
+// 팀 기록 불러오기(채팅 화면·팝업): 수집기 team.board·team.conflicts 응답 그대로. 실패 문구도 그대로 부른 화면에 돌려준다(웹 rpc 처럼)
+async function teamRecord(): Promise<BgResponse> {
+  try {
+    const [board, conflicts] = await Promise.all([rpc('team.board'), rpc('team.conflicts')]);
+    const result: TeamRecordRaw = { board, conflicts };
+    return { ok: true, result };
+  } catch (error) {
+    return { ok: false, error: errorText(error) };
+  }
+}
+
 // 콘텐츠 스크립트는 채팅 화면 출처만, 팝업과 설정한 개인 검토함 웹은 나머지 요청까지 보낼 수 있다.
-// 단, 동기화 켬·끔(syncSet)은 팝업만, 싱크 맞추기(syncNow)는 채팅 화면·팝업·웹 모두 보낼 수 있다
+// 단, 동기화 켬·끔(syncSet)·프로젝트 목록(syncProjects)은 팝업만, 팀 기록(teamRecord)은 채팅 화면·팝업,
+// 싱크 맞추기(syncNow)는 채팅 화면·팝업·웹 모두 보낼 수 있다
 async function handleRequest(message: BgRequest, sender: Browser.runtime.MessageSender) {
   const fromChat = !!sender.url && !!siteForUrl(sender.url);
   if (message.type === 'collect' && fromChat) return appendTurns(message.messages, message.trigger !== 'auto');
   if (message.type === 'syncNow' && fromChat) return syncNowFromExtension(message.params);
+  if (message.type === 'teamRecord' && fromChat) return teamRecord();
   const fromPopup = !sender.tab && sender.id === browser.runtime.id;
   const fromWeb = !!sender.url && isTrustedWebOrigin(await settingsItem.getValue(), new URL(sender.url).origin);
   if (!fromPopup && !fromWeb) throw new Error('허용되지 않은 연결 화면');
@@ -48,6 +61,12 @@ async function handleRequest(message: BgRequest, sender: Browser.runtime.Message
     case 'syncSet':
       if (!fromPopup) throw new Error('허용되지 않은 연결 화면');
       return setSync(message.enabled, message.project);
+    case 'syncProjects':
+      if (!fromPopup) throw new Error('허용되지 않은 연결 화면');
+      return listSyncProjects();
+    case 'teamRecord':
+      if (!fromPopup) throw new Error('허용되지 않은 연결 화면');
+      return teamRecord();
     case 'flush':
       await rpc('collection.flush');
       await clearErrorAndRefresh();

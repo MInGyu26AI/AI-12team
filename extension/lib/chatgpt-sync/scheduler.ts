@@ -1,8 +1,8 @@
-// 동기화 켬·끔(syncSet), 싱크 맞추기(syncNow), 5분 알람 (docs/sync-contract.md 5장).
+// 동기화 켬·끔(syncSet), 프로젝트 목록(syncProjects), 싱크 맞추기(syncNow), 5분 알람 (docs/sync-contract.md 5장).
 // 활발·조용 주기, touch, 쉼 두 배는 다음 단계다(약속 9장). 알람은 5분 고정이다
 import type { ExtStatus, SyncNowParams, SyncNowResult } from '@shared/bridge';
 import { errorText, rpc } from '../collector-rpc';
-import type { BgResponse, SyncProject, TabSyncError } from '../messages';
+import type { BgResponse, SyncProject, TabSyncError, TabSyncRequest, TabSyncResult } from '../messages';
 import { sendBlockedReason, settingsItem } from '../settings';
 import { findLeaderTab } from './leader-tab';
 import { runSyncPass, syncLeftoverItem, syncTiming, waitForRunningPass } from './pass';
@@ -16,15 +16,23 @@ export const SYNC_SET_ERRORS = {
   noProject: '프로젝트를 고르세요',
 } as const;
 
-// 켤 때 sync.session 이 받은 오류. 로그아웃 말고는 약속 표에 없어서 여기서 정한다
-const SESSION_ERRORS: Record<TabSyncError, string> = {
+// 켤 때(sync.session)·프로젝트 목록(sync.projects)이 받은 탭 오류. 로그아웃 말고는 약속 표에 없어서 여기서 정한다
+const TAB_ERRORS: Record<TabSyncError, string> = {
   logged_out: SYNC_SET_ERRORS.loggedOut,
-  rate_limited: 'ChatGPT 요청 제한에 걸렸어요. 잠시 뒤 다시 켜 주세요',
-  forbidden: 'ChatGPT가 요청을 막았어요. 잠시 뒤 다시 켜 주세요',
-  shape_changed: 'ChatGPT 응답 모양이 바뀌어 지금은 동기화를 켤 수 없어요',
-  not_found: 'ChatGPT에 연결하지 못했어요. 잠시 뒤 다시 켜 주세요',
-  network: 'ChatGPT에 연결하지 못했어요. 잠시 뒤 다시 켜 주세요',
+  rate_limited: 'ChatGPT 요청 제한에 걸렸어요. 잠시 뒤 다시 시도해 주세요',
+  forbidden: 'ChatGPT가 요청을 막았어요. 잠시 뒤 다시 시도해 주세요',
+  shape_changed: 'ChatGPT 응답 모양이 바뀌어 지금은 동기화를 쓸 수 없어요',
+  not_found: 'ChatGPT에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요',
+  network: 'ChatGPT에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요',
 };
+
+/** 대표 탭에 한 번 묻는다. 답하는 탭이 없거나 탭 오류면 팝업에 보일 문구 */
+async function askTab<T>(request: TabSyncRequest): Promise<{ ok: true; response: Extract<TabSyncResult<T>, { ok: true }> } | { ok: false; error: string }> {
+  const found = await findLeaderTab<T>(request);
+  if (!found) return { ok: false, error: SYNC_SET_ERRORS.noTab };
+  if (!found.response.ok) return { ok: false, error: TAB_ERRORS[found.response.error] };
+  return { ok: true, response: found.response };
+}
 
 export const startSyncAlarm = () => browser.alarms.create(SYNC_ALARM, { periodInMinutes: SYNC_PERIOD_MINUTES });
 
@@ -36,10 +44,9 @@ export async function ensureSyncAlarm() {
 
 async function enableSync(project: SyncProject | undefined): Promise<BgResponse> {
   if (!project?.gizmoId) return { ok: false, error: SYNC_SET_ERRORS.noProject };
-  const found = await findLeaderTab<null>({ type: 'sync.session' });
-  if (!found) return { ok: false, error: SYNC_SET_ERRORS.noTab };
-  if (!found.response.ok) return { ok: false, error: SESSION_ERRORS[found.response.error] };
-  const account = found.response.account;
+  const session = await askTab<null>({ type: 'sync.session' });
+  if (!session.ok) return session;
+  const { account } = session.response;
   try {
     const status = await rpc<ExtStatus>('collection.status');
     if (!status || !('accountSync' in status)) return { ok: false, error: SYNC_SET_ERRORS.oldCollector };
@@ -80,6 +87,12 @@ async function disableSync(): Promise<BgResponse> {
 
 /** BgRequest 'syncSet' (팝업에서만). 켬 결과는 { ok: true, result: SyncState } */
 export const setSync = (enabled: boolean, project?: SyncProject) => (enabled ? enableSync(project) : disableSync());
+
+/** BgRequest 'syncProjects' (팝업에서만): 켜기 전에 고를 프로젝트 목록. 동기화가 꺼져 있어도 된다 */
+export async function listSyncProjects(): Promise<BgResponse> {
+  const projects = await askTab<SyncProject[]>({ type: 'sync.projects' });
+  return projects.ok ? { ok: true, result: projects.response.data } : projects;
+}
 
 /**
  * 싱크 맞추기: 패스를 한 번 돌리고(결과와 상관없이) 수집 중이면 collection.flush.
