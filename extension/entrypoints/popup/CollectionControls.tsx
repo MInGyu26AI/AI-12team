@@ -1,8 +1,9 @@
-// 자동 수집 켜기 · 묶음 크기 · 종료 시각. 바꿀 때마다 로컬 수집기에 바로 저장한다
+// 자동 수집 켜기 · 종료 시각. 바꿀 때마다 로컬 수집기에 바로 저장한다
 import type { ExtSettingsPatch } from '@shared/bridge';
 import { sendToBackground } from '@/lib/messages';
-import { clampTurns, endsAtOf, isEnded, turnsOf, type Settings } from '@/lib/settings';
+import { endsAtOf, isEnded, type Settings } from '@/lib/settings';
 import { fromLocalInput, toLocalInput } from './datetime-local';
+import { SwitchTrack } from './SwitchTrack';
 
 async function save(patch: ExtSettingsPatch) {
   const result = await sendToBackground({ type: 'updateSettings', patch });
@@ -18,30 +19,16 @@ export function AutoCollectSwitch({ autoCollect }: { autoCollect: boolean }) {
         <span className="text-xs text-gray-500">ChatGPT에서 새로 끝난 대화를 자동으로 가져와요</span>
       </span>
       <input type="checkbox" role="switch" checked={autoCollect} onChange={() => void save({ autoCollect: !autoCollect })} className="peer sr-only" />
-      <span className="relative h-6 w-11 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-tag-decision after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5" />
+      <SwitchTrack />
     </label>
   );
 }
 
-// 몇 번의 대화마다 분류할지와 수집 종료 시각
+// 수집 종료 시각. 몇 회마다 분류할지는 팀 고정값이라 고르지 않는다 (회의록 3장 ①)
 export function CollectionLimits({ settings }: { settings: Settings }) {
-  const turns = turnsOf(settings);
   const end = endsAtOf(settings);
   return (
     <section className="space-y-2 rounded-lg border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span>대화</span>
-        <span className="flex items-center rounded-md border">
-          <button className="px-2 py-0.5 text-gray-500" onClick={() => void save({ turnsPerBatch: clampTurns(turns - 1) })} aria-label="줄이기">
-            −
-          </button>
-          <b className="w-7 text-center text-brand">{turns}</b>
-          <button className="px-2 py-0.5 text-gray-500" onClick={() => void save({ turnsPerBatch: clampTurns(turns + 1) })} aria-label="늘리기">
-            +
-          </button>
-        </span>
-        <span className="flex-1 text-xs text-gray-600">회마다 분류해 검토함에 올려요</span>
-      </div>
       <label className="flex items-center justify-between gap-2 text-xs">
         <span className="text-gray-600">수집 종료 시각</span>
         <input
