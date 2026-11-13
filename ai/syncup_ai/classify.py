@@ -164,14 +164,19 @@ def _finish_cards(raw_cards: list[dict], info: list[dict], topics: list[str],
                               enabled_subtopics=enabled)
         if card is None:
             continue
-        if card["relevance"] == "related":
-            _attach_evidence(card, raw, meta)
         if meta["role"] == "assistant" and card["relevance"] == "related":
             if card["tag"] in ("decision", "todo"):
                 card["tag"], card["owner"], card["due"], card["is_change"] = "none", None, None, False  # AI 말은 제안
             ai_cards_per_msg[idx] += 1
             if ai_cards_per_msg[idx] > config.MAX_CARDS_PER_AI_MESSAGE:
                 continue
+        if card["relevance"] == "related":
+            try:
+                _attach_evidence(card, raw, meta)
+            except ValueError:
+                if card["tag"] != "none":
+                    raise  # 저장될 카드의 근거가 원문에 없으면 묶음 실패 (test_contract)
+                continue  # 수집기가 저장하지 않는 제안 카드는 근거가 틀려도 묶음을 막지 않고 뺀다
         if card["relevance"] == "related" and card["topic_key"] and card["topic_key"] not in topics:
             topics.append(card["topic_key"])  # 같은 묶음 안 다음 카드는 기존 주제로 봄
         out.append((idx, card))

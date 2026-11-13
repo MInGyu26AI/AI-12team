@@ -17,6 +17,15 @@ class ContractTest(unittest.TestCase):
         self.assertFalse(result['ok'])
         self.assertEqual(request['messages'][0]['text'], 'DB 차이를 설명해 줘.')
 
+    def test_discarded_card_with_bad_evidence_does_not_fail_the_batch(self):
+        # 저장하지 않을 제안 카드나 AI 답변의 상한 초과 카드는 근거가 틀려도 같은 묶음의 결정을 막지 않는다 (코드 지도 지적)
+        request = dict(messages=[msg(1, 'SQLite로 결정했다.'), msg(2, 'MySQL도 괜찮아요.', role='assistant')])
+        suggestion = dict(msg=2, relevance='related', sentence='MySQL을 추천합니다.', content='MySQL 추천',
+                          tag='none', subtopic='작업·결과물', topic_key='DB', confidence=.9)
+        result = handle_request(request, FakeLLM({'cards': [self.card('SQLite로 결정했다.'), suggestion]}))
+        self.assertTrue(result['ok'])
+        self.assertEqual([c['tag'] for c in result['cards']], ['decision'])
+
     def test_guessed_role_and_source_are_preserved_for_review(self):
         sentence = 'SQLite로 결정했다.'
         request = dict(messages=[{**msg(1, sentence), 'roleGuessed': True}])
