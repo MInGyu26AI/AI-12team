@@ -1,11 +1,124 @@
 {
-  "_note": "합성 픽스처. 마지막 답변 생성 중 → 그 턴은 빠지고 inProgress=true",
+  "_note": "합성 픽스처. 도구 호출 노드(p-tool, recipient=web.run)는 완료 표시가 있지만 최종 답 p-a2 가 생성 중 → 턴 2 미완료, inProgress=true (실측 P7)",
   "conversation_id": "c0ffee00-0000-4000-8000-000000000002",
   "current_node": "p-a2",
   "mapping": {
-    "p-u1": { "id": "p-u1", "parent": null, "children": ["p-a1"], "message": { "id": "p-u1", "author": { "role": "user" }, "create_time": 1762995700.0, "content": { "content_type": "text", "parts": ["회의 시간 정하자"] } } },
-    "p-a1": { "id": "p-a1", "parent": "p-u1", "children": ["p-u2"], "message": { "id": "p-a1", "author": { "role": "assistant" }, "recipient": "all", "create_time": 1762995705.0, "content": { "content_type": "text", "parts": ["화요일 3시 어때요?"] }, "status": "finished_successfully", "end_turn": true, "metadata": { "is_complete": true } } },
-    "p-u2": { "id": "p-u2", "parent": "p-a1", "children": ["p-a2"], "message": { "id": "p-u2", "author": { "role": "user" }, "create_time": 1762995800.0, "content": { "content_type": "text", "parts": ["좋아, 안건도 정리해 줘"] } } },
-    "p-a2": { "id": "p-a2", "parent": "p-u2", "children": [], "message": { "id": "p-a2", "author": { "role": "assistant" }, "recipient": "all", "create_time": 1762995802.0, "content": { "content_type": "text", "parts": ["안건은 1) "] }, "status": "in_progress", "end_turn": null, "metadata": {} } }
+    "p-u1": {
+      "id": "p-u1",
+      "parent": null,
+      "children": [
+        "p-a1"
+      ],
+      "message": {
+        "id": "p-u1",
+        "author": {
+          "role": "user"
+        },
+        "create_time": 1762995700.0,
+        "content": {
+          "content_type": "text",
+          "parts": [
+            "회의 시간 정하자"
+          ]
+        }
+      }
+    },
+    "p-a1": {
+      "id": "p-a1",
+      "parent": "p-u1",
+      "children": [
+        "p-u2"
+      ],
+      "message": {
+        "id": "p-a1",
+        "author": {
+          "role": "assistant"
+        },
+        "recipient": "all",
+        "create_time": 1762995705.0,
+        "content": {
+          "content_type": "text",
+          "parts": [
+            "화요일 3시 어때요?"
+          ]
+        },
+        "status": "finished_successfully",
+        "end_turn": true,
+        "metadata": {
+          "is_complete": true
+        }
+      }
+    },
+    "p-u2": {
+      "id": "p-u2",
+      "parent": "p-a1",
+      "children": [
+        "p-tool"
+      ],
+      "message": {
+        "id": "p-u2",
+        "author": {
+          "role": "user"
+        },
+        "create_time": 1762995800.0,
+        "content": {
+          "content_type": "text",
+          "parts": [
+            "좋아, 안건도 정리해 줘"
+          ]
+        }
+      }
+    },
+    "p-a2": {
+      "id": "p-a2",
+      "parent": "p-tool",
+      "children": [],
+      "message": {
+        "id": "p-a2",
+        "author": {
+          "role": "assistant"
+        },
+        "recipient": "all",
+        "create_time": 1762995802.0,
+        "content": {
+          "content_type": "text",
+          "parts": [
+            "안건은 1) "
+          ]
+        },
+        "status": "in_progress",
+        "end_turn": null,
+        "metadata": {}
+      }
+    },
+    "p-tool": {
+      "id": "p-tool",
+      "parent": "p-u2",
+      "children": [
+        "p-a2"
+      ],
+      "message": {
+        "id": "p-tool",
+        "author": {
+          "role": "assistant"
+        },
+        "recipient": "web.run",
+        "create_time": 1762995801.0,
+        "content": {
+          "content_type": "code",
+          "parts": [
+            "{\"search\":\"회의 안건\"}"
+          ]
+        },
+        "status": "finished_successfully",
+        "end_turn": false,
+        "metadata": {
+          "is_complete": true,
+          "finish_details": {
+            "type": "stop"
+          }
+        }
+      }
+    }
   }
 }
