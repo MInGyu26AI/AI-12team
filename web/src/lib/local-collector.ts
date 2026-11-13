@@ -146,6 +146,29 @@ async function act(method: string, params: Record<string, unknown> = {}) {
   }
 }
 
+// 싱크 맞추기: 쌓인 대화를 지금 분류 대기열에 넣고(collection.flush, 팝업과 같은 요청) 상태를 다시 읽는다.
+// 쌓인 대화가 없거나 수집 중이 아니면 다시 읽기만 한다. 자동(승인함에 들어올 때)은 조용히, SYNC_GAP_MS 안에 한 번만
+const SYNC_GAP_MS = 60_000;
+let lastAutoSync = 0;
+async function sync(auto = false) {
+  if (USE_MOCK) {
+    if (!auto) toast.info("예시 모드에서는 실제 수집기에 요청하지 않습니다.");
+    return;
+  }
+  if (auto) {
+    if (Date.now() - lastAutoSync < SYNC_GAP_MS) return;
+    lastAutoSync = Date.now();
+  }
+  try {
+    const st = snapshot.status;
+    if (st?.autoCollect && st.bufferedTurns) await rpc("collection.flush");
+    await refreshCollector();
+    if (!auto) toast.success("싱크를 맞췄어요. 새 후보는 분류가 끝나면 올라와요.");
+  } catch (error) {
+    if (!auto) toast.error((error as Error).message);
+  }
+}
+
 // 개인정보 처리 요청은 서버 답을 돌려주거나 던진다 (실패를 성공으로 보이지 않게).
 // {queued:true} 는 다음 실행에서 다시 본다는 뜻이지 검사가 끝났다는 뜻이 아니다.
 async function privacyAction(method: "privacy.recheck" | "privacy.exclude", params: { id: string; teamId: string; messageId?: string }) {
@@ -175,7 +198,8 @@ const ACTIONS = {
   privacyAction,
   remove,
   updateSettings: (patch: ExtSettingsPatch) => act("collection.configure", { ...patch }),
-  flush: () => act("collection.flush"),
+  sync: () => sync(),
+  autoSync: () => sync(true),
 };
 
 /** 후보까지 필요한 곳 (승인함·대화 수집) */

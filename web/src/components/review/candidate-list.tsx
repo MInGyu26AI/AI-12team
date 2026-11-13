@@ -23,7 +23,7 @@ export function CandidateList({ review, selection, othersOpen, onToggleOthers }:
   onToggleOthers: () => void;
 }) {
   const { collector } = review;
-  if (!review.total && !review.personal) return <NoCandidates available={collector.available} turns={collector.status?.turnsPerBatch} />;
+  if (!review.total && !review.personal) return <NoCandidates available={collector.available} />;
   return (
     <div className="space-y-4">
       {review.shareable.map((c) => (
@@ -50,12 +50,12 @@ export function CandidateList({ review, selection, othersOpen, onToggleOthers }:
   );
 }
 
-function NoCandidates({ available, turns }: { available: boolean; turns: number | undefined }) {
+function NoCandidates({ available }: { available: boolean }) {
   return (
     <EmptyState title="승인할 후보가 없어요">
       <p className="break-keep">
         {available
-          ? `ChatGPT에서 대화를 ${turns ?? TURNS_PER_BATCH}회 나누면 후보가 자동으로 올라와요.`
+          ? `ChatGPT에서 대화를 ${TURNS_PER_BATCH}회 나누면 후보가 자동으로 올라와요. 바로 확인하려면 '싱크 맞추기'를 눌러 주세요.`
           : "브라우저 확장을 설치하거나 대화를 직접 붙여넣어 보세요."}
       </p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">

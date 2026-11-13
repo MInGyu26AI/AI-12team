@@ -133,6 +133,20 @@ describe('대화 보내기', () => {
   });
 });
 
+describe('묶음 크기 고정', () => {
+  it('수집기에 예전에 바꾼 묶음 크기가 남아 있으면 기본값(10)으로 되돌린다', async () => {
+    overrides['candidates.list'] = { ok: true, result: { cards: [], status: { ...STATUS, turnsPerBatch: 12 } } };
+    await send({ type: 'refresh' }, fromPopup());
+    const configure = nativeCalls.find((c) => c.method === 'collection.configure');
+    expect(configure?.params).toEqual({ turnsPerBatch: 10 });
+  });
+
+  it('이미 기본값이면 설정을 다시 보내지 않는다', async () => {
+    await send({ type: 'refresh' }, fromPopup());
+    expect(calledMethods()).not.toContain('collection.configure');
+  });
+});
+
 describe('우클릭 메뉴로 선택한 내용 보내기', () => {
   it('저장 뒤 안내 전송이 실패해도 오류로 남기지 않는다 (콘텐츠 스크립트가 없는 탭)', async () => {
     const toast = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockRejectedValue(new Error('Receiving end does not exist.'));

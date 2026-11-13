@@ -1,7 +1,8 @@
-// 자동 수집 켜기 · 묶음 크기 · 종료 시각. 바꿀 때마다 로컬 수집기에 바로 저장한다
+// 자동 수집 켜기 · 종료 시각(묶음 크기는 기본값 고정). 바꿀 때마다 로컬 수집기에 바로 저장한다
 import type { ExtSettingsPatch } from '@shared/bridge';
+import { TURNS_PER_BATCH } from '@shared/batch';
 import { sendToBackground } from '@/lib/messages';
-import { clampTurns, endsAtOf, isEnded, turnsOf, type Settings } from '@/lib/settings';
+import { endsAtOf, isEnded, type Settings } from '@/lib/settings';
 import { fromLocalInput, toLocalInput } from './datetime-local';
 
 async function save(patch: ExtSettingsPatch) {
@@ -25,23 +26,12 @@ export function AutoCollectSwitch({ autoCollect }: { autoCollect: boolean }) {
 
 // 몇 번의 대화마다 분류할지와 수집 종료 시각
 export function CollectionLimits({ settings }: { settings: Settings }) {
-  const turns = turnsOf(settings);
   const end = endsAtOf(settings);
   return (
     <section className="space-y-2 rounded-lg border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span>대화</span>
-        <span className="flex items-center rounded-md border">
-          <button className="px-2 py-0.5 text-gray-500" onClick={() => void save({ turnsPerBatch: clampTurns(turns - 1) })} aria-label="줄이기">
-            −
-          </button>
-          <b className="w-7 text-center text-brand">{turns}</b>
-          <button className="px-2 py-0.5 text-gray-500" onClick={() => void save({ turnsPerBatch: clampTurns(turns + 1) })} aria-label="늘리기">
-            +
-          </button>
-        </span>
-        <span className="flex-1 text-xs text-gray-600">회마다 분류해 검토함에 올려요</span>
-      </div>
+      <p className="text-xs text-gray-600">
+        대화 <b className="text-brand">{TURNS_PER_BATCH}</b>회마다 분류해 검토함에 올려요
+      </p>
       <label className="flex items-center justify-between gap-2 text-xs">
         <span className="text-gray-600">수집 종료 시각</span>
         <input

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Minus, Plus } from "lucide-react";
-import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from "@shared/batch";
+import { TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
 import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
@@ -77,40 +76,19 @@ export default function CollectPage() {
       {/* 수집 기준 */}
       <section className="space-y-5 rounded-xl border bg-card p-6">
         <h2 className="font-semibold">수집 기준</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <span>대화</span>
-          <span className="flex items-center rounded-lg border">
-            <button
-              className="px-3 py-2 text-muted-foreground disabled:opacity-40"
-              disabled={!connected || st.turnsPerBatch <= 1}
-              onClick={() => st && collector.updateSettings({ turnsPerBatch: st.turnsPerBatch - 1 })}
-              aria-label="줄이기"
-            >
-              <Minus className="size-4" />
-            </button>
-            <b className="w-8 text-center text-lg text-brand">{st?.turnsPerBatch ?? TURNS_PER_BATCH}</b>
-            <button
-              className="px-3 py-2 text-muted-foreground disabled:opacity-40"
-              disabled={!connected || st.turnsPerBatch >= MAX_TURNS_PER_BATCH}
-              onClick={() => st && collector.updateSettings({ turnsPerBatch: st.turnsPerBatch + 1 })}
-              aria-label="늘리기"
-            >
-              <Plus className="size-4" />
-            </button>
-          </span>
-          <span>회마다 자동으로 수집해 승인함에 올려요</span>
-        </div>
+        <p>
+          대화 <b className="text-lg text-brand">{TURNS_PER_BATCH}</b>회마다 자동으로 수집해 승인함에 올려요
+        </p>
         {connected && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
             <span>
-              다음 수집까지 대화 <b>{st.bufferedTurns}</b>/{st.turnsPerBatch}회
+              다음 수집까지 대화 <b>{st.bufferedTurns}</b>/{TURNS_PER_BATCH}회
             </span>
             <button
-              className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-              disabled={!st.bufferedTurns}
-              onClick={collector.flush}
+              className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium"
+              onClick={collector.sync}
             >
-              지금 수집하기
+              싱크 맞추기
             </button>
           </div>
         )}
@@ -137,7 +115,7 @@ export default function CollectPage() {
       <RecentBatches
         batches={connected ? st.recent : null}
         pendingIds={pendingIds}
-        emptyText={connected ? `ChatGPT에서 대화를 ${st.turnsPerBatch}회 나누면 여기에 쌓여요.` : "브라우저 확장을 연결하면 수집 기록이 보여요."}
+        emptyText={connected ? `ChatGPT에서 대화를 ${TURNS_PER_BATCH}회 나누면 여기에 쌓여요.` : "브라우저 확장을 연결하면 수집 기록이 보여요."}
       />
 
       <p className="text-sm text-muted-foreground">
