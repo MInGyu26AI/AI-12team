@@ -4,6 +4,7 @@ import { appendTurns } from '@/lib/append-turns';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
 import { CONFLICT_ALARM, checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
+import { refreshRepo } from '@/lib/repo-status';
 import { collectResultToast, type BgRequest, type TabToast } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
 import { settingsItem } from '@/lib/settings';
@@ -38,6 +39,7 @@ async function handleRequest(message: BgRequest, sender: Browser.runtime.Message
       await refreshStatus();
       return { ok: true };
     case 'refresh':
+      void refreshRepo(); // 팝업 하단 레포 상태. 실패해도 상태 새로 고침 결과와 상관없다
       return { ok: true, result: await refreshStatus() };
     default:
       throw new Error('지원하지 않는 요청');
@@ -73,10 +75,11 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 export default defineBackground(() => {
   void refreshStatusOrRecordFailure();
   void checkConflicts();
+  void refreshRepo();
   browser.alarms.create('refresh', { periodInMinutes: 0.5 });
   browser.alarms.create(CONFLICT_ALARM, { periodInMinutes: 1 });
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === CONFLICT_ALARM) void checkConflicts();
+    if (alarm.name === CONFLICT_ALARM) void checkConflicts().then(refreshRepo);
     else void refreshStatusOrRecordFailure();
   });
   browser.notifications.onClicked.addListener((id) => void openBoardFromNotification(id));

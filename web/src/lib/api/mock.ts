@@ -119,5 +119,9 @@ export function createMockApi(): TeamApi {
       const events = Object.values(s.resolutions).map((r) => ({ resolution: r.resolution, note: r.note ?? "", at: r.at ?? "" }));
       return { records: s.board, events };
     },
+    // 목업 팀은 레포에 저장하지 않는다 (레포 상태 바·팀 기록 파일은 실제 모드에서만)
+    async getRepo() {
+      return { linked: false };
+    },
   };
 }

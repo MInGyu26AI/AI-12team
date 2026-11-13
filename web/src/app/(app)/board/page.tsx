@@ -5,24 +5,30 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, timeOf } from "@shared/format";
 import { alertLevel, type AlertLevel } from "@shared/labels";
+import { repoIndex } from "@shared/repo";
 import type { RelatedCard } from "@shared/types";
 import { ConflictBanner } from "@/components/board/conflict-banner";
 import { ConflictChecks } from "@/components/board/conflict-checks";
 import { DecisionHistoryList } from "@/components/board/decision-history";
 import { DecisionTimeline, TopicFilter } from "@/components/board/decision-timeline";
+import { RepoStatusBar } from "@/components/board/repo-status";
 import { ResearchPanel } from "@/components/board/research-panel";
+import { TeamRecord } from "@/components/board/team-record";
 import { TodoPanel } from "@/components/board/todo-panel";
 import { ConflictDialog } from "@/components/conflict-dialog";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { USE_MOCK, api } from "@/lib/api";
 import { resetMockData } from "@/lib/api/mock";
 import { boardToMarkdown } from "@/lib/board-markdown";
 import { useBoard } from "@/lib/use-board";
+import { useRepo } from "@/lib/use-repo";
 
 // 피그마 6번: 팀 결정 기록 보드
 export default function BoardPage() {
   const { load, refresh, reload } = useBoard();
+  const repo = useRepo();
   const [topic, setTopic] = useState<string | null>(null); // 왼쪽 세부 주제 필터
   const [dialog, setDialog] = useState(false);
 
@@ -34,6 +40,7 @@ export default function BoardPage() {
   const { decisions, todos, research, topics, lastUpdate } = boardSections(cards);
   const shown = topic ? decisions.filter((c) => topicOf(c) === topic) : decisions;
   const flagged = new Map<string, AlertLevel>(conflicts.map((x) => [x.cardB.id, alertLevel(x)]));
+  const { todoIds, savedDecisions } = repoIndex(repo.state);
 
   const copyRecord = async () => {
     try {
@@ -86,21 +93,33 @@ export default function BoardPage() {
       <DecisionHistoryList />
       <ConflictChecks cards={cards} onRetry={retryCheck} />
       {conflicts.length > 0 && <ConflictBanner conflicts={conflicts} onOpen={() => setDialog(true)} />}
+      <RepoStatusBar status={repo.status} unreachable={repo.unreachable} />
 
-      {!cards.length ? (
-        <EmptyState title="아직 팀에 올라온 결정이 없어요">
-          <p>승인함에서 내용을 골라 올리면 여기에 쌓여요.</p>
-        </EmptyState>
-      ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[200px_minmax(0,1fr)_300px]">
-          <TopicFilter topics={topics} total={decisions.length} active={topic} onChange={setTopic} />
-          <DecisionTimeline decisions={shown} flagged={flagged} onOpenConflict={() => setDialog(true)} />
-          <div className="space-y-5">
-            <TodoPanel todos={todos} done={done} onToggle={toggleTodo} />
-            {research.length > 0 && <ResearchPanel research={research} />}
-          </div>
-        </div>
-      )}
+      <Tabs defaultValue="board" className="gap-5">
+        <TabsList aria-label="팀 보드 보기">
+          <TabsTrigger value="board">결정 보드</TabsTrigger>
+          <TabsTrigger value="record">팀 기록</TabsTrigger>
+        </TabsList>
+        <TabsContent value="record">
+          <TeamRecord status={repo.status} onCopy={copyRecord} />
+        </TabsContent>
+        <TabsContent value="board">
+          {!cards.length ? (
+            <EmptyState title="아직 팀에 올라온 결정이 없어요">
+              <p>승인함에서 내용을 골라 올리면 여기에 쌓여요.</p>
+            </EmptyState>
+          ) : (
+            <div className="grid items-start gap-5 lg:grid-cols-[200px_minmax(0,1fr)_300px]">
+              <TopicFilter topics={topics} total={decisions.length} active={topic} onChange={setTopic} />
+              <DecisionTimeline decisions={shown} flagged={flagged} saved={savedDecisions} onOpenConflict={() => setDialog(true)} />
+              <div className="space-y-5">
+                <TodoPanel todos={todos} done={done} todoIds={todoIds} onToggle={toggleTodo} />
+                {research.length > 0 && <ResearchPanel research={research} />}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {USE_MOCK && (
         <p className="text-center text-xs text-muted-foreground">

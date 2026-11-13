@@ -40,10 +40,12 @@ function TopicButton({ label, count, active, onClick }: { label: string; count: 
   );
 }
 
-// 가운데: 결정 타임라인 (최신순). 충돌·변경 판정이 걸린 새 결정은 빨간 테두리, 배지를 누르면 충돌 모달
-export function DecisionTimeline({ decisions, flagged, onOpenConflict }: {
+// 가운데: 결정 타임라인 (최신순). 충돌·확인 필요·변경이 걸린 새 결정은 단계 색 테두리, 배지를 누르면 충돌 모달.
+// 레포의 syncup.json 에 들어간 결정은 "레포 반영 ✓"
+export function DecisionTimeline({ decisions, flagged, saved, onOpenConflict }: {
   decisions: RelatedCard[];
   flagged: Map<string, AlertLevel>; // 새 결정(cardB) id → 알림 단계 (충돌·확인 필요·변경)
+  saved: Set<string>; // 레포에 반영된 결정 카드 id
   onOpenConflict: () => void;
 }) {
   return (
@@ -51,7 +53,7 @@ export function DecisionTimeline({ decisions, flagged, onOpenConflict }: {
       {decisions.length ? (
         <ol className="divide-y">
           {decisions.map((c) => (
-            <DecisionItem key={c.id} card={c} level={flagged.get(c.id)} onOpen={onOpenConflict} />
+            <DecisionItem key={c.id} card={c} level={flagged.get(c.id)} saved={saved.has(c.id)} onOpen={onOpenConflict} />
           ))}
         </ol>
       ) : (
@@ -61,7 +63,7 @@ export function DecisionTimeline({ decisions, flagged, onOpenConflict }: {
   );
 }
 
-function DecisionItem({ card: c, level, onOpen }: { card: RelatedCard; level?: AlertLevel; onOpen: () => void }) {
+function DecisionItem({ card: c, level, saved, onOpen }: { card: RelatedCard; level?: AlertLevel; saved: boolean; onOpen: () => void }) {
   const src = parseSource(c.source);
   return (
     <li
@@ -86,6 +88,7 @@ function DecisionItem({ card: c, level, onOpen }: { card: RelatedCard; level?: A
               {ALERT_LEVEL[level].label}
             </button>
           )}
+          {saved && <span className="rounded-full bg-ok-soft px-2.5 py-0.5 text-xs font-semibold text-ok">레포 반영 ✓</span>}
         </div>
         <p className="text-lg font-bold break-keep">{c.content}</p>
         {c.conflictCheckStatus === "complete" && <CheckProgress card={c} />}

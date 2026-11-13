@@ -5,6 +5,7 @@ import type { ExtStatus } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
 import { checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
+import { refreshRepo, repoItem } from '@/lib/repo-status';
 import { collectStateItem, settingsItem } from '@/lib/settings';
 import { LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
 
@@ -174,6 +175,18 @@ describe('충돌 시스템 알림', () => {
     await useWebUrl(PRODUCTION_WEB_URL);
     await openBoardFromNotification('syncup-conflicts');
     expect(open).toHaveBeenCalledWith({ url: `${PRODUCTION_WEB_URL}/board` });
+  });
+});
+
+describe('레포 연결 상태 (팝업 하단)', () => {
+  it('team.repo 를 저장하고, 수집기에 닿지 못하면 지운다', async () => {
+    const repo = { linked: true, repo: 'MInGyu26AI/AI-12team', branch: 'main', state: 'saved', commit: { sha: 'a1b2c3d' } };
+    overrides['team.repo'] = { ok: true, result: { repo } };
+    await refreshRepo();
+    expect(await repoItem.getValue()).toEqual(repo);
+    overrides['team.repo'] = 'unreachable';
+    await refreshRepo();
+    expect(await repoItem.getValue()).toBeNull();
   });
 });
 

@@ -3,6 +3,7 @@ import { webUrlOf } from '@/lib/web-url';
 import { AutoCollectSwitch, CollectionLimits } from './CollectionControls';
 import { Notice } from './Notice';
 import { QueueStatus } from './QueueStatus';
+import { RepoFooter } from './RepoFooter';
 import { TabNotice } from './TabNotice';
 
 interface MainScreenProps {
@@ -49,6 +50,7 @@ export function MainScreen({ settings, lastError, pendingCount, onEdit }: MainSc
           {webUrl.replace(/^https?:\/\//, '')}
         </p>
       </div>
+      <RepoFooter />
     </main>
   );
 }

@@ -3,16 +3,19 @@
 import Link from "next/link";
 import { TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
+import { RepoLinkRow } from "@/components/board/repo-status";
 import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
 import { useLocalCollector } from "@/lib/local-collector";
+import { useRepo } from "@/lib/use-repo";
 import { cn } from "@/lib/utils";
 
 // 피그마 3번: 대화 자동 수집 (브라우저 확장 상태·수집 기준·최근 수집)
 export default function CollectPage() {
   const collector = useLocalCollector();
+  const repo = useRepo();
   const st = collector.status;
   const connected = collector.available && !!st;
   const pendingIds = new Set(collector.cards.map((c) => c.id));
@@ -28,6 +31,11 @@ export default function CollectPage() {
       {collector.error && <p role="alert">{collector.error}</p>}
       <ExtensionMissingDialog missing={collector.extensionMissing} />
       {connected && <CollectionSettings status={st} onChange={collector.updateSettings} />}
+      {connected && repo.status && (
+        <section className="rounded-xl border bg-card px-6 py-4" aria-label="레포 연결">
+          <RepoLinkRow status={repo.status} />
+        </section>
+      )}
 
       {/* 연결된 AI */}
       <section className="rounded-xl border bg-card p-6">
