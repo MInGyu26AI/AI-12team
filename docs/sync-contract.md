@@ -80,19 +80,27 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
    - 턴 안 `createdAt`의 최소와 최대가 `sync_windows`의 같은 조각 `[start, end)` 안에 있어야 합니다(`start ≤ 최소`, `최대 < end`).
    - 창 밖 턴은 저장하지도 격리하지도 않고 `outsideWindow`에 셉니다. 창 밖 턴은 아래 단계를 거치지 않습니다.
 3. **C4-b 화면이 받은 턴.** 사용자 메시지 `chatgpt:<turnId>`의 intake 행이 이미 있는지 봅니다.
-   - 행이 없을 때: 이 턴의 assistant 메시지 id 가운데 하나라도 화면 경로 intake 행으로 이미 있으면, 이 턴 전체를 받지 않고 `skippedTurns`에 셉니다. 화면 질문이 해시 id였거나 격리된 경우입니다. 그렇지 않으면 4로 갑니다.
+   - 행이 없을 때: 이 턴의 assistant 메시지 id 가운데 화면 경로 intake 행으로 이미 있는 것이 있는지 봅니다.
+     - 없으면 4로 갑니다.
+     - 있고 그 화면 답 행이 모두 아직 묶이지 않았으면(`job IS NULL`), 그 화면 답 행의 message JSON에 `turnId`를 채운 뒤 4로 갑니다. 4에서 질문은 새로 저장되고, 화면에 있던 답은 C4-a로 중복이 됩니다. 같은 `turnId`라서 `group_turns`가 질문과 답을 한 턴으로 묶습니다(도착 순서는 답이 먼저입니다. 정렬은 9장 C5).
+       - 이런 일이 생기는 때: 다른 기기에서 질문하고 답이 생성되는 동안 PC에서 대화를 열면, 화면 기준선이 질문을 넣고 답만 보냅니다. 화면 질문이 해시 id였거나 20000자를 넘어 격리된 경우도 같습니다. 11/13 통합본 리뷰에서 재현했습니다.
+     - 있고 그 화면 답 행이 이미 묶였으면, 이 턴 전체를 받지 않고 `skippedTurns`에 셉니다.
    - 행이 있을 때: 같은 대화에서 그 행보다 rowid가 크고, **그 대화의 다음 화면 user 행보다 rowid가 작은** 화면 경로(origin 없음 또는 `screen`) assistant 행이 있는지 봅니다. 다음 user 행이 없으면 위쪽은 열려 있습니다. 그런 행이 있으면 이 턴 전체를 받지 않고 `skippedTurns`에 셉니다. 대화 뒤쪽 다른 턴의 답을 이 턴의 답으로 착각하지 않기 위해서입니다.
    - 그런 행이 없고 사용자 행이 아직 묶이지 않았으면(`job IS NULL`), 그 행의 message JSON에 `turnId`만 채웁니다. 본문은 바꾸지 않습니다. 그다음 답변만 4로 보내고, 질문은 4에서 중복이 됩니다.
      - 이유: `ai/syncup_ai/batch.py:19-20`은 `turnId`가 같은 발화끼리만 한 턴으로 묶습니다. 질문 행에 `turnId`가 없으면 질문과 답이 갈라집니다.
    - 사용자 행이 이미 묶였으면 이 턴을 받지 않고 `skippedTurns`에 셉니다. 질문은 이미 분류됐고, 답만 따로 넣으면 질문 없는 턴이 됩니다.
-4. **C4-a 저장.** 메시지마다 지금 `store_messages`처럼 처리합니다. 같은 intake id가 이미 있을 때만 판단이 바뀝니다.
+4. **팀 기록 거르기.** 사용자 메시지(모든 origin, 화면 경로 포함) 본문에 팀 기록 머리 `# 싱크업 팀 기록`이 있으면 그 부분을 지웁니다.
+   - 지우는 범위는 그 줄부터 끝 표시 `<!-- 싱크업 팀 기록 끝 -->` 줄까지입니다. 끝 표시가 없으면 머리부터 본문 끝까지 지웁니다.
+   - 남은 본문이 비면 그 메시지는 저장하지 않고 `teamRecordSkipped`에 셉니다. 남은 본문이 있으면 그것만 저장합니다. 가린 뒤 비교(C4-a)도 지운 뒤 본문으로 합니다.
+   - 이유: '팀 기록 불러오기'로 채워 보낸 글이 다시 수집돼 이미 승인한 팀 결정이 내 발화로 다시 분류되는 것을 막기 위해서입니다.
+5. **C4-a 저장.** 메시지마다 지금 `store_messages`처럼 처리합니다. 같은 intake id가 이미 있을 때만 판단이 바뀝니다.
    - origin이 다르면(없음 = `screen`) 중복입니다. 격리하지 않고 먼저 저장된 행을 남깁니다.
    - origin이 같고 본문·화자가 다르면 지금처럼 `message_changed`로 격리합니다.
 
 **응답.** 지금 필드에 다음을 더합니다. 화면 경로 호출에서는 모두 0입니다.
 
 ```
-{ newMessages, queued, intakeIssues, outsideWindow: int, skippedTurns: int, newTurns: int }
+{ newMessages, queued, intakeIssues, outsideWindow: int, skippedTurns: int, newTurns: int, teamRecordSkipped: int }
 ```
 
 - `newTurns`는 새로 저장된 메시지가 하나 이상인 동기화 턴 수입니다.
@@ -109,7 +117,7 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 |---|---|---|
 | `sync.session` | `GET /api/auth/session` | `null` |
 | `sync.projects` | `GET /backend-api/gizmos/snorlax/sidebar` | `SyncProject[]` |
-| `sync.projectPage` | `GET /backend-api/gizmos/{gizmoId}/conversations?limit=50&owned_only=false`. 다음 쪽부터 `&cursor=<encodeURIComponent(받은 cursor)>`를 붙인다. 첫 쪽에는 cursor를 붙이지 않는다 | `{items, nextCursor}` |
+| `sync.projectPage` | `GET /backend-api/gizmos/{gizmoId}/conversations?limit=50&owned_only=true`. 다음 쪽부터 `&cursor=<encodeURIComponent(받은 cursor)>`를 붙인다. 첫 쪽에는 cursor를 붙이지 않는다. **`owned_only=true`는 내 대화만 받기 위한 것이라 바꾸지 않는다**(아래 실측) | `{items, nextCursor, skippedItems}` |
 | `sync.conversation` | `GET /backend-api/conversation/{id}` → `normalizeConversation` → `turnsInWindows` → `CollectedMessage[]` | `{messages, inProgress, inProgressAt, skippedNoTime}` |
 
 **실측 (11/13, `side-session-notes/.../project-api-evidence-20261113.md`, `phone-origin-evidence-20261113.md`).**
@@ -123,7 +131,15 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 - 화면에는 `data-message-id`가 없습니다. `data-chatgpt-search-message-ids`의 사용자 id와 최종 답 id가 API id와 같습니다. 도구·생각 노드 id는 화면에 없습니다.
 - 아직 확인하지 않은 것: P2(확장 격리 world의 fetch, 개발 빌드에서 처음 확인), P5, P9, P11.
 
-**필수 필드.** 아래 필드가 없거나 타입이 다르면 `shape_changed`입니다. `normalizeConversation`이 던진 Error도 `shape_changed`입니다.
+**공유 프로젝트 실측 (11/13, `Documents/Codex/2026-11-12/new-chat-2/work/shared-owner-verified-20261113.md`).**
+- 다른 계정이 대화를 만든 공유 프로젝트에서 `owned_only=false`는 내 대화 4개와 다른 계정 대화 1개를 돌려줬습니다. `true`는 내 대화 4개만 돌려줬습니다.
+- 항목의 `owner`는 `{user_id, user_email, name, avatar_url}`입니다.
+- 회의록 7장 시연은 팀원들이 같은 프로젝트에서 각자 대화하는 것이라, `false`면 남의 대화가 내 발화로 들어가 외부 AI 분류까지 갑니다.
+- `owner.user_id`를 세션 `user.id`와 비교하는 이중 확인은 두 값의 형식이 같은지 확인되지 않아 넣지 않습니다(9장).
+
+**필수 필드.** 응답 최상위 모양(세션의 `accessToken`·`user.id`, 사이드바와 목록의 `items` 배열과 `cursor`, 상세의 `mapping`)이 없거나 타입이 다르면 `shape_changed`입니다. `normalizeConversation`이 던진 Error도 `shape_changed`입니다.
+
+**항목 하나의 모양이 틀릴 때.** 사이드바·목록의 항목 하나에 아래 필드가 없으면 그 항목만 건너뜁니다. 목록은 그 수를 `skippedItems`에 넣습니다. 항목이 하나 이상 있는데 모두 건너뛰었을 때만 `shape_changed`입니다.
 
 | 응답 | 필수 필드 |
 |---|---|
@@ -198,6 +214,7 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
    - 세션·사이드바·목록 응답의 `shape_changed`: `shape_changed`. 대화 상세 하나의 `shape_changed`는 멈춤이 아니고 아래 4의 대화별 실패입니다.
    - 수집기 `accountSync`가 꺼졌거나 null이거나, 그 `account`가 `SyncState.account`와 다름: `collector_off`. 수집기 상태 폴더를 새로 만들었거나 다른 곳에서 끈 경우입니다. 팝업은 "수집기에서 동기화가 꺼져 있어요. 다시 켜 주세요"를 보여 줍니다.
    - `collectorOffPending`이면 패스를 돌지 않습니다(`mode='off'`).
+   - 고른 프로젝트 목록이 `not_found`(404)이면 `project_missing`으로 멈춥니다. 프로젝트를 지웠거나 접근할 수 없게 된 경우입니다. 팝업 문구는 "고른 프로젝트를 찾을 수 없어요. 동기화를 껐다가 다시 골라 주세요"입니다.
 2. **창 읽기.** 1에서 읽은 `rpc('collection.status')`의 `syncWindows`를 씁니다. 비었으면 끝냅니다. 이 상태는 `syncNow`의 flush 판단에도 그대로 씁니다.
 3. **대상 고르기.** `pending`이 비었으면 고른 프로젝트 목록을 쪽마다 읽습니다.
    - 실효 커서는 `max(syncWindows[0].start, cursor)`입니다(날짜로 비교).
@@ -210,7 +227,12 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
    - 끝난 대화는 `pending`에서 빼고 `failures`에서도 지웁니다.
    - `not_found`인 대화는 건너뜁니다.
    - `inProgress`인 대화는 "남김"으로 표시하고 `pending`에서 뺍니다. 다만 `inProgressAt`이 10분보다 오래됐으면 남김으로 보지 않습니다. 첫 글자 전에 멈춘 답이나 오류로 끝난 답이 커서를 영원히 붙잡지 않게 하기 위해서입니다. 그 턴은 보내지 않습니다.
-   - **대화별 실패:** `network`, 그 대화 상세의 `shape_changed`, 그 대화의 `turns.append` 실패가 해당합니다. `failures[id]`를 1 늘리고, `pending`에서 빼고, "남김"으로 표시합니다. 3번째 실패에서는 그 대화를 건너뜀으로 처리합니다. 남김으로 보지 않고, `lastError`와 `stats.skippedConversations`에 남깁니다. 그 대화가 나중에 바뀌어 목록에 다시 오르면 다시 시도합니다. 대화 하나가 동기화 전체를 막지 않게 하기 위해서입니다.
+   - **대화별 실패:** 대상은 그 대화 상세의 `network`·`shape_changed`·`forbidden`(403)과, 그 대화의 `turns.append` 실패입니다.
+     - `failures[id]`를 1 늘리고, `pending`에서 빼고, "남김"으로 표시합니다.
+     - 3번째 실패에서는 그 대화를 건너뜀으로 처리합니다. 남김으로 보지 않고, `lastError`에 남깁니다.
+     - 그 대화가 나중에 바뀌어 목록에 다시 오르면 다시 시도하고, 성공하면 `failures`에서 지웁니다.
+     - 대화 하나가 동기화 전체를 막지 않게 하기 위해서입니다. 대화 상세 403은 쉼이 아니라 이 규칙으로 처리합니다. 세션·사이드바·목록의 403만 쉼입니다(6).
+   - **`stats.skippedConversations`:** 패스가 끝날 때마다 "지금 `failures`가 3 이상인 대화 수"로 다시 셉니다. 누적하지 않습니다. 켤 때 `failures`와 함께 0으로 둡니다.
 5. **커서.** 커서는 아래 셋이 모두 맞을 때만 `pendingPassStartedAt − 10분`으로 올립니다.
    - `pending`이 비었습니다.
    - 이 묶음에서 "남김"이 하나도 없었습니다.
@@ -219,7 +241,15 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
    커서를 못 올리면 다음 패스가 같은 범위를 다시 봅니다. 수집기가 중복을 거릅니다.
 6. **쉼.**
    - `rate_limited`: `retryAfterSec`, 없으면 30분 동안 `mode='rest'`
-   - `forbidden`: 120분 동안 `mode='rest'`
+   - `forbidden`(세션·사이드바·목록): 120분 동안 `mode='rest'`
+7. **오류 기록.** 오류로 끝난 패스는 `lastError`에 `{code, at}`을 남기고 `mode='idle'`로 돌아갑니다. 성공한 패스는 `lastError`를 지웁니다. 팝업은 `mode='idle'`이고 `lastError`가 있으면, 상태 줄에 아래 문구를 덧붙입니다(갈래 4).
+
+   | `lastError.code` | 문구 |
+   |---|---|
+   | `network` | ChatGPT 연결이 잠시 안 돼요. 다음 주기에 다시 해요 |
+   | `collector` | 수집기에 보내지 못했어요. 수집기가 켜져 있는지 확인해 주세요 |
+   | `shape_changed` | 일부 대화를 읽지 못했어요 |
+   | 그 밖 | 마지막 동기화가 실패했어요 |
 
    쉬는 동안의 알람과 `syncNow`는 패스를 건너뜁니다.
 
@@ -227,6 +257,9 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 - 알람 이름은 `chatgpt-sync`이고 5분마다 울립니다.
 - `background.ts`의 `onAlarm`(지금 76-77행)은 알람 이름으로 나눕니다. `refresh` 30초는 그대로 둡니다.
 - 서비스 워커가 시작될 때 켜져 있는데 알람이 없으면 다시 만듭니다.
+- 서비스 워커가 시작될 때 `mode='running'`이고 `lastPassStartedAt`이 3분보다 오래됐으면, 패스 도중 워커가 죽은 것으로 보고 `mode='idle'`로 되돌립니다. 커서와 `pending`은 저장돼 있으므로 그대로 둡니다. 크롬 지침 리뷰 E4에서 나온 규칙입니다.
+
+**웹 `rpc`로 동기화 켬·끔 막기.** 신뢰한 웹 출처의 `rpc` 가운데 `method === 'collection.configure'`이고 `params`에 `accountSync`가 있는 요청은 백그라운드가 거절합니다(`동기화 켬·끔은 확장 팝업에서만 바꿀 수 있어요`). 동의는 팝업에서만 받게 하기 위해서입니다. 크롬 지침 리뷰의 참고 항목에서 나왔습니다.
 - 브라우저를 시작할 때(`onStartup`) 패스를 한 번 돌립니다.
 
 **`syncNow`.**
@@ -248,6 +281,8 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 
 2. `sync` 값과 상관없이, 수집 중이면 `collection.flush`를 부릅니다. 수집 중인지는 캐시된 설정이 아니라, 이번 패스가 읽은(패스를 돌지 않았으면 새로 읽은) `collection.status`로 판단합니다. 수집 중이 아니면 `flushed=false`이고 `blockedReason`에 `sendBlockedReason` 문구를 넣습니다. 이때도 패스 결과(`sync`·`newTurns`)는 그대로 돌려줍니다.
 3. 결과는 `SyncNowResult`입니다.
+
+**웹의 대기 시간 (갈래 7).** 패스 한 번은 상세 20건, 건마다 1~2초 간격, 탭 요청마다 최대 20초가 걸릴 수 있습니다. 그래서 웹 `syncNow`는 150초까지 기다립니다. 150초를 넘기면 연결 오류로 보이지 않고 "동기화가 아직 진행 중이에요. 잠시 뒤 다시 확인해 주세요"를 띄웁니다. 확장 쪽 패스와 flush는 끝까지 갑니다.
 
 ## 6. 공용 파서 규칙 (갈래 2)
 
@@ -283,7 +318,8 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 - 노드 아무거나 하나라도 완료 표시가 있으면 완료로 보는 OR 규칙은 쓰지 않습니다. 실측에서 도구 호출 노드(`recipient=web.run`)는 최종 답이 생성 중일 때도 `finished_successfully`·`is_complete`·`stop`이었습니다.
 - `is_complete`와 `finish_details.type`은 판단에 쓰지 않습니다. 사용자가 멈춘 답도 실측에서 `finished_successfully`·`end_turn=true`였으므로 완료로 받습니다.
 - 보이는 답이 없는 턴은 미완료입니다.
-- 마지막 턴이 미완료면 `inProgress = true`이고, `inProgressAt`은 그 턴 메시지 시각의 최댓값입니다. `NormalizedConversation`에 `inProgressAt: string | null`을 더합니다. 이 필드는 갈래 2가 `shared/chatgpt-conversation.ts`에 넣습니다. 시각이 없으면 null입니다. 마지막이 아닌 미완료 턴은 `turnsInWindows`가 뺍니다.
+- **예외: 마지막이 아닌 턴은 늘 완료로 봅니다.** 뒤에 다음 사용자 메시지가 이어졌으므로 생성 중일 수 없습니다. 보이는 답이 없으면 질문만 담은 턴으로 보냅니다. 답 길이 한도로 끊긴 답(`end_turn=false`), 이미지만 있는 답, 오류로 끝난 답이 영영 빠지지 않게 하기 위해서입니다. 이 규칙은 11/13 통합본 리뷰 프로브에서 나왔습니다.
+- 마지막 턴이 미완료면 `inProgress = true`이고, `inProgressAt`은 그 턴 메시지 시각의 최댓값입니다. `NormalizedConversation`에 `inProgressAt: string | null`을 더합니다. 이 필드는 갈래 2가 `shared/chatgpt-conversation.ts`에 넣습니다. 시각이 없으면 null입니다.
 
 **시각.**
 - `createdAt = new Date(Math.round(create_time * 1000)).toISOString()`입니다.
@@ -349,6 +385,7 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 - **팝업 'GitHub 레포 상태' 자리:** 갈래 4가 `{name, lastSavedAt} | null`을 받는 표시 부품만 만듭니다. 데이터 출처(GitHub 연동, `feat/github-sync`)가 정해질 때까지 `null`을 넣어 아무것도 그리지 않습니다. 약속 타입은 더하지 않습니다.
 - **갈래 7(웹):** 합치는 순서에 둡니다. Vercel 재배포가 있어야 사용자에게 닿습니다(단비 님 권한).
 - **팀 기록을 ChatGPT 페이지에 넣는 것(11/13 동균 님: 괜찮음):** 채팅 화면의 '팀 기록 불러오기'는 팀 카드 문자열을 chatgpt.com 페이지의 입력창과 오버레이에 둡니다. 그 페이지의 스크립트도 이 문자열을 읽을 수 있습니다. 기능의 목적이 팀 기록을 ChatGPT에 붙여 넣는 것이므로 받아들입니다.
+- **팀 기록 끝 표시(갈래 5):** 확장의 '팀 기록 불러오기'는 `boardToMarkdown` 결과 뒤에 빈 줄과 `<!-- 싱크업 팀 기록 끝 -->` 한 줄을 붙여 입력창에 채웁니다. `boardToMarkdown`의 출력과 웹 '팀 기록 복사'는 바꾸지 않습니다. 수집기는 3-3의 4단계에서 머리부터 이 줄까지를 지웁니다. 끝 표시가 없는 웹 복사본은 머리부터 끝까지 지웁니다.
 
 ## 9. 다음 단계로 미룬 것 (11/13 동균 님 결정)
 
@@ -362,4 +399,7 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 | 분류기가 `createdAt`을 시각으로 쓰기 | 동기화 `collectedAt` = `createdAt` | `classify.py`의 `_when`이 `createdAt`을 우선하도록(하은 님 파일) | 없음. 받은 시각은 `intake.received`에 있습니다 |
 | 스캐너와 창 경계 맞추기 | 수집기는 반열린 `[start, end)` | `scanner/src/review_db.rs:82-92`는 양끝 포함입니다. 한쪽으로 맞춥니다 | 경계에 정확히 걸친 턴은 두 경로에서 판정이 다를 수 있습니다 |
 | 계정 전체 동기화, 고정 동반 탭, WebSocket 신호 | 프로젝트만 수집, 사용자 탭 | 설계 3·5장 | — |
+| `owner.user_id` 이중 확인 (11/13 통합본 리뷰) | `owned_only=true`만 | 목록 항목의 `owner.user_id`를 세션 `user.id`와 비교해 다르면 뺍니다. 두 값의 형식이 같은지 먼저 실측합니다 | ChatGPT가 `owned_only`를 무시하게 바뀌면 다른 멤버 대화가 들어올 수 있습니다 |
+| 10분 넘는 답과 `update_time` (11/13 통합본 리뷰, 가설) | 10분 지난 미완료는 커서를 붙잡지 않음 | 답이 끝날 때 `update_time`이 오르는지 실측. 오르지 않으면 미완료 대화를 따로 기억해 다시 봅니다 | 생각이 10분 넘게 걸리는 답(Pro, 딥 리서치)을 잃을 수 있습니다 |
+| 크롬 지침 리뷰(`mwg-review-8e11c40.md`) 가운데 이번 갈래 파일 밖의 것 | 그대로 | E1(꺼져 있을 때 `auto-collect.ts`가 디바운스 없이 다시 읽음), E2(`*.vercel.app` 전체에 붙는 web-bridge), E3·W2(글꼴 CDN), E5(우클릭 보내기 결과가 안 보이는 탭), E7(스토어 문서), W1(웹 CSP·보안 헤더), W3~W16(접근성·폼·글자 크기). 모두 원래 있던 코드이고 대부분 단비 님 파일입니다 | 리뷰 표 그대로 |
 | 생성 중 flush (dual-brain 리뷰, 가설) | 그대로 | 화면 경로가 질문만 보낸 열린 턴은 flush에서 묶지 않거나, 동기화 답을 이미 묶인 질문에 붙이는 규칙 | 답이 생성되는 중에 싱크 맞추기를 누르거나 검토함을 열면, 화면 질문이 답 없이 묶입니다. 그 뒤 동기화로도 그 답을 붙이지 못합니다(C4-b "이미 묶임"). 원래 있던 화면 경로 동작입니다 |
