@@ -103,6 +103,14 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(parse_json_reply('[{"msg": 1}]'), {"cards": [{"msg": 1}]})
         self.assertEqual(parse_json_reply('```\n{"cards": []}\n```'), {"cards": []})
 
+    def test_confidence_rounding_does_not_cross_the_review_line(self):
+        # 0.595~0.599 가 반올림으로 0.6 이 되면 '확인 필요' 배지가 사라진다 (코드 지도 지적)
+        raw = {"relevance": "related", "sentence": "x", "tag": "decision", "subtopic": "기타", "topic_key": "t",
+               "content": "x", "owner": "김단비"}
+        conf = lambda v: normalize_card({**raw, "confidence": v}, source="ChatGPT", pre_masked=False,
+                                        existing_topics=[])["confidence"]
+        self.assertEqual([conf(0.597), conf(0.6), conf(0.604), conf(0.42)], [0.59, 0.6, 0.6, 0.42])
+
     def test_parse_json_reply_keeps_fences_inside_strings(self):
         # 코드 블록을 인용한 발화 (Codex·Claude Code 프롬프트, 동기화의 마크다운 원문)
         reply = '{"cards": [{"sentence": "```py\\nx = 1\\n``` 이렇게 고쳐", "reason": "```diff``` 참고"}]}'

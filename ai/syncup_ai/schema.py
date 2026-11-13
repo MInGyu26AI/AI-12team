@@ -6,7 +6,7 @@ import re
 from datetime import date
 from typing import NamedTuple
 
-from .config import BELOW_LOW_CONFIDENCE
+from .config import BELOW_LOW_CONFIDENCE, LOW_CONFIDENCE
 from .mask import has_mask_token, mask
 
 SUBTOPICS = ("주제·목표", "자료 조사", "작업·결과물", "역할·일정", "과제 조건·피드백", "발표·제출", "기타")
@@ -44,7 +44,11 @@ def _conf(v) -> float:
         x = float(v)
     except (TypeError, ValueError):
         return 0.5
-    return round(min(max(x, 0.0), 1.0), 2)
+    x = min(max(x, 0.0), 1.0)
+    rounded = round(x, 2)
+    if x < LOW_CONFIDENCE <= rounded:  # 0.595 가 반올림으로 0.6 이 되면 '확인 필요'가 사라진다
+        return BELOW_LOW_CONFIDENCE
+    return rounded
 
 
 def _due(v) -> str | None:
