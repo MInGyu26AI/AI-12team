@@ -3,7 +3,7 @@ import type { ExtStatus } from '@shared/bridge';
 import type { RelatedCard } from '@shared/types';
 import { announceCandidates } from './candidate-notice';
 import { CollectorUnreachable, errorText, rpc } from './collector-rpc';
-import { collectStateItem, pendingItem, settingsFromStatus, settingsItem, shareableCount, type CollectState } from './settings';
+import { collectStateItem, pendingCountItem, settingsFromStatus, settingsItem, shareableCount, type CollectState } from './settings';
 
 // 새로 고침이 성공하면 지우는 오류: 새로 고침 자신의 실패와 수집기에 닿지 못한 실패(unreachable 이 false 로 적히지 않은 것).
 // 수집·지금 분류·설정 저장을 수집기가 거절한 오류는 그 요청이 다시 성공할 때까지 남긴다.
@@ -12,10 +12,10 @@ const clearedByRefresh = (state: CollectState) => state.op === 'refresh' || stat
 export async function refreshStatus() {
   const result = await rpc<{ cards: RelatedCard[]; status: ExtStatus }>('candidates.list');
   await settingsItem.setValue(settingsFromStatus(await settingsItem.getValue(), result.status));
-  await pendingItem.setValue(result.cards);
+  const shareable = shareableCount(result.cards);
+  await pendingCountItem.setValue(shareable); // 개수만 저장한다: 카드 본문은 확장 저장소에 남기지 않는다
   const state = await collectStateItem.getValue();
   if (state.lastError && clearedByRefresh(state)) await collectStateItem.setValue({ lastError: null });
-  const shareable = shareableCount(result.cards);
   await browser.action.setBadgeText({ text: shareable ? String(shareable) : '' });
   await announceCandidates(shareable); // 검토할 카드가 늘었으면 시스템 알림 (던지지 않는다. lib/candidate-notice.ts)
   return result;
