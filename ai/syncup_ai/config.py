@@ -28,6 +28,10 @@ CONFLICT_CHECK_SECONDS = 90  # 새 호출 전/결과 수신 후 검사. 진행 �
 # 팀에서 정하면 이 값만 바꾼다.
 CONFLICT_ON_CHANGE = True
 
+# ── 결정·커밋 어긋남 (commit_check, 2차 최종 회의 10장 선택 기능) ──
+COMMIT_MAX_DECISIONS = 30  # 한 번에 비교하는 현재 결정 수 (충돌 판정 후보 상한과 같게)
+COMMIT_MAX_FILES = 50  # 프롬프트에 넣는 바뀐 파일 경로 수
+
 
 def load_env() -> None:
     """ai/.env 를 읽어 환경변수로 (이미 있는 값은 덮어쓰지 않음). .env 는 .gitignore 대상."""
