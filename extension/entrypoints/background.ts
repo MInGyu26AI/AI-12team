@@ -59,7 +59,10 @@ async function teamRecord(): Promise<BgResponse> {
 // 싱크 맞추기(syncNow)는 채팅 화면·팝업·웹 모두 보낼 수 있다
 async function handleRequest(message: BgRequest, sender: Browser.runtime.MessageSender) {
   const fromChat = !!sender.url && !!siteForUrl(sender.url);
-  if (message.type === 'collect' && fromChat && (await isSyncedProjectPage(sender.url))) return syncedProjectResult(message.trigger);
+  // 프로젝트 판별은 탭의 지금 주소로 한다. sender.url 은 ChatGPT 처럼 주소만 바꾸는(SPA) 화면에서 처음 연 주소(https://chatgpt.com/)에
+  // 머물러 있다 (11/13 리허설 실측). 탭 주소는 tabs 권한으로 받는다
+  const pageUrl = sender.tab?.url ?? sender.url;
+  if (message.type === 'collect' && fromChat && (await isSyncedProjectPage(pageUrl))) return syncedProjectResult(message.trigger);
   if (message.type === 'collect' && fromChat) return appendTurns(message.messages, message.trigger !== 'auto');
   if (message.type === 'syncNow' && fromChat) return syncNowFromExtension(message.params);
   if (message.type === 'teamRecord' && fromChat) return teamRecord();

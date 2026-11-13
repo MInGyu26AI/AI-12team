@@ -989,6 +989,14 @@ describe('동기화로 고른 프로젝트에서는 화면 수집을 하지 않�
     expect(appendCalls()).toHaveLength(0);
   });
 
+  it('보낸 쪽 주소가 처음 연 주소에 머물러 있어도(SPA 이동) 탭의 지금 주소로 판별한다', async () => {
+    // 실제 Chrome: ChatGPT 홈에서 프로젝트 대화로 옮기면 sender.url 은 https://chatgpt.com/ 그대로, sender.tab.url 만 바뀐다
+    const staleSender = { url: 'https://chatgpt.com/', tab: { id: 1, url: syncedPage }, id: fakeBrowser.runtime.id };
+    expect(await send({ type: 'collect', trigger: 'auto', messages: screenMessages }, staleSender)).toEqual({ ok: true, newMessages: 0, intakeIssues: 0 });
+    expect(await send({ type: 'collect', trigger: 'manual', messages: screenMessages }, staleSender)).toMatchObject({ ok: false });
+    expect(appendCalls()).toHaveLength(0);
+  });
+
   it('프로젝트 홈 화면도 같은 프로젝트로 본다', async () => {
     expect(await collect('manual', `https://chatgpt.com/g/${PROJECT.gizmoId}-hackathon/project`)).toMatchObject({ ok: false });
   });
