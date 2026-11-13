@@ -45,8 +45,9 @@ SETS = {
          "대표 계좌는 {v}로 하자"],
     ),
     "API 키": (
-        [("sk-proj-Ab3dEf6hIj9kLm2nOp5qRs8t", "Ab3dEf6h"), ("ghp_1a2B3c4D5e6F7g8H9i0J1k2L", "1a2B3c4D"),
-         ("AIzaSyB1c2D3e4F5g6H7i8J9k0L1m2N3o4P5q6R", "AIzaSyB1"), ("AKIAIOSFODNN7EXAMPLE", "IOSFODNN"),
+        # 가짜 키. GitHub 비밀 검사가 진짜 키로 오인하지 않게 접두사를 따로 붙인다
+        [("sk-" + "proj-Ab3dEf6hIj9kLm2nOp5qRs8t", "Ab3dEf6h"), ("ghp" + "_1a2B3c4D5e6F7g8H9i0J1k2L", "1a2B3c4D"),
+         ("AI" + "zaSyB1c2D3e4F5g6H7i8J9k0L1m2N3o4P5q6R", "SyB1c2D3"), ("AKIA" + "IOSFODNN7EXAMPLE", "IOSFODNN"),
          ("api_key=9f8e7d6c5b4a3210fedcba98", "9f8e7d6c")],
         ["테스트 키는 {v} 이거 쓰면 돼", "env 에 {v} 넣어 놨어", "배포 서버 키 {v} 공유할게",
          "이 키 {v} 만료됐대"],
