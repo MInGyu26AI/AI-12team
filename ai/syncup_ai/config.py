@@ -11,6 +11,7 @@ CONTEXT_TURNS = 1  # 앞 배치의 마지막 N턴을 "참고용"으로만 같이
 MAX_AI_CHARS = 1200  # AI 답변은 길어서 앞부분만 발췌해 보냄 ("필요한 발췌만 외부 AI로")
 MAX_USER_CHARS = 2000
 MAX_CARDS_PER_AI_MESSAGE = 2  # AI 답변 하나에서 만들 수 있는 카드 수 상한
+MAX_CARD_TEXT = 1200  # 카드 글 한 칸의 상한. contract/card_contract.py MAX_TEXT 와 같아야 수집기가 묶음을 거절하지 않는다
 
 # ── 화면 규칙과 맞춤 (shared/labels.ts LOW_CONFIDENCE) ──
 LOW_CONFIDENCE = 0.6
@@ -26,6 +27,10 @@ CONFLICT_CHECK_SECONDS = 90  # 새 호출 전/결과 수신 후 검사. 진행 �
 # 이용흐름도는 "같음·바뀜 → 저장, 충돌 → 경고"인데, 목업·시연(MVP 범위)은 '변경'도 경고로 보여 준다.
 # 팀에서 정하면 이 값만 바꾼다.
 CONFLICT_ON_CHANGE = True
+
+# ── 결정·커밋 어긋남 (commit_check, 2차 최종 회의 10장 선택 기능) ──
+COMMIT_MAX_DECISIONS = 30  # 한 번에 비교하는 현재 결정 수 (충돌 판정 후보 상한과 같게)
+COMMIT_MAX_FILES = 50  # 프롬프트에 넣는 바뀐 파일 경로 수
 
 
 def load_env() -> None:

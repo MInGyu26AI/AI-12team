@@ -21,6 +21,15 @@ class ClassifyTest(unittest.TestCase):
         llm = FakeLLM({"cards": cards})
         return classify({"context": {**CTX, **ctx}, "messages": messages}, llm), llm
 
+    def test_team_criteria_only_when_given(self):
+        card = [{"msg": 1, "relevance": "related", "sentence": "x", "subtopic": "기타", "tag": "decision",
+                 "topic_key": "t", "content": "x", "owner": None, "confidence": 0.9}]
+        _, plain = self.run_cls([msg(1, "x")], card)
+        self.assertNotIn("팀 목표", plain.prompts[0])
+        _, given = self.run_cls([msg(1, "x")], card, teamGoal="흩어진 결정 모으기", teamRules=["ChatGPT만 지원"])
+        self.assertIn("- 팀 목표: 흩어진 결정 모으기", given.prompts[0])
+        self.assertIn("- 팀 규칙: ChatGPT만 지원", given.prompts[0])
+
     def test_masks_before_sending_and_source(self):
         cards, llm = self.run_cls(
             [msg(1, "발표 자료는 010-1234-5678로 보내 줘.")],
@@ -92,6 +101,21 @@ class ClassifyTest(unittest.TestCase):
     def test_parse_json_reply_with_fence(self):
         self.assertEqual(parse_json_reply('결과입니다\n```json\n{"cards": []}\n```'), {"cards": []})
         self.assertEqual(parse_json_reply('[{"msg": 1}]'), {"cards": [{"msg": 1}]})
+        self.assertEqual(parse_json_reply('```\n{"cards": []}\n```'), {"cards": []})
+
+    def test_confidence_rounding_does_not_cross_the_review_line(self):
+        # 0.595~0.599 가 반올림으로 0.6 이 되면 '확인 필요' 배지가 사라진다 (코드 지도 지적)
+        raw = {"relevance": "related", "sentence": "x", "tag": "decision", "subtopic": "기타", "topic_key": "t",
+               "content": "x", "owner": "김단비"}
+        conf = lambda v: normalize_card({**raw, "confidence": v}, source="ChatGPT", pre_masked=False,
+                                        existing_topics=[])["confidence"]
+        self.assertEqual([conf(0.597), conf(0.6), conf(0.604), conf(0.42)], [0.59, 0.6, 0.6, 0.42])
+
+    def test_parse_json_reply_keeps_fences_inside_strings(self):
+        # 코드 블록을 인용한 발화 (Codex·Claude Code 프롬프트, 동기화의 마크다운 원문)
+        reply = '{"cards": [{"sentence": "```py\\nx = 1\\n``` 이렇게 고쳐", "reason": "```diff``` 참고"}]}'
+        self.assertEqual(parse_json_reply(reply)["cards"][0]["reason"], "```diff``` 참고")
+        self.assertEqual(parse_json_reply("```json\n" + reply + "\n```")["cards"][0]["reason"], "```diff``` 참고")
 
 
 class BatchTest(unittest.TestCase):
@@ -157,6 +181,12 @@ class OwnerRuleTest(unittest.TestCase):
         self.assertEqual(conflict.rule_judge(other, old)["judgement"], "충돌")
         self.assertEqual(conflict.rule_judge(team, old)["judgement"], "변경")
 
+    def test_rule_judge_uses_the_same_topic_and_owner_basis(self):
+        # 띄어쓰기만 다른 세부 주제는 같은 주제, 자리표시자 결정자는 같은 사람이 아니다 (코드 지도 지적)
+        old = {**dec("a", "MVP 범위", "확장 = 제외"), "owner": "사용자"}
+        new = {**dec("b", "MVP범위", "확장 = 포함"), "owner": "사용자"}
+        self.assertEqual(conflict.rule_judge(new, old)["judgement"], "충돌")
+
 
 class DecisionsTest(unittest.TestCase):
     def test_relabel_overrides_labels_and_confidence(self):
@@ -179,6 +209,20 @@ class DecisionsTest(unittest.TestCase):
         self.assertEqual(set(b), {"relevance", "source", "masked", "confidence"})
         self.assertEqual(b["confidence"], 0.8)
         self.assertEqual(len(d.calls[0][1]), 8)  # 문장 2개 × 질문 4개
+
+    def test_card_without_sentence_does_not_drop_decisions_labels(self):
+        # sentence 가 빠진 카드 한 장 때문에 다른 카드까지 chat 라벨로 돌아가지 않는다 (코드 지도 지적)
+        llm = FakeLLM({"cards": [
+            {"msg": 1, "relevance": "related", "tag": "none", "content": "문장 없음"},
+            {"msg": 1, "relevance": "related", "sentence": "DB는 SQLite로 하자.", "tag": "research", "subtopic": "기타",
+             "topic_key": "DB", "content": "DB = SQLite"},
+        ]})
+        d = FakeDecider(lambda q: {"type": "choice", "name": q["name"], "choice": "decision", "confidence": 0.9}
+                        if q["name"] == "u2_tag" else None)
+        cards = classify({"context": CTX, "messages": [msg(1, "DB는 SQLite로 하자.")]}, llm, d)
+        decided = [c for c in cards if c.get("sentence") == "DB는 SQLite로 하자."]
+        self.assertEqual((decided[0]["tag"], decided[0]["classificationMethod"]), ("decision", "decisions"))
+        self.assertEqual(len(d.calls[0][1]), 4)  # sentence 있는 카드 1장 × 질문 4개
 
     def test_personal_relabel_keeps_zero_confidence(self):
         llm = FakeLLM({"cards": [{"msg": 1, "relevance": "related", "sentence": "오늘 피곤하다", "tag": "research",
@@ -260,6 +304,13 @@ class MaskTest(unittest.TestCase):
         self.assertNoLeak(d.calls[0][0])   # Decisions 로 가는 본문
         self.assertNoLeak(json.dumps(cards, ensure_ascii=False))  # 모델이 원문을 되돌려 줘도 카드에 안 남음
         self.assertTrue(cards[0]["masked"])
+
+    def test_other_stage_marks_count_as_masked(self):
+        # 로컬 게이트의 [비밀키], 스캐너의 [가림]이 카드에 남으면 '민감정보 가림' 배지가 붙는다 (코드 지도 미뤄 둔 #118)
+        for token in ("[비밀키]", "[가림]"):
+            raw = {"relevance": "related", "sentence": f"인증은 {token} 로 하자", "tag": "decision",
+                   "subtopic": "작업·결과물", "topic_key": "인증", "content": "인증 방식", "owner": "김하은"}
+            self.assertTrue(normalize_card(raw, source="Codex", pre_masked=False, existing_topics=[])["masked"])
 
     def test_card_masks_value_exposed_by_the_first_pass(self):
         # 첫 가림이 주민번호를 바꾼 뒤에야 바로 붙은 토큰의 경계가 생긴다. normalize_card 는 문장을 두 번 가려 이것도 지운다.

@@ -53,6 +53,18 @@ def _prepare(m: dict) -> tuple[str, bool]:
     return text, masked or bool(m.get('masked'))
 
 
+def _team_criteria(context: dict) -> list[str]:
+    """팀이 정한 목표·범위·규칙 (2차 최종 회의 '프로젝트 방향성 기준'). 없으면 아무 줄도 넣지 않는다."""
+    rules = context.get("teamRules") or []
+    if isinstance(rules, str):
+        rules = [rules]
+    lines = [f"- 팀 목표: {context['teamGoal']}"] if context.get("teamGoal") else []
+    if context.get("teamScope"):
+        lines.append(f"- 팀 범위: {context['teamScope']}")
+    lines += [f"- 팀 규칙: {r}" for r in rules if isinstance(r, str) and r.strip()]
+    return lines
+
+
 def build_user_prompt(context: dict, messages: list[dict], context_messages: list[dict] | None = None) -> tuple[str, list[dict]]:
     """AI 에 보낼 사용자 메시지와 번호별 발화 정보 [{source, masked, role, context}]."""
     user = context.get("userName", "")
@@ -71,6 +83,7 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
         f"- 기존 세부 주제: {', '.join(topics) if topics else '(없음)'}",
         "- 기존 팀 결정:",
         *([f"  - [{d.get('topic_key')}] {d.get('content')}" for d in decisions] or ["  (없음)"]),
+        *_team_criteria(context),
         "",
         "# 발화",
     ]
@@ -78,7 +91,7 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
     numbered = [(m, True) for m in context_messages or []] + [(m, False) for m in messages]
     for i, (m, is_ctx) in enumerate(numbered, start=1):
         text, masked = _prepare(m)
-        who = "AI" if m.get("role") == "assistant" else "사용자"
+        who = "화자 미상" if m.get("roleGuessed") else ("AI" if m.get("role") == "assistant" else "사용자")
         tag = " [참고용]" if is_ctx else ""
         lines.append(f"[{i}]{tag} {who} ({_when(m):%Y-%m-%d %H:%M}): {text}")
         info.append({"source": source_of(m), "masked": masked, "role": m.get("role"), "context": is_ctx,
@@ -151,14 +164,21 @@ def _finish_cards(raw_cards: list[dict], info: list[dict], topics: list[str],
                               enabled_subtopics=enabled)
         if card is None:
             continue
-        if card["relevance"] == "related":
-            _attach_evidence(card, raw, meta)
-        if meta["role"] == "assistant" and card["relevance"] == "related":
+        # 화자를 추정한 발화는 AI 규칙을 적용하지 않는다. 실제 사용자 결정일 수 있어 확인 필요로 남기고
+        # 검토함에서 화자를 확인받는다 (수집기 delivery 는 확인 전 전송을 막는다)
+        if meta["role"] == "assistant" and not meta["roleGuessed"] and card["relevance"] == "related":
             if card["tag"] in ("decision", "todo"):
                 card["tag"], card["owner"], card["due"], card["is_change"] = "none", None, None, False  # AI 말은 제안
             ai_cards_per_msg[idx] += 1
             if ai_cards_per_msg[idx] > config.MAX_CARDS_PER_AI_MESSAGE:
                 continue
+        if card["relevance"] == "related":
+            try:
+                _attach_evidence(card, raw, meta)
+            except ValueError:
+                if card["tag"] != "none":
+                    raise  # 저장될 카드의 근거가 원문에 없으면 묶음 실패 (test_contract)
+                continue  # 수집기가 저장하지 않는 제안 카드는 근거가 틀려도 묶음을 막지 않고 뺀다
         if card["relevance"] == "related" and card["topic_key"] and card["topic_key"] not in topics:
             topics.append(card["topic_key"])  # 같은 묶음 안 다음 카드는 기존 주제로 봄
         out.append((idx, card))

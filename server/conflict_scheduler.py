@@ -10,6 +10,7 @@ import psycopg
 
 from conflict_checks import process_checks
 from diagnostics import failure
+from repo_sync import schedule_save
 from team_access import authorized
 
 DB_RETRY_SECONDS = 5
@@ -38,7 +39,9 @@ def _work(server, token, team_id, key, wake):
         while not server.checks_stop.is_set():
             wake.clear()
             try:
-                process_checks(server, token, team_id)
+                if process_checks(server, token, team_id):
+                    # New alerts and review states go to the repository too; one batch even across many slices.
+                    schedule_save(server, token, team_id)
                 due = _next_due(server.dsn, token, team_id)
             except (psycopg.OperationalError, psycopg.InterfaceError) as error:
                 failure('conflict_database', error, team_id)

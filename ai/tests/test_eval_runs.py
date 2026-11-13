@@ -45,6 +45,26 @@ class SheetEvalTest(unittest.TestCase):
         self.assertEqual(result["total_alerts"], 35 * 34 // 2)
         self.assertEqual(result["detection_rate"], 1.0)
 
+    def test_e2e_leaves_failed_pairs_out_of_the_rates(self):
+        # 판정 실패(낮은 확신도)와 분류 실패 세션의 쌍은 '놓친 경고'가 아니라 미완료다 (코드 지도 지적, 감지율이 낮게 나옴)
+        preds = [(f"M{i}", {**dec(f"M{i}#{i}", "DB", f"DB = {i}"), "status": "approved"}) for i in range(2)]
+        pairs = [{"pair_id": "K1", "old_unit": "M0-1", "new_unit": "M1-1", "label": "충돌"},
+                 {"pair_id": "K2", "old_unit": "M0-1", "new_unit": "M9-1", "label": "충돌"}]
+        result = sheet_eval.eval_e2e(preds, pairs, None, UNSURE, unclassified={"M9"})
+        self.assertEqual(result["incomplete_pairs"], 2)
+        self.assertEqual(result["detection_rate"], 0.0)  # 채점할 쌍이 없어 0/0
+        self.assertEqual([r["incomplete"] for r in result["rows"]], [True, True])
+
+    def test_ai_judging_does_not_fall_back_to_rules(self):
+        # chat 답에 그 쌍이 없으면 AI 평가는 규칙으로 채우지 않고 미완료로 센다 (--rule 기준선만 규칙)
+        class Empty:
+            def chat_json(self, system, user):
+                return {"results": []}
+        gold = [gold_unit("M1-1", "DB = SQLite", "박지민"), gold_unit("M2-1", "DB = MySQL", "이서준")]
+        pairs = [{"pair_id": "K1", "old_unit": "M1-1", "new_unit": "M2-1", "old_text": "", "new_text": "", "label": "충돌"}]
+        self.assertEqual(sheet_eval.eval_judge(gold, pairs, Empty(), None)["incomplete"], 1)
+        self.assertEqual(sheet_eval.eval_judge(gold, pairs, None, None)["incomplete"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

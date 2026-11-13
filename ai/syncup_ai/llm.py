@@ -54,9 +54,10 @@ def describe_failure(error: Exception) -> str:
 def parse_json_reply(text: str) -> dict:
     """모델 답에서 JSON 객체를 꺼낸다 (```json 코드 블록·앞뒤 설명이 붙어도)."""
     text = text.strip()
-    fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
+    # 답 전체를 감싼 코드 블록만 벗긴다. 카드 문자열 안의 ``` (코드를 인용한 발화)는 건드리지 않는다
+    fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.S)
     if fence:
-        text = fence.group(1).strip()
+        text = fence.group(1)
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

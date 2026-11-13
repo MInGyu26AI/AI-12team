@@ -20,6 +20,7 @@ from conflict_checks import retry_check
 from conflict_resolution import resolve
 from conflict_scheduler import schedule
 from diagnostics import failure
+from repo_sync import first_check_due, linked, repo_status, schedule_save, target_from_env
 from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
 from team_board import board, conflict_events, conflicts, done_todos, mark_todo, shared_item, shared_items
@@ -47,6 +48,7 @@ class TeamServer(http.server.ThreadingHTTPServer):
 
     def __init__(self, *args, **kwargs):
         self.checks_stop = threading.Event()
+        self.repo_target = None  # repo_sync.RepoTarget when one team's state is saved to GitHub
         super().__init__(*args, **kwargs)
 
     def shutdown(self):
@@ -73,13 +75,15 @@ class TeamHandler(SecureHandler):
         self.handle_api()
 
     def handle_api(self):
-        status, result, token, team_id = 200, {}, '', None
+        status, result, token, team_id, actor = 200, {}, '', None, None
         try:
             parts, team_id = self.parse_path()
             token = self.bearer_token()
             data = json.loads(self.body()) if self.command == 'POST' else None
             with authorized(self.server.dsn, token, team_id) as (c, user_id):
-                result = dispatch(c, user_id, team_id, self.command, parts, data)
+                result = dispatch(c, user_id, team_id, self.command, parts, data, self.server)
+                if self.command == 'POST' and linked(self.server, team_id):
+                    actor = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
             # Respond only after the transaction has committed, including idempotent retries.
         except AccessError as error:
             status, result = error.status, {'error': '접근할 수 없거나 허용되지 않은 요청입니다.'}
@@ -94,6 +98,15 @@ class TeamHandler(SecureHandler):
         if status == 200 and team_id is not None:
             # No worker runs on its own: any member's successful team request resumes that team's due checks.
             schedule(self.server, token, team_id)
+            self.save_repo_files(token, team_id, parts, actor)
+
+    def save_repo_files(self, token, team_id, parts, actor):
+        """A change is saved to the linked repository. After a start, the team's first request of any kind saves
+        once right away, so a save that was waiting when the server stopped still happens and the status is known."""
+        if self.command == 'POST':
+            schedule_save(self.server, token, team_id, actor, approved=parts[2:] == ['items'])
+        elif first_check_due(self.server, team_id):
+            schedule_save(self.server, token, team_id, delay=0)
 
     def parse_path(self):
         """(path parts, team id or None for /me); checked before the token so unknown paths never touch the DB."""
@@ -118,7 +131,7 @@ class TeamHandler(SecureHandler):
         return token
 
 
-def dispatch(c, user_id, team_id, method, parts, data):
+def dispatch(c, user_id, team_id, method, parts, data, server=None):
     if team_id is None:
         if method != 'GET':
             raise AccessError(405)
@@ -126,6 +139,8 @@ def dispatch(c, user_id, team_id, method, parts, data):
     tail = parts[2:]
     if tail[0] == 'items' and len(tail) != 3:
         return shared_cards(c, team_id, user_id, method, tail, data)
+    if method == 'GET' and tail == ['repo']:
+        return dict(team_id=str(team_id), repo=repo_status(server, team_id))
     if method == 'GET' and tuple(tail) in BOARD_READS:
         return dict(team_id=str(team_id), **BOARD_READS[tuple(tail)](c, team_id))
     change = CHANGES.get((tail[0], tail[2])) if len(tail) == 3 else None
@@ -170,6 +185,10 @@ def main():
     if not dsn:
         parser.error('SYNCUP_DATABASE_URL 환경 변수가 필요합니다.')
     try:
+        target = target_from_env()  # its messages name the setting, never the token
+    except ValueError as error:
+        parser.error(str(error))
+    try:
         verify_database(dsn)
     except DatabaseSetupError as error:
         parser.error(str(error))
@@ -177,7 +196,7 @@ def main():
         # Driver messages can contain connection details; show only the kind of problem.
         parser.error('제한된 syncup_api 계정과 팀 DB 연결을 확인하세요.')
     with TeamServer(('127.0.0.1', args.port), TeamHandler) as srv:
-        srv.dsn = dsn
+        srv.dsn, srv.repo_target = dsn, target
         print(f'팀 API http://127.0.0.1:{srv.server_port}/ · 외부 연결은 HTTPS 프록시 필요', flush=True)
         srv.serve_forever()
 

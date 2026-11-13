@@ -78,16 +78,17 @@ def retry_check(c, team_id, card_id):
 
 
 def process_checks(server, token, team_id):
-    """Advance this team's due checks by up to CHECK_SLICE_PAIRS pairs."""
+    """Advance this team's due checks by up to CHECK_SLICE_PAIRS pairs; returns how many pairs were judged."""
+    judged = 0
     for _ in range(CHECK_SLICE_PAIRS):
         if server.checks_stop.is_set():
-            return
+            return judged
         with authorized(server.dsn, token, team_id) as (c, _user):
             team_lock(c, team_id)
             _reclaim_expired(c, team_id)
             job = _next_job(c, team_id)
             if job is None:
-                return
+                return judged
             lease = _lease_or_skip(c, team_id, job)
         if lease is None:
             continue
@@ -96,6 +97,8 @@ def process_checks(server, token, team_id):
         with authorized(server.dsn, token, team_id) as (c, _user):
             team_lock(c, team_id)
             _record(c, team_id, lease, result, (time.monotonic() - started) * 1000)
+        judged += 1
+    return judged
 
 
 def _reclaim_expired(c, team_id):

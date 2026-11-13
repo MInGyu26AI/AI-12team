@@ -5,7 +5,7 @@ from collection_session import bound_team
 from storage import connect
 
 READ_PATHS = {'team.board': 'board', 'team.history': 'history', 'team.conflicts': 'conflicts',
-              'team.conflictHistory': 'conflicts/history', 'team.done': 'todos/done'}
+              'team.conflictHistory': 'conflicts/history', 'team.done': 'todos/done', 'team.repo': 'repo'}
 WRITE_METHODS = ('team.resolve', 'team.setDone', 'team.retryCheck')
 
 

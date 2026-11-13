@@ -117,7 +117,29 @@ docker build -f Dockerfile.cloud .
 | `POST …/conflicts/{충돌}/resolve` | 충돌 처리 (`resolution`, `resolutionNote`). 409 이미 끝난 충돌 |
 | `POST …/items/{카드}/done` | 할 일 완료 표시 (`done`) |
 | `POST …/items/{카드}/retry-check` | 실패한 충돌 검사 다시 시작. 시도 횟수와 진단을 비운다. 409 실패 상태가 아님 |
+| `GET …/repo` | 팀 상태 파일의 GitHub 저장 상태 ([아래](#github-레포-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | 공통 | 401 키 없음·틀림·만료·폐기, 사용자 비활성 · 403 그 팀 소속 아님 · 503 DB에 닿지 못함 |
+
+## GitHub 레포 저장
+
+팀 하나의 상태 파일([SYNCUP.md·syncup.json](team-state.md))을 GitHub 레포 루트에 커밋한다. 코드는 `server/repo_sync.py`(언제·무엇을), `server/github_repo.py`(GitHub API 호출).
+어느 팀을 어느 레포에 저장할지는 서버 환경 변수로만 정한다. 요청으로는 바꿀 수 없다.
+레포가 Public이면 결정·할 일 내용, 결정 이유, 충돌 처리 이유, 팀 이름, 요청한 사람 이름이 공개 커밋 기록에 영구히 남는다. 원문 발췌·출처·승인자 ID·AI가 쓴 충돌 이유는 넣지 않는다.
+
+| 환경 변수 | 내용 |
+|---|---|
+| `SYNCUP_GITHUB_TEAM` | 저장할 팀 ID (`team_admin.py team`이 출력한 uuid) |
+| `SYNCUP_GITHUB_REPO` | `owner/name` (예 `MInGyu26AI/AI-12team`) |
+| `SYNCUP_GITHUB_BRANCH` | 저장할 브랜치. 없으면 `main`. 브랜치는 미리 있어야 한다 |
+| `SYNCUP_GITHUB_TOKEN` | 그 레포 하나만 고른 Fine-grained 토큰, 권한 Contents: Read and write |
+
+- 셋(`TEAM`·`REPO`·`TOKEN`)을 모두 비우면 저장하지 않는다. 일부만 있거나 형식이 틀리면 서버가 시작하지 않는다 (토큰은 출력하지 않음).
+- 그 팀의 승인·충돌 처리·할 일 체크 요청이 성공하거나 충돌 검사가 판정을 하나 이상 기록하면, 10초 동안 다른 변경이 없을 때 DB에서 파일을 다시 만든다. 그 사이의 변경은 커밋 하나로 묶는다. 변경이 계속 와도 첫 변경 뒤 60초 안에는 저장한다.
+- 브랜치의 두 파일과 내용이 같으면 커밋하지 않는다. 사이에 다른 사람(또는 다른 서버 인스턴스)이 같은 브랜치에 푸시했으면 DB에서 파일을 다시 만들어 새 머리 위에 커밋한다. 브랜치 보호 규칙이 거절하면(422) 다시 시도하지 않고 `failed`로 남긴다.
+- 커밋 메시지는 바뀐 내용과 요청한 사람으로 만든다. 카드를 승인한 사람에만 '승인'을 붙인다. 예: `SyncUp: MVP 범위 결정 변경 외 1건 (김단비 승인, 이서준)`. 충돌 검사가 찾은 충돌은 이름 없이 `SyncUp: DB 충돌 확인 필요`. 저장에 실패한 묶음의 사람은 다음 커밋에 함께 적는다.
+- GitHub 오류는 팀 API 응답에 영향을 주지 않는다. 진단 로그에는 단계·오류 종류·HTTP 상태만 남고, 다음 변경 때 다시 저장한다. GitHub가 다른 곳으로 리다이렉트하면 토큰은 따라가지 않는다.
+- `GET …/repo` 응답의 `repo`: `linked`, `repo`, `branch`, `files`, `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `commit`(`sha`, `url`, `at`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC `team.repo`가 같은 응답을 준다.
+- 상태는 메모리에만 있다. 서버를 다시 켜면 `unknown`이고, 그 팀의 첫 요청(보드 조회 등 무엇이든)이 바로 한 번 저장해 연결을 확인한다. 재시작 때문에 기다리던 저장이 끊겼어도 그때 다시 맞춰진다.
 
 ## 기존 DB 업그레이드
 

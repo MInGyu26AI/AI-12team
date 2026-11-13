@@ -4,11 +4,12 @@
   python -m syncup_ai conflicts  < {newCards, existing}    → {ok, results, conflicts}
   python -m syncup_ai batch      < {messages, flush?}      → {batches, leftover}
   python -m syncup_ai prompt     < NativeClassifyRequest   → AI 에 보낼 프롬프트 (API 호출 없음)
+  python -m syncup_ai commit-check < {commit, state}      → {ok, alerts}  (state = syncup.json)
 """
 import json
 import sys
 
-from . import batch, classify, conflict
+from . import batch, classify, commit_check, conflict
 from .config import load_env
 from .llm import LLMNotConfigured, decider_from_env, from_env
 
@@ -29,6 +30,12 @@ def main() -> int:
         except LLMNotConfigured:
             llm = None  # 규칙 판정으로
         res = conflict.handle_request(req, llm, decider_from_env())
+    elif cmd == "commit-check":
+        try:
+            llm = from_env()
+        except LLMNotConfigured:
+            llm = None
+        res = commit_check.handle_request(req, llm)
     elif cmd == "batch":
         batches, leftover = batch.take_ready_batches(req.get("messages") or [], flush=bool(req.get("flush")))
         res = {"batches": batches, "leftover": leftover}

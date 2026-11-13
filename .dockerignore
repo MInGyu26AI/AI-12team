@@ -10,6 +10,8 @@
 !server/conflict_checks.py
 !server/conflict_resolution.py
 !server/conflict_scheduler.py
+!server/repo_sync.py
+!server/github_repo.py
 !contract/secure_http.py
 !contract/diagnostics.py
 !contract/card_contract.py

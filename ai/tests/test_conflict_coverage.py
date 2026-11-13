@@ -85,8 +85,9 @@ class CoverageTest(unittest.TestCase):
             self.assertFalse(decider.calls)
 
     def test_time_limit_blocks_fallback_and_rejects_late_result(self):
-        for fail_at in (None, 1):
-            decider = RecordingDecider(fail_at=fail_at)
+        # 두 번째: Decisions 통신 실패 뒤 chat 대체를 시간 한도가 막는지 (빈 답이면 한도 전에 '답 없음'으로 끝나 검사가 안 됨)
+        for fail_at, transport_failure in ((None, False), (1, True)):
+            decider = RecordingDecider(fail_at=fail_at, transport_failure=transport_failure)
             llm = FakeLLM({'results': []})
             with patch.object(conflict.time, 'monotonic', side_effect=[0, 0, config.CONFLICT_CHECK_SECONDS + 1]):
                 result = check(dec('new', 'DB', 'x'), [dec('old', 'DB', 'y')], llm, decider)

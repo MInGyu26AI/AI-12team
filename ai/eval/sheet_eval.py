@@ -82,14 +82,15 @@ def sessions(msgs):
 
 
 # ── 1) 분류 ──
-def run_classify(msgs, llm, decider):
+def run_classify(msgs, llm, decider, context=CONTEXT):
     """세션을 시간순으로 분류. 앞 세션의 결정은 '기존 팀 결정'으로 다음 요청에 들어간다 (모두 승인했다고 가정).
 
+    context: 팀 정보 (기본은 민규 님 샘플 팀, eval/synth_eval.py 는 팀마다 넘긴다)
     (예측 [(message_id, 카드)], 분류에 실패한 세션 [{session, failure}])"""
     preds, failed = [], []  # preds: (message_id, card)
     for sess in sessions(msgs):
         decisions = [c for _, c in preds if c["relevance"] == "related" and c["tag"] == "decision"]
-        ctx = {**CONTEXT, "userName": sess[0]["member"],
+        ctx = {**context, "userName": sess[0]["member"],
                "existingTopicKeys": list(dict.fromkeys(c["topic_key"] for _, c in preds if c.get("topic_key"))),
                "existingDecisions": [{"topic_key": c["topic_key"], "content": c["content"]} for c in decisions]}
         req = {"type": "classify", "version": 1, "context": ctx,
@@ -196,16 +197,19 @@ def eval_judge(gold, pairs, llm, decider):
 
 
 # ── 3) 끝까지: 예측 카드 → 충돌 ──
-def eval_e2e(preds, pairs, llm, decider):
-    """팀 worker 처럼 새 결정마다 앞선 결정과 한 쌍씩 판정한다 (쌍 하나가 실패해도 나머지는 계속)."""
-    existing, found, incomplete = [], [], 0  # found: (old message_id, new message_id, judgement)
+def eval_e2e(preds, pairs, llm, decider, unclassified=frozenset()):
+    """팀 worker 처럼 새 결정마다 앞선 결정과 한 쌍씩 판정한다 (쌍 하나가 실패해도 나머지는 계속).
+
+    unclassified: 분류에 실패한 세션의 발화 ID. 정답 쌍이 이 발화나 판정에 실패한 쌍에 걸리면
+    '놓친 경고'가 아니라 미완료로 세고 감지율에서 뺀다 (docstring 7행, ai/README 평가 절)."""
+    existing, found, failed = [], [], set()  # found: (old message_id, new message_id, judgement)
     for mid, c in preds:
         if c["relevance"] != "related" or c["tag"] != "decision":
             continue
         for old in conflict.ordered_candidates(c, existing):
             _, conflicts, failure = judge(c, [old], llm, decider)
             if failure:
-                incomplete += 1
+                failed.add((old["id"].split("#")[0], mid))
             found += [(x["cardA"]["id"].split("#")[0], mid, x["judgement"]) for x in conflicts]
         existing.append(c)
     rows, outcomes = [], []
@@ -214,10 +218,13 @@ def eval_e2e(preds, pairs, llm, decider):
         new = _units(p["new_unit"])[0].split("-")[0]
         hit = [j for o, n, j in found if o in olds and n == new]
         want = p["label"].replace("바뀜", "변경")
-        outcomes.append((should_alert(want), bool(hit)))
-        rows.append({"pair": p["pair_id"], "want": want, "alerts": hit})
-    return {**alert_rates(outcomes), "total_alerts": len(found), "incomplete_pairs": incomplete,
-            "rows": rows, "all_alerts": found}
+        unfinished = not hit and (new in unclassified or bool(olds & set(unclassified))
+                                  or any((o, new) in failed for o in olds))
+        if not unfinished:
+            outcomes.append((should_alert(want), bool(hit)))
+        rows.append({"pair": p["pair_id"], "want": want, "alerts": hit, "incomplete": unfinished})
+    return {**alert_rates(outcomes), "total_alerts": len(found), "incomplete_pairs": sum(r["incomplete"] for r in rows),
+            "failed_judgements": len(failed), "rows": rows, "all_alerts": found}
 
 
 def _print_judge_rows(rows) -> None:
@@ -234,7 +241,8 @@ def _classify_and_e2e(what, msgs, gold, pairs, llm, decider) -> tuple[dict, dict
     res = {"classify": acc, "rows": rows, "preds": preds, "failed_sessions": failed}
     summary = {"classify": acc}
     if what == "e2e":
-        e2e = eval_e2e(preds, pairs, llm, decider)
+        unclassified = {m["id"] for m in msgs if m["conversationId"] in failed_ids}
+        e2e = eval_e2e(preds, pairs, llm, decider, unclassified)
         res["e2e"] = e2e
         summary["e2e"] = {k: v for k, v in e2e.items() if k not in ("rows", "all_alerts")}
     return res, summary

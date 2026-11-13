@@ -11,7 +11,8 @@ shared/classify.ts mask() 와 같은 규칙·같은 순서. 두 쪽 모두 share
 - OpenAI 키 sk-proj-… / sk-…, GitHub 토큰 ghp_… 등 / github_pat_… : 접두사로 판단. "…abcd" 같은 줄임 표기 뒷부분까지 가림
 - 우리 서버 토큰(secrets.token_urlsafe(32), 43자, 접두사 없음)은 인증 문맥이 있을 때만 가림:
   Authorization: Bearer …, bearer …, "token": "…", access_token=…, api_key=…, password: … 등
-- 문맥 없는 43자 문자열은 일반 식별자 오탐 때문에 가리지 않음
+- 문맥 없는 43자 문자열은 일반 식별자 오탐 때문에 여기서는 가리지 않음. 통합 모드의 로컬 개인정보 게이트
+  (collector/privacy_rules.py)는 외부로 보내기 전에 32자 이상 섞인 문자열을 따로 [비밀키]로 가린다
 """
 import re
 
@@ -62,7 +63,8 @@ SENSITIVE: list[tuple[re.Pattern, object]] = [
     (re.compile(r'''(\b(?:\w*_)?(?:token|secret|api[_-]?key|passw(?:or)?d)["']?\s*[:=]\s*)(["'])(?!\[)([^"'\r\n]+)\2''', re.I | re.A),
      _quoted_secret),
     (re.compile(r'''((?:주소|건강정보|개인사정)\s*[:=]\s*)(["'])(?!\[)([^"'\r\n]+)\2'''), _quoted_label_value),
-    (re.compile(r'((?:주소|건강정보|개인사정)\s*[:=]\s*)(?![\s\["\x27])[^\n\r.;,"\x27]+'), _label_value),
+    # 쉼표에서 멈추지 않는다 ('건강정보: 당뇨, 고혈압', '주소: ○○로 12, 3층'). 마침표·세미콜론·줄바꿈에서 끝
+    (re.compile(r'((?:주소|건강정보|개인사정)\s*[:=]\s*)(?![\s\["\x27])[^\n\r.;"\x27]+'), _label_value),
     # ── 인증정보 ──
     (re.compile(r"(?<![A-Za-z0-9_-])sk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}|(?=\.{3}|…))" + _TAIL), "[API키]"),
     (re.compile(r"(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})" + _TAIL), "[액세스토큰]"),
@@ -75,14 +77,20 @@ SENSITIVE: list[tuple[re.Pattern, object]] = [
         r"[^" + _VALUE_END + r"]{4,}",
         re.I | re.A),
      _keyed_secret),
+    # 한국어 이름: '비밀번호: qwer1234', '서버 비번은 qwer1234'. 영문·숫자 값만 ('비밀번호는 8자리로'는 그대로)
+    (re.compile(r"((?:비밀\s*번호|비번|패스워드)(?:\s*[:=]\s*|[은는]\s+))(?!\[)[A-Za-z0-9!@#$%^&*._+-]{4,}"),
+     lambda m: m.group(1) + "[비밀번호]"),
     # ── 개인정보 ──
     # 국제 표기(+82)와 지역번호 유선전화(02·031·070 …)도 연락처다. 계좌 규칙보다 먼저 둔다.
     (re.compile(r"(?<!\d)\+82[-.\s]?0?(?:1[016789]|2|[3-6][1-5]|70)[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)"), "[연락처]"),
     (re.compile(r"(?<![\d-])0(?:2|[3-6][1-5]|70)[-.\s)]\s?\d{3,4}[-.\s]\d{4}(?!\d)"), "[연락처]"),
     (re.compile(r"01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}"), "[연락처]"),
-    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), "[이메일]"),
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+", re.A), "[이메일]"),  # ASCII 만 (TS 와 같음). 'kim@ex.com으로'의 '으로'는 남긴다
     (re.compile(r"\d{6}-?[1-4]\d{6}"), "[주민번호]"),
     (re.compile(r"\d{3,6}-\d{2,6}-\d{4,8}"), "[계좌]"),  # 날짜(2026-11-06)는 안 걸림
+    # 띄어 쓴 표기 (eval/mask_set.py v1 에서 놓친 것): "park.ux @ daum.net", "352 0123 4567 83"
+    (re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+ ?@ ?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"), "[이메일]"),
+    (re.compile(r"(?<![\d-])(?=(?:\d ?){11})\d{2,6}(?: \d{2,8}){2,4}(?![\d-])"), "[계좌]"),  # 11자리 이상만, 날짜는 안 걸림
 ]
 
 # 가린 자리 표시 (코드가 쓰는 것 + 프롬프트에서 AI 가 쓰는 것). 카드 masked 판정에도 쓴다.
@@ -90,6 +98,9 @@ MASK_TOKENS = (
     "[API키]", "[액세스토큰]", "[비밀번호]",
     "[연락처]", "[이메일]", "[주민번호]", "[계좌]", "[주소]", "[건강정보]", "[금융정보]", "[개인사정]",
 )
+# 다른 단계가 넣는 표시. AI 는 쓰지 않지만 카드에 남으면 가린 것으로 본다
+# [비밀키]: 로컬 개인정보 게이트(collector/privacy_rules.py), [가림]: Codex·Claude Code 스캐너(scanner/src/excerpt.rs)
+OTHER_MASK_TOKENS = ("[비밀키]", "[가림]")
 
 
 def mask(text: str) -> tuple[str, bool]:
@@ -105,4 +116,4 @@ def mask_text(text: str) -> str:
 
 
 def has_mask_token(text: str) -> bool:
-    return any(t in text for t in MASK_TOKENS)
+    return any(t in text for t in MASK_TOKENS + OTHER_MASK_TOKENS)
