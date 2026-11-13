@@ -101,6 +101,13 @@ class ClassifyTest(unittest.TestCase):
     def test_parse_json_reply_with_fence(self):
         self.assertEqual(parse_json_reply('결과입니다\n```json\n{"cards": []}\n```'), {"cards": []})
         self.assertEqual(parse_json_reply('[{"msg": 1}]'), {"cards": [{"msg": 1}]})
+        self.assertEqual(parse_json_reply('```\n{"cards": []}\n```'), {"cards": []})
+
+    def test_parse_json_reply_keeps_fences_inside_strings(self):
+        # 코드 블록을 인용한 발화 (Codex·Claude Code 프롬프트, 동기화의 마크다운 원문)
+        reply = '{"cards": [{"sentence": "```py\\nx = 1\\n``` 이렇게 고쳐", "reason": "```diff``` 참고"}]}'
+        self.assertEqual(parse_json_reply(reply)["cards"][0]["reason"], "```diff``` 참고")
+        self.assertEqual(parse_json_reply("```json\n" + reply + "\n```")["cards"][0]["reason"], "```diff``` 참고")
 
 
 class BatchTest(unittest.TestCase):
