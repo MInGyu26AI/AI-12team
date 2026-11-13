@@ -35,6 +35,13 @@ SCREEN_ANSWER = '''SELECT 1 FROM intake a WHERE a.team_id=:team AND a.conversati
         AND u.rowid>:question AND u.rowid<a.rowid AND json_extract(u.message,'$.session')=:session
         AND json_extract(u.message,'$.role')='user' AND coalesce(json_extract(u.message,'$.origin'),'screen')='screen')
     LIMIT 1'''
+# The screen-path row of the conversation just before a given row.
+SCREEN_ROW_BEFORE = '''SELECT rowid,id,job,message FROM intake WHERE team_id=:team AND conversation=:conversation
+    AND rowid<:row AND json_extract(message,'$.session')=:session
+    AND coalesce(json_extract(message,'$.origin'),'screen')='screen' ORDER BY rowid DESC LIMIT 1'''
+# What C4-b does with a sync turn: store it (step 4 and on), skip it (skippedTurns), or let the screen rows that already
+# hold its question and answer be the turn (its sync messages are not stored and not counted).
+TAKE, SKIP, PAIRED = 'take', 'skip', 'paired'
 
 
 def created_at(message):
@@ -158,12 +165,28 @@ def _fill_turn_id(c, row, turn_id):
                   (json.dumps(dict(saved, turnId=turn_id), ensure_ascii=False), row['id']))
 
 
-def _screen_has_turn(c, team_id, start, turn):
-    """C4-b: True when this sync turn must not be taken because the screen path already has it.
+def _screen_question_before(c, team_id, start, conversation, answer):
+    """The screen question paired with a screen answer row, or None.
+
+    The conversation's screen row just before the answer must be a question (so no other screen answer lies between),
+    not batched yet and without a turnId.
+    """
+    row = c.execute(SCREEN_ROW_BEFORE, dict(team=team_id, conversation='chatgpt:' + conversation, row=answer['rowid'],
+                                            session=start)).fetchone()
+    if not row or row['job'] is not None:
+        return None
+    saved = json.loads(row['message'])
+    return row if saved['role'] == 'user' and 'turnId' not in saved else None
+
+
+def _screen_overlap(c, team_id, start, turn):
+    """C4-b: TAKE, SKIP or PAIRED for this sync turn, by what the screen path already has of it.
 
     Without a stored question (chatgpt:<turnId>), some of the turn's answers may be screen rows: the screen question
     was left in the baseline, had a hash id or was quarantined. Batched, the turn is skipped (its answer was classified).
-    Not batched yet, they get the turnId and the turn is taken: the question is new, the answers are duplicates.
+    Not batched yet, they get the turnId. When the screen question just before them is found too (a hash id), it gets
+    the turnId and the screen rows are the turn (PAIRED). Otherwise the turn is taken: the question is new, the answers
+    are duplicates.
     With a stored question: a screen answer follows it before the conversation's next screen question (a later turn's
     answer is not this turn's), or the question is already batched. Taking the turn would repeat it or add answers
     without their question. A stored question still waiting for its answer gets the turnId.
@@ -174,16 +197,19 @@ def _screen_has_turn(c, team_id, start, turn):
     if not question:
         answers = [_screen_row(c, intake_id(team_id, start, m)) for m in turn if m['role'] == 'assistant']
         answers = [r for r in answers if r]
+        if not answers:
+            return TAKE
         if any(r['job'] is not None for r in answers):
-            return True
-        for row in answers:
+            return SKIP
+        pair = _screen_question_before(c, team_id, start, conversation, min(answers, key=lambda r: r['rowid']))
+        for row in answers + ([pair] if pair else []):
             _fill_turn_id(c, row, turn_id)
-        return False
+        return PAIRED if pair else TAKE
     if question['job'] is not None or c.execute(SCREEN_ANSWER, dict(
             team=team_id, conversation='chatgpt:' + conversation, question=question['rowid'], session=start)).fetchone():
-        return True
+        return SKIP
     _fill_turn_id(c, question, turn_id)
-    return False
+    return TAKE
 
 
 def without_team_record(text):
@@ -240,8 +266,10 @@ def append(pipeline, messages, flush=False):
         issues = [quarantine(c, m, team_id, s['start'], 'invalid_message') for m in rejected]
         windows = sync_windows(c, s)
         outside = {key for key, turn in turns.items() if not _in_window(turn, windows)}
-        skipped = {key for key in turns.keys() - outside if _screen_has_turn(c, team_id, s['start'], turns[key])}
-        kept, team_records = _own_words([m for m in clean if _sync_turn(m) not in outside | skipped])
+        overlap = {key: _screen_overlap(c, team_id, s['start'], turn) for key, turn in turns.items() if key not in outside}
+        skipped = {key for key, kind in overlap.items() if kind == SKIP}
+        dropped = outside | {key for key, kind in overlap.items() if kind != TAKE}
+        kept, team_records = _own_words([m for m in clean if _sync_turn(m) not in dropped])
         stored = []
         for m in kept:
             if store_messages(c, [m], team_id, s['start'], issues):
