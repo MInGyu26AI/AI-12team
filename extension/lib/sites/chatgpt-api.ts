@@ -100,6 +100,7 @@ const fail = (error: TabSyncError, retry?: number): Failure => (retry === undefi
 interface Session {
   token: string;
   account: string; // sha256(UTF-8(user.id)) 소문자 hex
+  userId: string; // 세션의 user.id 원본. 목록 항목의 owner.user_id 와 비교하는 데만 쓰고 탭 밖으로 내보내지 않는다
   expiresAtMs: number | null;
 }
 type SessionResult = { ok: true; session: Session } | Failure;
@@ -163,7 +164,7 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     const userId = asRecord(body.user)?.id;
     if (typeof token !== 'string' || typeof userId !== 'string' || !userId) return fail('shape_changed');
     const expires = typeof body.expires === 'string' ? Date.parse(body.expires) : NaN;
-    session = { token, account: await sha256Hex(userId), expiresAtMs: Number.isNaN(expires) ? null : expires };
+    session = { token, account: await sha256Hex(userId), userId, expiresAtMs: Number.isNaN(expires) ? null : expires };
     return { ok: true, session };
   }
 
@@ -177,7 +178,7 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
   }
 
   /** 토큰을 붙여 GET. 401 이면 토큰을 한 번 다시 받아 다시 시도하고, 그래도 401 이면 logged_out */
-  async function authedGet(path: string): Promise<{ result: Fetched; account?: string }> {
+  async function authedGet(path: string): Promise<{ result: Fetched; account?: string; userId?: string }> {
     let started = await ensureSession(false);
     if (!started.ok) return { result: started, account: session?.account };
     let res = await get(path, started.session.token);
@@ -191,18 +192,18 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
         return { result: fail('logged_out'), account: started.session.account };
       }
     }
-    return { result: res, account: started.session.account };
+    return { result: res, account: started.session.account, userId: started.session.userId };
   }
 
   const done = <T>(account: string | undefined, data: T): TabSyncResult<T> => (account ? { ok: true, account, data } : fail('shape_changed'));
   const failed = (result: Failure, account: string | undefined): TabSyncResult<never> => (account ? { ...result, account } : result);
 
-  /** 인증 GET + 본문 해석. parse 가 null 을 주면 필수 필드가 없는 것이라 shape_changed */
-  async function read<T>(path: string, parse: (json: unknown) => T | null): Promise<TabSyncResult<T>> {
-    const { result, account } = await authedGet(path);
+  /** 인증 GET + 본문 해석. parse 가 null 을 주면 필수 필드가 없는 것이라 shape_changed. parse 는 이 요청에 쓴 세션의 user.id 도 받는다 */
+  async function read<T>(path: string, parse: (json: unknown, userId: string) => T | null): Promise<TabSyncResult<T>> {
+    const { result, account, userId } = await authedGet(path);
     if ('unauthorized' in result) return failed(fail('logged_out'), account);
     if (!result.ok) return failed(result, account);
-    const data = parse(result.json);
+    const data = parse(result.json, userId ?? '');
     return data === null ? failed(fail('shape_changed'), account) : done(account, data);
   }
 
@@ -250,16 +251,27 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
   }
 
   // 프로젝트 대화 목록: 최상위는 items 배열과 cursor(문자열 또는 null)가 필수. 항목은 id · update_time 이 필수이고,
-  // 빠진 항목은 그 항목만 건너뛴다(skippedItems). 항목이 있는데 모두 건너뛴 경우에만 모양이 바뀐 것(null)으로 본다
-  function parseProjectPage(json: unknown): SyncProjectPage | null {
+  // 빠진 항목은 그 항목만 건너뛴다(skippedItems). 항목이 있는데 모두 건너뛴 경우에만 모양이 바뀐 것(null)으로 본다.
+  // 주인 이중 확인: 항목의 owner.user_id 가 있고 세션 user.id 와 다르면 남의 대화라서 뺀다(skippedItems 에 더함). owner 가 없으면 남긴다.
+  // owner.user_id 가 있는 항목이 하나 이상인데 모두 다르면 형식이 바뀐 것(null). owner 의 값은 비교에만 쓰고 결과에 넣지 않는다
+  function parseProjectPage(json: unknown, userId: string): SyncProjectPage | null {
     const body = asRecord(json);
     if (!body || !Array.isArray(body.items)) return null;
     if (body.cursor !== null && typeof body.cursor !== 'string') return null; // 없거나(undefined) 다른 타입이면 모양이 바뀐 것
     const items: SyncConversationRef[] = [];
+    let withOwner = 0;
+    let ownedByMe = 0;
     for (const raw of body.items) {
       const item = asRecord(raw);
-      const updateTime = isoOf(item?.update_time);
-      if (!item || typeof item.id !== 'string' || !item.id || updateTime === null) continue;
+      if (!item) continue;
+      const ownerId = asRecord(item.owner)?.user_id;
+      if (typeof ownerId === 'string' && ownerId) {
+        withOwner += 1;
+        if (ownerId !== userId) continue; // 남의 대화
+        ownedByMe += 1;
+      }
+      const updateTime = isoOf(item.update_time);
+      if (typeof item.id !== 'string' || !item.id || updateTime === null) continue;
       items.push({
         id: item.id,
         updateTime,
@@ -269,6 +281,7 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
       });
     }
     const skippedItems = body.items.length - items.length;
+    if (withOwner > 0 && ownedByMe === 0) return null;
     if (body.items.length > 0 && items.length === 0) return null;
     items.sort((a, b) => Date.parse(b.updateTime) - Date.parse(a.updateTime)); // update_time 최신 순 (같으면 받은 순서)
     return { items, nextCursor: items.length ? cursorOf(body.cursor) : null, skippedItems }; // cursor 가 null(또는 빈 문자열)이면 끝

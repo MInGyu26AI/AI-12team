@@ -386,6 +386,73 @@ describe('sync.projectPage', () => {
     expect(await api.handle(request())).toEqual({ ok: true, account: expectedAccount, data: { items: [], nextCursor: null, skippedItems: 0 } });
   });
 
+  describe('주인 이중 확인 (owner.user_id ↔ 세션 user.id)', () => {
+    const ME = SESSION.user.id as string; // 시험용 합성 사용자 id
+    const owner = (userId: unknown) => ({ user_id: userId, user_email: 'other@example.test', name: '다른 사람', avatar_url: 'https://example.test/a.png' });
+    const row = (id: string, ownerValue?: unknown) => ({ id, update_time: '2025-11-13T05:00:00Z', ...(ownerValue === undefined ? {} : { owner: ownerValue }) });
+    const listOf = async (items: unknown[], routes: Record<string, unknown> = {}) => {
+      const { api } = apiWith({ [base]: { items, cursor: null }, ...routes });
+      return api.handle(request());
+    };
+    const dataOf = (res: Awaited<ReturnType<typeof listOf>>) => (res.ok ? (res.data as unknown as { items: { id: string }[]; skippedItems: number }) : null);
+
+    it('섞인 목록: 내 대화는 남기고 owner.user_id 가 다른 대화는 빼서 skippedItems 에 더한다', async () => {
+      const res = await listOf([row('mine-1', owner(ME)), row('theirs', owner('user-other')), row('mine-2', owner(ME)), row('no-owner')]);
+      const data = dataOf(res);
+      expect(data?.items.map((i) => i.id).sort()).toEqual(['mine-1', 'mine-2', 'no-owner']);
+      expect(data?.skippedItems).toBe(1);
+    });
+
+    it('owner 가 없는 항목은 남긴다 (owner 없음·null·user_id 없음·문자열이 아닌 user_id)', async () => {
+      const res = await listOf([row('a'), row('b', null), row('c', {}), row('d', { name: '이름만' }), row('e', owner(42)), row('f', owner(''))]);
+      const data = dataOf(res);
+      expect(data?.items.map((i) => i.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+      expect(data?.skippedItems).toBe(0);
+    });
+
+    it('owner.user_id 가 있는 항목이 모두 다르면 shape_changed (owner 없는 항목이 섞여 있어도)', async () => {
+      const allOther = await listOf([row('x', owner('user-other')), row('y', owner('user-third'))]);
+      expect(allOther).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
+      const withBare = await listOf([row('x', owner('user-other')), row('no-owner')]);
+      expect(withBare).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
+    });
+
+    it('owner 의 이메일·이름·id 는 반환값에 들어가지 않는다', async () => {
+      const res = await listOf([row('mine', owner(ME)), row('theirs', owner('user-other'))]);
+      const text = JSON.stringify(res);
+      for (const secret of ['other@example.test', '다른 사람', 'avatar', 'user-other', ME, 'owner']) expect(text).not.toContain(secret);
+    });
+
+    it('남의 대화이면서 필수 필드도 빠진 항목은 한 번만 센다', async () => {
+      const res = await listOf([row('mine', owner(ME)), { owner: owner('user-other') }, { id: 'broken', owner: owner(ME) }]);
+      expect(dataOf(res)?.skippedItems).toBe(2);
+      expect(dataOf(res)?.items.map((i) => i.id)).toEqual(['mine']);
+    });
+
+    it('내 항목이 필수 필드가 빠져 모두 건너뛰어지면 shape_changed', async () => {
+      expect(await listOf([{ owner: owner(ME) }])).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
+    });
+
+    it('401 로 세션을 다시 받으면 새 세션의 user.id 로 비교한다', async () => {
+      const second = { ...SESSION_BODY, accessToken: 'second-token', user: { id: 'user-second' } };
+      const { api } = apiWith({
+        '/api/auth/session': [SESSION_BODY, second],
+        [base]: [status(401), { items: [row('second-mine', owner('user-second')), row('first-mine', owner(ME))], cursor: null }],
+      });
+      const res = await api.handle(request());
+      expect(dataOf(res)?.items.map((i) => i.id)).toEqual(['second-mine']);
+      expect(dataOf(res)?.skippedItems).toBe(1);
+    });
+
+    it('owned_only 를 무시하고 섞어 주는 서버에서도 남의 대화는 걸러진다', async () => {
+      const mixed = { items: [row('mine', owner(ME)), row('theirs-1', owner('user-other')), row('theirs-2', owner('user-other'))], cursor: null };
+      const { api } = apiWith({ [base]: mixed });
+      const res = await api.handle(request());
+      expect(dataOf(res)?.items.map((i) => i.id)).toEqual(['mine']);
+      expect(dataOf(res)?.skippedItems).toBe(2);
+    });
+  });
+
   it('gizmoId 가 비어 있으면 요청하지 않고 shape_changed', async () => {
     const { api, calls } = apiWith({});
     expect(await api.handle({ type: 'sync.projectPage', gizmoId: '', cursor: null })).toEqual({ ok: false, error: 'shape_changed' });
