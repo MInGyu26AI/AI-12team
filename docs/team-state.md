@@ -9,6 +9,8 @@
 
 ## 서버에서 부르는 법 (동균)
 
+팀 서버의 [server/repo_sync.py](../server/repo_sync.py)가 이렇게 부르고 GitHub에 커밋한다. 설정은 [팀 서버 문서](team-server.md#github-레포-저장).
+
 ```python
 from ai.syncup_ai.team_state import build_state, render_markdown, dumps
 
@@ -18,13 +20,15 @@ state = build_state(
     done_todos(c, team_id),
     team={"name": ..., "goal": ..., "scope": ..., "rules": [...], "repo": ...},  # 프로젝트 방향성 기준. 없으면 생략
     members={user_uuid: "김단비", ...},      # owner 가 빈 결정에 승인자 이름을 넣을 때만 씀
+    changed_at=...,                          # 충돌 처리·할 일 체크의 마지막 시각(epoch 초). 없으면 생략
 )
 files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 ```
 
-- **언제**: 카드 승인, 충돌 해결, 할 일 체크 뒤. 짧은 시간 안의 여러 건은 마지막에 한 번만 만들어 커밋 하나로.
-- **안 바뀌었으면 커밋 안 함**: 같은 입력이면 글자까지 똑같이 나온다 (생성 시각 대신 마지막 승인 시각을 씀). 레포 파일과 같으면 건너뛰기.
-- **커밋 메시지**: 서버 쪽에서 정함 (회의록 예: `SyncUp: MVP 범위 결정 변경 (김단비 승인)`)
+- **언제**: 카드 승인, 충돌 해결, 할 일 체크, 충돌 검사가 끝난 뒤. 짧은 시간 안의 여러 건은 마지막에 한 번만 만들어 커밋 하나로.
+- **안 바뀌었으면 커밋 안 함**: 같은 입력이면 글자까지 똑같이 나온다 (생성 시각 대신 마지막 변경 시각을 씀). 레포 파일과 같으면 건너뛰기.
+- **커밋 메시지**: 서버가 바뀐 내용으로 만든다 (예: `SyncUp: MVP 범위 결정 변경 외 1건 (김단비 승인)`)
+- 팀 서버는 RLS 때문에 요청한 사람 이름만 읽을 수 있어 `members`는 넘기지 않는다. owner 가 빈 결정은 결정자 없이 나간다.
 
 ## 할 일 ID (SU-n)
 
@@ -39,7 +43,7 @@ files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 |---|---|
 | `syncup_version` | 형식 버전 (1) |
 | `team` | `name`, `goal`, `scope`, `rules[]`, `repo` — 있는 것만 |
-| `updated_at` | 마지막 승인 시각 (KST ISO, 예 `2026-11-13T14:02+09:00`) |
+| `updated_at` | 마지막 변경 시각: 승인·충돌 처리·할 일 체크 중 가장 늦은 것 (KST ISO, 예 `2026-11-13T14:02+09:00`). 충돌 검사가 새로 찾은 충돌은 시각이 없어 넣지 않는다 |
 | `summary` | `decisions`(현재 결정 수), `open_conflicts`, `todos`, `todos_done`, `research` |
 | `open_conflicts[]` | `id`, `topic_key`, `judgement`, `reason`, `existing{card_id,content,owner}`, `new{…}`, `status`(open / discuss) |
 | `decisions[]` | 세부 주제(topic_key)별 하나. `subtopic`, `status`(settled / review), `current[]`(최신이 앞, '둘 다 유효'면 여러 개), `history[]`(바뀜 superseded / 채택 안 됨 rejected) |
@@ -54,6 +58,7 @@ files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 ## 레포가 Public 일 때 지키는 것
 
 - 원문 발췌(`sentence`), 출처(`source`), 확신도, 승인자 uuid 는 **넣지 않는다**. 정리된 `content`·`reason`·이름만.
+- 충돌의 `reason` 은 판정별 고정 문구다. chat 판정의 이유는 AI가 원문 발화를 인용해 쓸 수 있어 내보내지 않는다.
 - 모든 글에 `mask_text` 를 한 번 더 적용 (연락처·이메일·API 키 등).
 - 팀원 이름은 들어간다. 시연용 팀 레포(MInGyu26AI/AI-12team)는 Public 이므로 개인 사정이 담긴 카드는 승인하지 않도록 안내.
 
