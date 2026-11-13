@@ -1,0 +1,8 @@
+{
+  "_note": "합성 픽스처. /backend-api/gizmos/snorlax/sidebar 모양 추정(P10 전). 탭 클라이언트는 gizmo.id 와 display.name 만 쓴다",
+  "items": [
+    { "gizmo": { "gizmo": { "id": "g-p-0001synthetic", "display": { "name": "AI-12team 해커톤" } }, "conversations": { "items": [], "cursor": null } } },
+    { "gizmo": { "gizmo": { "id": "g-p-0002synthetic", "display": { "name": "개인 메모" } }, "conversations": { "items": [], "cursor": null } } }
+  ],
+  "cursor": null
+}

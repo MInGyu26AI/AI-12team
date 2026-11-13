@@ -41,6 +41,36 @@ export interface ExtStatus {
   recent: BatchRecord[]; // 최근 수집 (새 것부터)
   counts?: Partial<Record<"reviewPending" | "deliveryPending" | "deliveryBlocked" | "classificationPending" | "classificationFailed" | "intakeIssues" | "privacyHeld" | "privacyExcluded", number>>;
   privacy?: { policy: string; model: string | null; available: boolean | null; reason: string | null }; // 로컬 개인정보 검사 상태
+  // 계정 동기화 (docs/sync-contract.md 3장). 옛 수집기는 없음 → 확장은 동기화를 켜지 못하게 한다
+  syncWindows?: SyncWindow[]; // 동기화 창: 수집 기간 ∩ 동기화 켠 구간 − 일시정지 구간 (시작 순)
+  accountSync?: AccountSyncState | null; // null = 한 번도 켠 적 없음
+}
+
+// 동기화 창 한 구간 [start, end). end=null 은 아직 열려 있음(지금 수집 중이고 동기화 켜짐)
+export interface SyncWindow {
+  start: string; // ISO
+  end: string | null; // ISO
+}
+
+export interface AccountSyncState {
+  enabled: boolean;
+  account: string; // 묶인 ChatGPT 계정 해시 (sha256 hex 64자). 꺼도 마지막 값을 둔다
+  since: string | null; // 지금 켜진 구간의 시작(동의 시각, ISO). 꺼져 있으면 null
+}
+
+// 웹 → 확장 '싱크 맞추기' (rpc 메시지의 method 이름). 수집기로 넘기지 않고 background 가 처리한다:
+// 프로젝트 동기화 패스를 바로 한 번 돌리고(켜져 있을 때) collection.flush 를 부른다
+export const EXT_SYNC_NOW = "ext.syncNow";
+
+export interface SyncNowParams {
+  reason: "button" | "review-open"; // 버튼 = 사용자가 누름, review-open = 개인 검토함 진입 시 자동
+}
+
+export interface SyncNowResult {
+  sync: "ran" | "off" | "resting" | "no-tab" | "busy" | "failed"; // 패스 결과. off = 동기화 꺼짐(화면 수집만)
+  newTurns: number; // 이번 패스가 수집기에 새로 넣은 턴 수 (패스를 안 돌렸으면 0)
+  flushed: boolean; // collection.flush 를 불렀는지 (수집 중이 아니면 false)
+  blockedReason?: string; // flush 를 못 부른 이유 (sendBlockedReason 과 같은 문구)
 }
 
 // 로컬 개인정보 검사 (privacy.list). 원문 미리보기는 형식 가림만 적용된 로컬 전용 값이다.
@@ -87,4 +117,6 @@ export interface ExtSettingsPatch {
   autoCollect?: boolean;
   turnsPerBatch?: number;
   endsAt?: string;
+  // 계정 동기화 켬·끔 (C6). 켤 때 account 필수. 다른 계정으로 켜려면 먼저 꺼야 한다(수집기가 거절)
+  accountSync?: { enabled: boolean; account?: string };
 }

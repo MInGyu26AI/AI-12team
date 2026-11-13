@@ -16,7 +16,14 @@ export interface CollectedMessage {
   conversationTitle?: string;
   url?: string;
   collectedAt: string; // ISO
+  // 아래 셋은 계정 동기화(docs/sync-contract.md 2장)가 붙인다. 화면 경로는 보내지 않는다(없으면 screen 으로 본다)
+  createdAt?: string; // ChatGPT 서버의 메시지 작성 시각 (ISO, 시간대 포함). origin='sync' 이면 필수
+  origin?: MessageOrigin;
+  turnId?: string; // 그 턴의 사용자 메시지 id (접두사 없음). 같은 turnId 끼리 한 턴. origin='sync' 이면 필수
 }
+
+// 발화가 들어온 경로: screen = 화면 수집(auto-collect·수동·선택), sync = 계정 동기화 패스
+export type MessageOrigin = "screen" | "sync";
 
 // `python -m syncup_ai classify` 표준 입력 (ai/README.md). TS 코드는 쓰지 않고 ai/ 가 이 이름으로 형식을 가리킨다
 export interface NativeClassifyRequest {

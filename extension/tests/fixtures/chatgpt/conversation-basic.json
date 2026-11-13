@@ -1,0 +1,33 @@
+{
+  "_note": "합성 픽스처. 실제 대화 아님. 기대 결과는 expected-basic.json",
+  "conversation_id": "c0ffee00-0000-4000-8000-000000000001",
+  "title": "합성 대화",
+  "create_time": 1762995600.0,
+  "update_time": 1762996200.5,
+  "current_node": "m-a3",
+  "mapping": {
+    "root": { "id": "root", "parent": null, "children": ["m-sys"], "message": null },
+    "m-sys": { "id": "m-sys", "parent": "root", "children": ["m-u1"],
+      "message": { "id": "m-sys", "author": { "role": "system" }, "create_time": null, "content": { "content_type": "text", "parts": [""] }, "metadata": { "is_visually_hidden_from_conversation": true } } },
+    "m-u1": { "id": "m-u1", "parent": "m-sys", "children": ["m-think", "m-u1-old-branch"],
+      "message": { "id": "m-u1", "author": { "role": "user" }, "recipient": "all", "create_time": 1762995601.2, "content": { "content_type": "text", "parts": ["발표 자료 마감을 금요일로 정할까?"] }, "status": "finished_successfully", "end_turn": null, "metadata": {} } },
+    "m-u1-old-branch": { "id": "m-u1-old-branch", "parent": "m-u1", "children": [],
+      "message": { "id": "m-u1-old-branch", "author": { "role": "assistant" }, "create_time": 1762995602.0, "content": { "content_type": "text", "parts": ["(편집 전 가지라 빠져야 함)"] }, "status": "finished_successfully", "end_turn": true, "metadata": {} } },
+    "m-think": { "id": "m-think", "parent": "m-u1", "children": ["m-tool"],
+      "message": { "id": "m-think", "author": { "role": "assistant" }, "create_time": 1762995603.0, "content": { "content_type": "thoughts", "parts": [] }, "metadata": { "is_thinking_preamble_message": true } } },
+    "m-tool": { "id": "m-tool", "parent": "m-think", "children": ["m-a1"],
+      "message": { "id": "m-tool", "author": { "role": "tool" }, "recipient": "all", "create_time": 1762995604.0, "content": { "content_type": "execution_output", "parts": ["42"] }, "metadata": {} } },
+    "m-a1": { "id": "m-a1", "parent": "m-tool", "children": ["m-a1b"],
+      "message": { "id": "m-a1", "author": { "role": "assistant" }, "recipient": "all", "create_time": 1762995605.5, "content": { "content_type": "text", "parts": ["좋아요. 금요일 18시로 하죠 【3†source】"] }, "status": "finished_successfully", "end_turn": false, "metadata": { "content_references": [{ "matched_text": "【3†source】" }] } } },
+    "m-a1b": { "id": "m-a1b", "parent": "m-a1", "children": ["m-u2"],
+      "message": { "id": "m-a1b", "author": { "role": "assistant" }, "recipient": "all", "create_time": 1762995606.0, "content": { "content_type": "text", "parts": ["담당은 민지가 맡으면 됩니다."] }, "status": "finished_successfully", "end_turn": true, "metadata": { "is_complete": true, "finish_details": { "type": "stop" } } } },
+    "m-u2": { "id": "m-u2", "parent": "m-a1b", "children": ["m-a2"],
+      "message": { "id": "m-u2", "author": { "role": "user" }, "recipient": "all", "create_time": 1762996100.0, "content": { "content_type": "multimodal_text", "parts": [{ "content_type": "image_asset_pointer", "asset_pointer": "file-service://x" }, "이 표 정리해 줘"] }, "metadata": {} } },
+    "m-a2": { "id": "m-a2", "parent": "m-u2", "children": ["m-u3"],
+      "message": { "id": "m-a2", "author": { "role": "assistant" }, "recipient": "all", "create_time": 1762996105.0, "content": { "content_type": "text", "parts": [""] }, "status": "finished_successfully", "end_turn": true, "metadata": { "is_complete": true, "finish_details": { "type": "stop" }, "model_dil_v2": { "fallbackMarkdown": "| 항목 | 값 |\n|---|---|\n| 마감 | 금 18시 |" } } } },
+    "m-u3": { "id": "m-u3", "parent": "m-a2", "children": ["m-a3"],
+      "message": { "id": "m-u3", "author": { "role": "user" }, "recipient": "all", "create_time": 1762996190.0, "content": { "content_type": "text", "parts": ["그만"] }, "metadata": {} } },
+    "m-a3": { "id": "m-a3", "parent": "m-u3", "children": [],
+      "message": { "id": "m-a3", "author": { "role": "assistant" }, "recipient": "all", "create_time": 1762996195.0, "content": { "content_type": "text", "parts": ["알겠습니다. 여기서"] }, "status": "finished_partial_completion", "end_turn": null, "metadata": { "finish_details": { "type": "interrupted" } } } }
+  }
+}

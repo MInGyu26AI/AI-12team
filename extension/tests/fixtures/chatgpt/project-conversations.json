@@ -1,0 +1,9 @@
+{
+  "_note": "합성 픽스처. /backend-api/gizmos/g-p-0001synthetic/conversations?cursor= 모양 추정(P1·P10 전)",
+  "items": [
+    { "id": "c0ffee00-0000-4000-8000-000000000001", "title": "합성 대화", "update_time": "2025-11-13T01:10:00.500000Z", "is_archived": false, "gizmo_id": "g-p-0001synthetic" },
+    { "id": "c0ffee00-0000-4000-8000-000000000002", "title": "생성 중", "update_time": 1762995802.0, "is_archived": false, "gizmo_id": "g-p-0001synthetic" },
+    { "id": "c0ffee00-0000-4000-8000-000000000003", "title": "보관됨", "update_time": "2025-11-12T09:00:00Z", "is_archived": true, "gizmo_id": "g-p-0001synthetic" }
+  ],
+  "cursor": "synthetic-cursor-2"
+}
