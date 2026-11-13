@@ -278,7 +278,11 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 - `origin='sync'`로 둡니다.
 - `collectedAt`은 `createdAt`과 같은 값입니다.
 
-**웹 내보내기.** `web/src/lib/chatgpt-export.ts`를 이 파서로 바꿀지는 결정 대기입니다(8장).
+**웹 내보내기 (갈래 2).** `web/src/lib/chatgpt-export.ts`도 이 파서를 씁니다(`normalizeConversation`만, `turnsInWindows`는 쓰지 않음).
+- `readChatGPTExport`의 결과 모양(`ExportConversation`, `Utterance`)과 정렬은 그대로 둡니다.
+- 시각이 없는 메시지는 지금처럼 대화 시각, 그다음 지금 시각으로 채웁니다.
+- 생성 중·미완료 턴도 내보내기에서는 그대로 넣습니다(파일은 이미 끝난 대화라서).
+- 바뀌는 결과: 도구·생각·숨김 메시지가 빠지고, 첨부만 있는 사용자 메시지가 `[첨부 N개]`로 들어오고, 인용 표시가 지워집니다. 웹 시험에 이 차이를 하나씩 넣습니다.
 
 ## 7. 갈래와 파일
 
@@ -287,12 +291,12 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 | # | 갈래 | 고치는 파일 | 기대는 것 | 모델 |
 |---|---|---|---|---|
 | 1 | 수집기 | `collector/turn_intake.py`, `collector/collection_settings.py`, `collector/collection_status.py`, `checks/check_sync_intake.py` | 약속 | 리드 모델 |
-| 2 | 탭 | `shared/chatgpt-conversation.ts`, `extension/lib/sites/chatgpt-api.ts`(새), `extension/entrypoints/ai-chat.content.ts`(`sync.*`만), 시험 | 약속 | sonnet xhigh |
+| 2 | 탭 | `shared/chatgpt-conversation.ts`, `extension/lib/sites/chatgpt-api.ts`(새), `extension/entrypoints/ai-chat.content.ts`(`sync.*`만), `web/src/lib/chatgpt-export.ts`(공용 파서 사용), 시험 | 약속 | sonnet xhigh |
 | 3 | 패스·스케줄러 | `extension/lib/chatgpt-sync/*`(`state.ts`의 타입은 약속), `extension/entrypoints/background.ts`, 시험 | 약속 (2·1은 가짜로 시험) | 리드 모델 |
-| 4 | 팝업 | `extension/entrypoints/popup/*`, `extension/lib/settings.ts`, 시험 | 약속 | sonnet xhigh |
-| 5 | 채팅 화면 | `extension/lib/chat-overlay.ts`, `extension/lib/team-record.ts`(새), 팀 기록 형식 파일(8장), 시험 | 약속 | sonnet xhigh |
+| 4 | 팝업 | `extension/entrypoints/popup/*`, `extension/lib/settings.ts`, 시험. 프로젝트만 수집 스위치·프로젝트 고르기·동의 문구, 싱크 맞추기 버튼, "N회마다" 조절 제거, 화면 구조 경고 자리, 레포 상태 자리 | 약속 | sonnet xhigh |
+| 5 | 채팅 화면 | `extension/lib/chat-overlay.ts`, `extension/lib/team-record.ts`(새), `shared/board-markdown.ts`(웹에서 옮김), `web/src/lib/board-markdown.ts`(공용을 다시 내보내기만), 시험 | 약속 | sonnet xhigh |
 | 6 | 감지·알림 | `extension/lib/extract-health.ts`(새), `extension/lib/candidate-notice.ts`(새), `extension/wxt.config.ts`, 시험. 2·3을 합친 뒤에는 연결부(`ai-chat.content.ts`, `background.ts`, `collector-status.ts`)도 맡습니다 | 약속, 연결부는 2·3 | sonnet xhigh |
-| 7 | 웹 (선택) | `web/src/app/(app)/review/page.tsx`, `web/src/app/(app)/collect/page.tsx`, `web/src/lib/rpc.ts`, 시험 | 약속 | sonnet xhigh |
+| 7 | 웹 | `web/src/app/(app)/review/page.tsx`, `web/src/app/(app)/collect/page.tsx`, `web/src/lib/rpc.ts`, 시험 | 약속 | sonnet xhigh |
 | 8 | e2e | `~/.cache/syncup-e2e` (저장소 밖) | 1~6 | sonnet xhigh |
 
 **e2e 시나리오(갈래 8).** 아래 넷만 가짜 서버로 만듭니다. 429·403 쉼은 갈래 3의 단위 시험에서 다룹니다.
@@ -315,14 +319,12 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 - `~/syncup-demo`와 `~/syncup-demo-run`은 건드리지 않습니다.
 - 보고는 RULES.md 형식으로 합니다(내가 할 일 / 변경 사항 / 발견 사항). 팀원 원본 줄을 바꿨다면 표(파일, 줄, 이전, 이후, 이유)를 붙입니다.
 
-## 8. 결정 대기 (동균 님)
+## 8. 웹 쪽 결정 (11/13 동균 님: 넣음)
 
-결정되기 전까지 갈래는 아래 항목을 만들지 않습니다.
-
-- 웹 내보내기를 공용 파서로 바꾸는 일(갈래 2가 `web/src/lib/chatgpt-export.ts`를 고칠지)
-- 팀 기록 형식 함수 `boardToMarkdown`의 위치. 웹에서 `shared/`로 옮길지, 확장에 복사만 할지 정해야 합니다(갈래 5).
-- 팝업의 'GitHub 레포 상태' 자리(갈래 4)
-- 갈래 7(웹)을 합치는 순서에 둘지, 마지막 선택 항목으로 둘지
+- **웹 내보내기:** 공용 파서로 바꿉니다(갈래 2, 6장 "웹 내보내기").
+- **팀 기록 형식:** `boardToMarkdown`을 `shared/board-markdown.ts`로 옮깁니다(갈래 5). `web/src/lib/board-markdown.ts`는 공용 함수를 다시 내보내기만 해서 웹 import는 그대로 둡니다. 출력 문자열은 바꾸지 않습니다.
+- **팝업 'GitHub 레포 상태' 자리:** 갈래 4가 `{name, lastSavedAt} | null`을 받는 표시 부품만 만듭니다. 데이터 출처(GitHub 연동, `feat/github-sync`)가 정해질 때까지 `null`을 넣어 아무것도 그리지 않습니다. 약속 타입은 더하지 않습니다.
+- **갈래 7(웹):** 합치는 순서에 둡니다. Vercel 재배포가 있어야 사용자에게 닿습니다(단비 님 권한).
 
 ## 9. 다음 단계로 미룬 것 (11/13 동균 님 결정)
 
