@@ -5,7 +5,7 @@ import { errorText, rpc } from '../collector-rpc';
 import type { BgResponse, SyncProject, TabSyncError, TabSyncRequest, TabSyncResult } from '../messages';
 import { sendBlockedReason, settingsFromStatus, settingsItem } from '../settings';
 import { findLeaderTab } from './leader-tab';
-import { runSyncPass, syncLeftoverItem, syncTiming, waitForRunningPass } from './pass';
+import { recoverInterruptedPass, runSyncPass, syncLeftoverItem, syncTiming, waitForRunningPass } from './pass';
 import { SYNC_ALARM, SYNC_DEFAULTS, SYNC_PERIOD_MINUTES, syncStateItem } from './state';
 
 // 켬 실패 문구 (약속 5장 표). 팝업은 받은 문구를 그대로 보여 준다
@@ -66,8 +66,12 @@ export const retryCollectorOff = () =>
     await setCollectorOffPending(false);
   });
 
-/** 서비스 워커가 시작할 때: 켜져 있는데 알람이 없으면 다시 만들고(persistAcrossSessions 는 Chrome 150 부터), 못 전한 끄기를 다시 보낸다 */
+/**
+ * 서비스 워커가 시작할 때: 패스 도중 죽은 흔적('running')을 되돌리고, 켜져 있는데 알람이 없으면 다시 만들고
+ * (persistAcrossSessions 는 Chrome 150 부터), 못 전한 끄기를 다시 보낸다
+ */
 export async function startSyncScheduler() {
+  await recoverInterruptedPass();
   const state = await syncStateItem.getValue();
   if (state.enabled && !(await browser.alarms.get(SYNC_ALARM))) await startSyncAlarm();
   await retryCollectorOff();
@@ -86,7 +90,7 @@ const bindCollector = (project: SyncProject, account: string) =>
     } catch (error) {
       return errorText(error);
     }
-    // 켤 때마다 새로 시작한다(커서·pending·failures·쉼·못 전한 끄기). 통계만 이어 간다
+    // 켤 때마다 새로 시작한다(커서·pending·failures·쉼·못 전한 끄기). 통계는 이어 가되 건너뛴 대화 수는 failures 와 함께 0
     const { stats } = await syncStateItem.getValue();
     await syncLeftoverItem.setValue(false);
     await syncStateItem.setValue({
@@ -96,7 +100,7 @@ const bindCollector = (project: SyncProject, account: string) =>
       account,
       enabledAt: new Date(syncTiming.now()).toISOString(),
       mode: 'idle',
-      stats,
+      stats: { ...stats, skippedConversations: 0 },
     });
     return null;
   });

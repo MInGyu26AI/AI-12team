@@ -336,6 +336,20 @@ describe('대화별 실패', () => {
     expect(appendCalls()).toHaveLength(1);
   });
 
+  it('건너뛴 대화 수는 누적하지 않고 패스마다 지금 failures 로 다시 센다', async () => {
+    await enabled({ cursor: at(-60), failures: { c1: 3, gone: 4, flaky: 1 }, stats: { ...SYNC_DEFAULTS.stats, skippedConversations: 9 } });
+    await runSyncPass(); // c1 을 받아 실패 수가 지워진다
+    expect(await state()).toMatchObject({ failures: { gone: 4, flaky: 1 }, stats: { skippedConversations: 1 } });
+  });
+
+  it('켜면 건너뛴 대화 수를 0 으로 시작한다', async () => {
+    await enabled({ failures: { c9: 3 }, stats: { ...SYNC_DEFAULTS.stats, passes: 7, skippedConversations: 1 } });
+    collectorSync = { enabled: false, account: ACCOUNT, since: null };
+    statusPatch = { syncWindows: [] }; // 켬 직후 패스가 아무것도 받지 않게
+    await send({ type: 'syncSet', enabled: true, project: PROJECT }, fromPopup());
+    expect((await state()).stats).toMatchObject({ passes: 8, skippedConversations: 0 });
+  });
+
   it('network 실패도 대화별로 센다', async () => {
     tabOverrides['conv:c1'] = tabError('network');
     expect(await runSyncPass()).toMatchObject({ sync: 'ran' });
@@ -475,10 +489,22 @@ describe('쉼', () => {
     expect(await state()).toMatchObject({ mode: 'rest', restUntil: at(30), pending: [], pendingPassStartedAt: null });
   });
 
-  it('403 은 120분 쉰다', async () => {
-    tabOverrides['conv:c1'] = tabError('forbidden');
+  it.each([
+    ['세션', 'sync.session'],
+    ['목록', 'page:first'],
+  ])('%s 403 은 120분 쉰다', async (_name, key) => {
+    tabOverrides[key] = tabError('forbidden');
     expect(await runSyncPass()).toMatchObject({ sync: 'resting' });
     expect(await state()).toMatchObject({ mode: 'rest', restReason: 'forbidden', restUntil: at(120), lastError: { code: 'forbidden' } });
+  });
+
+  it('대화 상세 403 은 쉼이 아니라 대화별 실패다 (쉼이 끝없이 되풀이되지 않게)', async () => {
+    await enabled({ cursor: at(-60) });
+    projectPages = [[ref('c1', -1), ref('c2', -2)]];
+    tabOverrides['conv:c1'] = tabError('forbidden');
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 1 });
+    expect(await state()).toMatchObject({ mode: 'idle', restUntil: null, failures: { c1: 1 }, pending: [], lastError: { code: 'forbidden' } });
+    expect(detailIds()).toEqual(['c1', 'c2']);
   });
 });
 
@@ -519,6 +545,21 @@ describe('멈춤', () => {
     await runSyncPass();
     expect(await state()).toMatchObject({ mode: 'stopped', stopReason: 'account_mismatch' });
     expect(appendCalls()).toHaveLength(0);
+  });
+
+  it('고른 프로젝트 목록이 not_found 이면 project_missing', async () => {
+    tabOverrides['page:first'] = tabError('not_found');
+    expect(await runSyncPass()).toMatchObject({ sync: 'failed' });
+    expect(await state()).toMatchObject({ mode: 'stopped', stopReason: 'project_missing', pending: [] });
+  });
+
+  it('오류로 끝난 패스는 lastError 를 남기고 idle, 오류 없이 끝난 패스는 지운다', async () => {
+    tabOverrides['sync.session'] = tabError('network');
+    expect(await runSyncPass()).toMatchObject({ sync: 'failed' });
+    expect(await state()).toMatchObject({ mode: 'idle', lastError: { code: 'network', at: at(0) } });
+    delete tabOverrides['sync.session'];
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran' });
+    expect((await state()).lastError).toBeNull();
   });
 
   it('세션 응답 모양이 바뀌면 shape_changed', async () => {
@@ -696,6 +737,24 @@ describe('syncNow (싱크 맞추기)', () => {
 
   it('채팅 화면에서도 받는다', async () => {
     expect(await syncNow(chatPage)).toMatchObject({ ok: true, result: { sync: 'off', flushed: true } });
+  });
+
+  it.each([
+    ['켬', { accountSync: { enabled: true, account: OTHER_ACCOUNT } }],
+    ['끔', { accountSync: { enabled: false } }],
+    ['다른 설정과 함께', { projectTopic: '주제', accountSync: { enabled: false } }],
+  ])('웹의 rpc collection.configure 로 동기화를 %s 바꾸려 하면 수집기로 넘기지 않고 거절한다', async (_name, params) => {
+    await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
+    const response = await send({ type: 'rpc', method: 'collection.configure', params }, fromPage('http://localhost:3000/collect'));
+    expect(response).toEqual({ ok: false, error: '동기화 켬·끔은 확장 팝업에서만 바꿀 수 있어요' });
+    expect(calledMethods()).not.toContain('collection.configure');
+  });
+
+  it('웹의 다른 collection.configure 는 그대로 수집기로 넘긴다', async () => {
+    await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
+    const response = await send({ type: 'rpc', method: 'collection.configure', params: { projectTopic: '새 주제' } }, fromPage('http://localhost:3000/collect'));
+    expect(response).toMatchObject({ ok: true });
+    expect(calledMethods()).toContain('collection.configure');
   });
 
   it('웹의 rpc ext.syncNow 는 수집기로 넘기지 않고 같은 함수로 처리한다', async () => {
@@ -924,6 +983,21 @@ describe('알람과 시작', () => {
     background.main();
     await settle();
     expect(await fakeBrowser.alarms.get(SYNC_ALARM)).toBeUndefined();
+  });
+
+  it('서비스 워커가 시작할 때 3분보다 오래된 running 은 idle 로 되돌리고 커서·pending 은 둔다', async () => {
+    await enabled({ mode: 'running', lastPassStartedAt: at(-4), cursor: at(-30), pending: ['c7'] });
+    background.main();
+    await vi.waitFor(async () => expect((await state()).mode).toBe('idle'));
+    expect(await state()).toMatchObject({ cursor: at(-30), pending: ['c7'], lastPassStartedAt: at(-4) });
+  });
+
+  it('3분이 안 된 running 은 그대로 둔다 (다른 곳에서 막 시작한 패스일 수 있다)', async () => {
+    await enabled({ mode: 'running', lastPassStartedAt: at(-2) });
+    background.main();
+    await settle();
+    await settle();
+    expect((await state()).mode).toBe('running');
   });
 
   it('브라우저를 시작하면 패스를 한 번 돈다', async () => {
