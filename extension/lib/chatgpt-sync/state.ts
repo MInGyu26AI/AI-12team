@@ -12,7 +12,8 @@ export type SyncStopReason =
   | 'logged_out'
   | 'account_mismatch' // 탭 계정 ≠ 켤 때 묶은 계정
   | 'shape_changed' // ChatGPT 세션·사이드바·목록 응답 모양이 바뀜 (대화 하나의 모양 오류는 대화별 실패)
-  | 'collector_off'; // 수집기 accountSync 가 꺼졌거나 없거나 계정이 다름 (상태 폴더를 새로 만듦 등)
+  | 'collector_off' // 수집기 accountSync 가 꺼졌거나 없거나 계정이 다름 (상태 폴더를 새로 만듦 등)
+  | 'project_missing'; // 고른 프로젝트 목록이 404 (프로젝트를 지웠거나 접근 불가)
 
 export interface SyncState {
   enabled: boolean;
