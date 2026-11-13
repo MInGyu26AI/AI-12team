@@ -81,8 +81,12 @@ export const collectStateItem = storage.defineItem<CollectState>('local:collectS
   fallback: { lastError: null },
 });
 
-// 검토 대기 카드: 개인(personal)은 버렸고 민감정보는 가린 상태
-export const pendingItem = storage.defineItem<RelatedCard[]>('local:pending', { fallback: [] });
+// 검토 대기 공유 후보 수. 팝업이 쓰는 것은 개수뿐이라 카드 본문은 확장 저장소에 두지 않는다
+// (브라우저를 껐다 켜도 남는 storage.local 에 카드 본문이 쌓이지 않게. 본문은 로컬 수집기와 개인 검토함에만 있다)
+export const pendingCountItem = storage.defineItem<number>('local:pendingCount', { fallback: 0 });
+
+// 예전 판이 검토 대기 카드 본문을 담던 키. 지금은 쓰지 않으므로 확장이 업데이트될 때 지운다 (background onInstalled)
+export const clearLegacyPendingCards = () => storage.removeItem('local:pending');
 
 // 배지와 팝업이 함께 쓰는 검토 대기 수. 수집기는 공유 후보만 보내지만 프로세스 경계라 한 번 더 거른다
 export const shareableCount = (cards: RelatedCard[]) => cards.filter(isShareable).length;

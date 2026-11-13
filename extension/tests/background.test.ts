@@ -5,7 +5,7 @@ import type { ExtStatus } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
 import { NOTICE_ID, noticeBaselineItem } from '@/lib/candidate-notice';
-import { collectStateItem, settingsItem } from '@/lib/settings';
+import { collectStateItem, pendingCountItem, settingsItem } from '@/lib/settings';
 import { DEFAULT_WEB_URL, LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
 
 const STATUS: ExtStatus = {
@@ -258,5 +258,45 @@ describe('채팅 탭 화면 읽기 점검 (tab-health)', () => {
     const warned = setBadge.mock.calls.map(([details]) => details as { tabId?: number; text?: string | null }).filter((d) => d.text === '!');
     expect(warned.length).toBeGreaterThan(0);
     expect(warned.every((d) => d.tabId === 5)).toBe(true);
+  });
+});
+
+describe('검토 대기 카드는 개수만 확장 저장소에 둔다', () => {
+  const SECRET = '발표는 금요일로 정했다 (비밀 결정 내용)';
+  const status = (extra: object[]) => ({
+    ok: true,
+    result: {
+      cards: [
+        { id: 'c1', relevance: 'related', tag: 'decision', content: SECRET },
+        { id: 'c2', relevance: 'related', tag: 'todo', content: SECRET },
+        { id: 'c3', relevance: 'related', tag: 'none', content: SECRET }, // 제안: 공유 후보 아님
+        ...extra,
+      ],
+      status: STATUS,
+    },
+  });
+  const storedText = async () => JSON.stringify(await fakeBrowser.storage.local.get(null));
+
+  it('공유 후보 수만 저장하고, 카드 본문은 어느 저장소 키에도 남기지 않는다', async () => {
+    overrides['candidates.list'] = status([{ id: 'p1', relevance: 'personal', content: SECRET }]);
+    await send({ type: 'refresh' }, fromPopup());
+    expect(await pendingCountItem.getValue()).toBe(2);
+    expect(await storedText()).not.toContain(SECRET);
+    expect(await storedText()).not.toContain('"c1"');
+  });
+
+  it('배지는 같은 수를 보여 준다', async () => {
+    overrides['candidates.list'] = status([]);
+    await send({ type: 'refresh' }, fromPopup());
+    expect(fakeBrowser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '2' });
+  });
+
+  it('확장이 업데이트되면 예전 판이 남긴 카드 본문(local:pending)을 지운다', async () => {
+    vi.spyOn(fakeBrowser.contextMenus, 'create').mockImplementation((() => 1) as never); // fakeBrowser 에 없는 우클릭 메뉴 만들기
+    await fakeBrowser.storage.local.set({ pending: [{ id: 'old', content: SECRET }], pendingCount: 4 });
+    await fakeBrowser.runtime.onInstalled.trigger({ reason: 'update' } as never);
+    await vi.waitFor(async () => expect(await fakeBrowser.storage.local.get('pending')).toEqual({}));
+    expect(await storedText()).not.toContain(SECRET);
+    expect(await pendingCountItem.getValue()).toBe(4); // 새 키는 건드리지 않는다
   });
 });

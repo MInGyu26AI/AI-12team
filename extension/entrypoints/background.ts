@@ -11,7 +11,7 @@ import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
 import { collectResultToast, type BgRequest, type BgResponse, type TabToast, type TeamRecordRaw } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
-import { sendBlockedReason, settingsItem } from '@/lib/settings';
+import { clearLegacyPendingCards, sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
 import { checkChatTabs } from '@/lib/tab-health';
 import { isTrustedWebOrigin } from '@/lib/web-url';
@@ -135,6 +135,7 @@ export default defineBackground(() => {
     return true;
   });
   browser.runtime.onInstalled.addListener(() => {
+    void clearLegacyPendingCards(); // 예전 판이 storage.local 에 남긴 검토 대기 카드 본문
     browser.contextMenus.create({
       id: SELECTION_MENU_ID,
       title: '싱크업에 선택한 내용 보내기',
