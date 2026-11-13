@@ -181,6 +181,12 @@ class OwnerRuleTest(unittest.TestCase):
         self.assertEqual(conflict.rule_judge(other, old)["judgement"], "충돌")
         self.assertEqual(conflict.rule_judge(team, old)["judgement"], "변경")
 
+    def test_rule_judge_uses_the_same_topic_and_owner_basis(self):
+        # 띄어쓰기만 다른 세부 주제는 같은 주제, 자리표시자 결정자는 같은 사람이 아니다 (코드 지도 지적)
+        old = {**dec("a", "MVP 범위", "확장 = 제외"), "owner": "사용자"}
+        new = {**dec("b", "MVP범위", "확장 = 포함"), "owner": "사용자"}
+        self.assertEqual(conflict.rule_judge(new, old)["judgement"], "충돌")
+
 
 class DecisionsTest(unittest.TestCase):
     def test_relabel_overrides_labels_and_confidence(self):

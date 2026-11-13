@@ -17,7 +17,7 @@ import sys
 import time
 
 from . import config
-from .decide import judge_pairs, judgement_reason
+from .decide import _owner, judge_pairs, judgement_reason
 from .llm import LLM, Decider, LLMError, RetryableLLMError, describe_failure
 from .similarity import similarities
 from .mask import mask_text
@@ -70,12 +70,12 @@ def _brief(c: dict) -> dict:
 
 def rule_judge(new: dict, old: dict) -> dict:
     """AI 없이 쓰는 판정 (오프라인·실패 대비). 같은 세부 주제만 비교."""
-    if new.get("topic_key") != old.get("topic_key"):
+    if norm_key(new.get("topic_key") or "") != norm_key(old.get("topic_key") or ""):  # 정렬(ordered_candidates)과 같은 기준
         return {"id": old.get("id"), "judgement": "무관", "reason": "세부 주제가 다름", "confidence": 0.4}
     if norm_key(new.get("content") or "") == norm_key(old.get("content") or ""):
         return {"id": old.get("id"), "judgement": "같음", "reason": "같은 세부 주제의 같은 내용", "confidence": 0.6}
     # 정답표(conflict_key K1·K5·K6·K12): 같은 사람이 고치거나 팀 합의로 바꾸면 변경, 다른 사람이 반대로 정하면 충돌
-    same_owner = bool(new.get("owner")) and new.get("owner") == old.get("owner")
+    same_owner = _owner(new) is not None and _owner(new) == _owner(old)  # 자리표시자(사용자 등)는 같은 사람으로 보지 않는다
     team_agreed = bool(re.search(r"팀에서|다들|모두|합의|회의에서", new.get("sentence") or ""))
     j = "변경" if same_owner or team_agreed else "충돌"
     reason = (
