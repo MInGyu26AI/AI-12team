@@ -12,7 +12,7 @@ import { StructureWarning } from '@/entrypoints/popup/StructureWarning';
 import { ConsentText, SyncSwitch } from '@/entrypoints/popup/SyncSwitch';
 import { runSyncNow, setProjectSync } from '@/entrypoints/popup/sync-actions';
 import { loadSyncProjects } from '@/entrypoints/popup/sync-projects';
-import { syncNowBlockedReason, syncNowNotice, syncStatusLine } from '@/entrypoints/popup/sync-status';
+import { syncNowBlockedReason, syncNowNotice, syncSkippedLine, syncStatusLine } from '@/entrypoints/popup/sync-status';
 import { formatAgo, formatClock } from '@/entrypoints/popup/time-format';
 
 const NOW = new Date(2026, 10, 13, 14, 0).getTime(); // 지역 시간 11/13 14:00
@@ -79,7 +79,21 @@ describe('상태 한 줄 (syncStatusLine)', () => {
     expect(stopped('account_mismatch')?.text).toMatch(/다른 ChatGPT 계정/);
     expect(stopped('shape_changed')?.text).toMatch(/화면이 바뀌어/);
     expect(stopped('collection_paused')?.text).toMatch(/자동 수집을 다시 켜/);
+    expect(stopped('collector_off')).toEqual({ tone: 'error', text: '수집기에서 동기화가 꺼져 있어요. 다시 켜 주세요' });
     expect(stopped(null)?.tone).toBe('error');
+  });
+
+  it('끄기를 수집기에 아직 전하지 못했으면 꺼진 뒤에도 알린다', () => {
+    const pending = { tone: 'info', text: '수집기에 끄기를 전하는 중이에요' };
+    expect(syncStatusLine({ ...SYNC_DEFAULTS, collectorOffPending: true }, NOW)).toEqual(pending);
+    expect(syncStatusLine(synced({ mode: 'off', collectorOffPending: true }), NOW)).toEqual(pending);
+  });
+
+  it('건너뛴 대화가 있을 때만 개수를 말한다', () => {
+    const stats = (skippedConversations: number) => ({ ...SYNC_DEFAULTS.stats, skippedConversations });
+    expect(syncSkippedLine(synced({ stats: stats(0) }))).toBeNull();
+    expect(syncSkippedLine(synced({ stats: stats(2) }))).toBe('가져오지 못한 대화 2개');
+    expect(syncSkippedLine({ ...SYNC_DEFAULTS, stats: stats(2) })).toBeNull(); // 꺼져 있으면 말하지 않는다
   });
 });
 
@@ -141,6 +155,12 @@ describe('백그라운드에 보내는 요청', () => {
     expect(await setProjectSync(true, PROJECT)).toEqual({ ok: false, error: 'chatgpt.com 탭을 하나 열어 두세요' });
   });
 
+  it('끄기가 수집기에 닿지 않아 실패해도 받은 문구를 그대로 돌려준다', async () => {
+    const error = '수집기에 끄기를 전하지 못했어요. 수집기를 켜면 다시 보낼게요';
+    backendAnswers({ ok: false, error });
+    expect(await setProjectSync(false)).toEqual({ ok: false, error });
+  });
+
   it('백그라운드가 답하지 않으면 안내 문구를 만든다', async () => {
     vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockRejectedValue(new Error('Receiving end does not exist'));
     expect(await setProjectSync(true, PROJECT)).toEqual({ ok: false, error: '동기화 설정을 바꾸지 못했어요' });
@@ -191,6 +211,16 @@ describe('팝업 화면 그리기', () => {
     const html = renderToStaticMarkup(createElement(SyncSwitch, { sync: synced({ mode: 'stopped', stopReason: 'no_tab' }) }));
     expect(html).toContain('checked=""');
     expect(html).toContain('chatgpt.com 탭을 열어 두세요');
+  });
+
+  it('꺼진 뒤 끄기 전달이 남아 있으면 스위치는 꺼진 채 안내가 보이고, 건너뛴 대화가 있으면 개수가 보인다', () => {
+    const pending = renderToStaticMarkup(createElement(SyncSwitch, { sync: { ...SYNC_DEFAULTS, collectorOffPending: true } }));
+    expect(pending).not.toContain('checked=""');
+    expect(pending).toContain('수집기에 끄기를 전하는 중이에요');
+    const skipped = renderToStaticMarkup(
+      createElement(SyncSwitch, { sync: synced({ stats: { ...SYNC_DEFAULTS.stats, skippedConversations: 1 } }) }),
+    );
+    expect(skipped).toContain('가져오지 못한 대화 1개');
   });
 
   it('동의 문구는 고른 프로젝트 대화만 가져오고 승인한 것만 공유한다는 말이 중심이다', () => {

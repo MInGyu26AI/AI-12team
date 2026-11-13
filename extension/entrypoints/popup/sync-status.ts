@@ -18,12 +18,17 @@ const STOP_TEXT: Record<SyncStopReason, string> = {
   logged_out: 'ChatGPT에 로그인하세요',
   account_mismatch: '켤 때와 다른 ChatGPT 계정이에요. 껐다가 다시 켜 주세요',
   shape_changed: 'ChatGPT 화면이 바뀌어 동기화를 멈췄어요',
+  collector_off: '수집기에서 동기화가 꺼져 있어요. 다시 켜 주세요', // 껐다가 다시 켜면 풀린다
 };
 
 const REST_TEXT = { rate_limited: '요청 제한', forbidden: '접속 제한' } as const;
 
-/** 스위치 아래 한 줄. 동기화가 꺼져 있으면 null */
+/**
+ * 스위치 아래 한 줄. 동기화가 꺼져 있으면 null.
+ * 끄기를 수집기에 아직 전하지 못했으면(collectorOffPending) 꺼진 뒤에도 그 사실을 알린다
+ */
 export function syncStatusLine(state: SyncState, now = Date.now()): PopupNotice | null {
+  if (state.collectorOffPending) return { tone: 'info', text: '수집기에 끄기를 전하는 중이에요' };
   if (!state.enabled) return null;
   const project = state.project ? ` · ${state.project.name} 프로젝트` : '';
   switch (state.mode) {
@@ -41,6 +46,12 @@ export function syncStatusLine(state: SyncState, now = Date.now()): PopupNotice 
       return { tone: 'info', text: `동기화: ${when}${project}` };
     }
   }
+}
+
+/** 건너뛴 대화가 있을 때만 짧게 알린다 (대화가 3번 연달아 실패하면 패스가 건너뛴다) */
+export function syncSkippedLine(state: SyncState): string | null {
+  const skipped = state.stats.skippedConversations;
+  return state.enabled && skipped > 0 ? `가져오지 못한 대화 ${skipped}개` : null;
 }
 
 /**

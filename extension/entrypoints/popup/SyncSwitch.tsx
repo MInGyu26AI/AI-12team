@@ -6,7 +6,7 @@ import type { SyncProject } from '@/lib/messages';
 import { Notice } from './Notice';
 import { SwitchTrack } from './SwitchTrack';
 import { setProjectSync } from './sync-actions';
-import { syncStatusLine } from './sync-status';
+import { syncSkippedLine, syncStatusLine } from './sync-status';
 import { useSyncProjects } from './useSyncState';
 
 function useNow(intervalMs = 30_000) {
@@ -23,6 +23,7 @@ export function SyncSwitch({ sync }: { sync: SyncState }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const line = syncStatusLine(sync, useNow());
+  const skipped = syncSkippedLine(sync);
 
   const change = async (enabled: boolean, project?: SyncProject) => {
     setBusy(true);
@@ -49,6 +50,7 @@ export function SyncSwitch({ sync }: { sync: SyncState }) {
         <SwitchTrack />
       </label>
       {line && <Notice tone={line.tone}>{line.text}</Notice>}
+      {skipped && <p className="text-xs text-warn">{skipped}</p>}
       {choosing && !sync.enabled && <ConsentPanel busy={busy} onConfirm={(project) => void change(true, project)} onCancel={() => setChoosing(false)} />}
       {error && <Notice tone="error">{error}</Notice>}
     </section>
