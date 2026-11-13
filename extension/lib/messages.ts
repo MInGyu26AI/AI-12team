@@ -5,6 +5,8 @@ import type { CollectedMessage } from '@shared/collector';
 export type BgRequest =
   | { type: 'syncNow'; params: SyncNowParams } // 팝업·채팅 화면의 '싱크 맞추기'. 결과는 BgResponse.result = SyncNowResult
   | { type: 'syncSet'; enabled: boolean; project?: SyncProject } // 팝업 '프로젝트만 수집' 스위치. 켤 때 project 필수
+  | { type: 'syncProjects' } // 팝업 프로젝트 고르기. result = SyncProject[] (대표 탭의 sync.projects). 실패 문구는 syncSet 표와 같다
+  | { type: 'teamRecord' } // 채팅 화면 '팀 기록 불러오기'. result = TeamRecordRaw
   | { type: 'collect'; trigger: 'auto' | 'manual' | 'selection'; messages: CollectedMessage[] }
   | { type: 'flush' } // 지금 쌓인 대화까지 분류 (팝업 "지금 분류하기")
   | { type: 'updateSettings'; patch: ExtSettingsPatch } // 로컬 수집기 collection.configure 로 그대로 보낸다
@@ -12,6 +14,12 @@ export type BgRequest =
   | { type: 'rpc'; method: string; params?: unknown }; // 개인 검토함 웹 → 로컬 수집기 (web-bridge 가 중계)
 
 export type BgResponse = { ok: true; result?: unknown } | { ok: false; error: string };
+
+// 'teamRecord' 결과: 수집기 team.board·team.conflicts 응답 그대로 (웹 보드와 같은 중계). 카드·충돌로 바꾸는 일은 team-record.ts
+export interface TeamRecordRaw {
+  board: unknown;
+  conflicts: unknown;
+}
 
 // intakeIssues: 수집기가 형식 오류나 같은 id 의 내용 변경으로 분류하지 않고 따로 보관한 발화 수
 export type CollectResult =
