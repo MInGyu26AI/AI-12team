@@ -1,5 +1,5 @@
 {
-  "_note": "conversation-in-progress.json 의 기대값. 마지막 턴이 생성 중이라 미완료, inProgress=true. turnsInWindows 는 턴 1만 남긴다",
+  "_note": "conversation-in-progress.json 의 기대값. 마지막 턴 미완료, inProgress=true, inProgressAt=그 턴의 가장 늦은 메시지 시각. turnsInWindows 는 턴 1만 남긴다",
   "inProgress": true,
   "turns": [
     {
@@ -42,5 +42,6 @@
         }
       ]
     }
-  ]
+  ],
+  "inProgressAt": "2025-11-13T01:03:22.000Z"
 }
