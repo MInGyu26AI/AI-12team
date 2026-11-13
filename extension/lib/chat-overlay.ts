@@ -1,6 +1,6 @@
 import type { SyncNowResult } from '@shared/bridge';
 import { sendToBackground, type BgResponse, type TabToast } from './messages';
-import { deliverTeamRecord, loadTeamRecord, type TeamRecordSource } from './team-record';
+import { EXTENSION_UPDATED_GUIDE, deliverTeamRecord, loadTeamRecord, type TeamRecordSource } from './team-record';
 
 // AI 채팅 화면 오른쪽 아래의 "싱크업에 보내기"·"선택한 내용 보내기"·"싱크 맞추기"·"팀 기록 불러오기" 버튼과 안내. shadow DOM 으로 사이트 스타일과 분리한다.
 const TEMPLATE = `
@@ -39,7 +39,6 @@ export interface OverlayActions {
   fetchTeamRecord?: TeamRecordSource;
 }
 
-const EXTENSION_UPDATED_GUIDE = '확장 프로그램이 업데이트됐어요. 페이지를 새로고침해 주세요';
 const NO_RECORD_SOURCE_GUIDE = '팀 기록을 받아 올 연결이 아직 없어요';
 
 /** '싱크 맞추기' 결과(SyncNowResult)를 화면 안내로. 패스 결과와 분류 시작 여부를 한 줄에 담는다 */

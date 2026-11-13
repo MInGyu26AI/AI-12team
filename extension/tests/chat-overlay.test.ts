@@ -6,6 +6,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { SyncNowResult } from '@shared/bridge';
 import type { RelatedCard } from '@shared/types';
 import { createChatOverlay, syncNowToast, type ChatOverlay, type OverlayActions } from '@/lib/chat-overlay';
+import { fetchTeamRecord } from '@/lib/team-record';
 
 const result = (patch: Partial<SyncNowResult>): SyncNowResult => ({ sync: 'ran', newTurns: 0, flushed: false, ...patch });
 
@@ -122,6 +123,30 @@ describe('"팀 기록 불러오기" 버튼', () => {
     expect(toastText()).toBe('팀 기록 1개를 입력창에 채웠어요. 질문을 덧붙여 직접 보내세요');
     expect(send).not.toHaveBeenCalled(); // 백그라운드로 아무것도 보내지 않는다 (전송 버튼도 누르지 않는다)
     expect(overlay.recordButton.disabled).toBe(false);
+  });
+
+  it("합칠 때 넘길 fetchTeamRecord 와 이으면 {type: 'teamRecord'} 요청부터 입력창 채우기까지 이어진다", async () => {
+    const editor = mountEditor();
+    const send = vi
+      .spyOn(fakeBrowser.runtime, 'sendMessage')
+      .mockResolvedValue({ ok: true, result: { board: { items: [card] }, conflicts: { conflicts: [] } } } as never);
+    mount(fetchTeamRecord);
+    overlay.recordButton.click();
+    await settle();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith({ type: 'teamRecord' });
+    expect(editor.textContent).toContain('- [결정] MVP 범위: 브라우저 확장 = MVP 포함 (결정 이서준)');
+    expect(toastText()).toBe('팀 기록 1개를 입력창에 채웠어요. 질문을 덧붙여 직접 보내세요');
+  });
+
+  it('백그라운드가 수집기 오류를 주면 그 문구를 보여 주고 입력창은 건드리지 않는다', async () => {
+    const editor = mountEditor();
+    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: false, error: '로컬 수집기 연결 실패' } as never);
+    mount(fetchTeamRecord);
+    overlay.recordButton.click();
+    await settle();
+    expect(toastText()).toBe('로컬 수집기 연결 실패');
+    expect(editor.textContent).toBe('');
   });
 
   it('입력창을 못 찾으면 클립보드에 복사하고 붙여넣으라고 안내한다', async () => {

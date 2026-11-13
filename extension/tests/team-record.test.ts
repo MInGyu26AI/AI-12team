@@ -3,9 +3,20 @@
 // 팀 기록 불러오기: 팀 보드 → 마크다운(웹의 "팀 기록 복사"와 같은 글), ChatGPT 입력창 찾기·채우기, 못 채울 때의 클립보드 대체.
 // 실제 chatgpt.com 에는 요청하지 않고, 입력창은 ProseMirror 흉내로 만든 가짜 화면으로 시험한다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { boardToMarkdown } from '@shared/board-markdown';
 import type { Conflict, RelatedCard } from '@shared/types';
-import { EMPTY_RECORD_GUIDE, copyText, deliverTeamRecord, fillComposer, findComposer, loadTeamRecord } from '@/lib/team-record';
+import {
+  EMPTY_RECORD_GUIDE,
+  EXTENSION_UPDATED_GUIDE,
+  copyText,
+  deliverTeamRecord,
+  fetchTeamRecord,
+  fillComposer,
+  findComposer,
+  loadTeamRecord,
+  teamRecordFromRaw,
+} from '@/lib/team-record';
 
 const card = (patch: Partial<RelatedCard>): RelatedCard => ({
   relevance: 'related', status: 'approved', source: 'ChatGPT, 2026-11-06 21:10', masked: false, confidence: 0.9, is_new_topic: false,
@@ -54,6 +65,58 @@ function mountEditor({ draft = '', handlesPaste = true } = {}) {
   return { el, pasted };
 }
 const lines = (el: HTMLElement) => [...el.querySelectorAll('p')].map((p) => p.textContent);
+
+describe('수집기 응답 → 카드·충돌 (teamRecordFromRaw)', () => {
+  it('웹 real.ts 와 같이 team.board 의 items, team.conflicts 의 conflicts 를 그대로 꺼낸다', () => {
+    const data = teamRecordFromRaw({ board: { items: cards }, conflicts: { conflicts } });
+    expect(data.cards).toBe(cards);
+    expect(data.conflicts).toBe(conflicts);
+  });
+
+  it('카드도 충돌도 없는 빈 보드는 빈 배열로 받는다', () => {
+    expect(teamRecordFromRaw({ board: { items: [] }, conflicts: { conflicts: [] } })).toEqual({ cards: [], conflicts: [] });
+  });
+
+  it.each<[string, unknown]>([
+    ['값이 없음', undefined],
+    ['보드 응답에 items 가 없음', { board: {}, conflicts: { conflicts: [] } }],
+    ['충돌 응답에 conflicts 가 없음', { board: { items: [] }, conflicts: { items: [] } }],
+    ['목록이 배열이 아님', { board: { items: 'x' }, conflicts: { conflicts: [] } }],
+    ['응답이 null', { board: null, conflicts: null }],
+  ])('모양이 어긋나면 오류: %s', (_name, raw) => {
+    expect(() => teamRecordFromRaw(raw as never)).toThrow('팀 기록 형식이 올바르지 않아요');
+  });
+});
+
+describe('백그라운드에서 팀 기록 받기 (fetchTeamRecord)', () => {
+  beforeEach(() => fakeBrowser.reset());
+
+  it("{type: 'teamRecord'} 를 보내고 받은 수집기 응답을 카드·충돌로 바꾼다", async () => {
+    const send = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: true, result: { board: { items: cards }, conflicts: { conflicts } } } as never);
+    expect(await fetchTeamRecord()).toEqual({ cards, conflicts });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith({ type: 'teamRecord' });
+  });
+
+  it('백그라운드가 준 오류 문구를 그대로 던진다 (수집기 오류 포함)', async () => {
+    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: false, error: '로컬 수집기 연결 실패' } as never);
+    await expect(fetchTeamRecord()).rejects.toThrow('로컬 수집기 연결 실패');
+  });
+
+  it('확장이 업데이트돼 연결이 끊겼거나 답이 없으면 새로고침을 안내한다', async () => {
+    const send = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockRejectedValue(new Error('Extension context invalidated.'));
+    await expect(fetchTeamRecord()).rejects.toThrow(EXTENSION_UPDATED_GUIDE);
+    send.mockResolvedValue(undefined as never);
+    await expect(fetchTeamRecord()).rejects.toThrow(EXTENSION_UPDATED_GUIDE);
+  });
+
+  it('응답이 어긋나면 loadTeamRecord 가 형식 오류 문구로 돌려준다', async () => {
+    vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: true, result: { board: {}, conflicts: {} } } as never);
+    const result = await loadTeamRecord(fetchTeamRecord);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toContain('팀 기록 형식이 올바르지 않아요');
+  });
+});
 
 describe('팀 기록 만들기 (loadTeamRecord)', () => {
   it('웹의 "팀 기록 복사"와 같은 글을 만든다', async () => {

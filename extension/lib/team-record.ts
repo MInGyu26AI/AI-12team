@@ -1,16 +1,48 @@
 // 팀 기록 불러오기: 팀 보드를 웹의 "팀 기록 복사"와 같은 마크다운으로 만들고 ChatGPT 입력창에 채운다.
 // 전송은 사용자가 직접 한다. 입력창을 못 찾거나 못 채우면 클립보드에 복사한다.
-// 팀 보드 데이터를 받는 방법(백그라운드 → 로컬 수집기 team.board·team.conflicts)은 이 파일이 모른다: 받는 함수를 주입받는다.
+// 팀 보드 데이터는 백그라운드('teamRecord')가 수집기 team.board·team.conflicts 응답 그대로 넘겨주고, 카드·충돌로 바꾸는 일은 여기서 한다.
+// 글 만들기·입력창 채우기는 데이터를 받는 함수(TeamRecordSource)를 주입받아 쓰므로, 받는 쪽은 fetchTeamRecord 로 바꿔 끼울 수 있다.
 import { boardToMarkdown } from '@shared/board-markdown';
 import type { Conflict, RelatedCard } from '@shared/types';
+import { sendToBackground, type BgResponse, type TeamRecordRaw } from './messages';
 
 export interface TeamRecordData {
   cards: RelatedCard[]; // team.board 의 items (웹 real.ts getBoard 와 같은 값)
-  conflicts: Conflict[]; // team.conflicts 의 conflicts
+  conflicts: Conflict[]; // team.conflicts 의 conflicts (웹 real.ts getConflicts 와 같은 값)
 }
 
 /** 팀 보드 카드와 처리 안 된 충돌을 받아 온다. 실패는 사용자에게 보일 문구를 담은 Error 로 던진다 */
 export type TeamRecordSource = () => Promise<TeamRecordData>;
+
+export const EXTENSION_UPDATED_GUIDE = '확장 프로그램이 업데이트됐어요. 페이지를 새로고침해 주세요';
+const BAD_RECORD_GUIDE = '팀 기록 형식이 올바르지 않아요. 수집기를 새 버전으로 바꿨는지 확인해 주세요';
+
+const listOf = (value: unknown, key: string): unknown[] | null => {
+  const list = (value as Record<string, unknown> | null | undefined)?.[key];
+  return Array.isArray(list) ? list : null;
+};
+
+/** 수집기 응답을 카드·충돌로: 웹 real.ts 와 같다 — team.board 는 `{items}`, team.conflicts 는 `{conflicts}` */
+export function teamRecordFromRaw(raw: TeamRecordRaw | null | undefined): TeamRecordData {
+  const cards = listOf(raw?.board, 'items');
+  const conflicts = listOf(raw?.conflicts, 'conflicts');
+  if (!cards || !conflicts) throw new Error(BAD_RECORD_GUIDE);
+  return { cards: cards as RelatedCard[], conflicts: conflicts as Conflict[] };
+}
+
+/** 백그라운드에 'teamRecord' 를 보내 팀 보드를 받아 온다. createChatOverlay({ fetchTeamRecord }) 에 그대로 넘기는 함수 */
+export async function fetchTeamRecord(): Promise<TeamRecordData> {
+  let response: BgResponse | undefined;
+  try {
+    response = await sendToBackground<BgResponse | undefined>({ type: 'teamRecord' });
+  } catch {
+    // 확장을 새로 고친 뒤 이전 콘텐츠 스크립트가 남아 있는 경우
+    throw new Error(EXTENSION_UPDATED_GUIDE);
+  }
+  if (!response) throw new Error(EXTENSION_UPDATED_GUIDE);
+  if (!response.ok) throw new Error(response.error);
+  return teamRecordFromRaw(response.result as TeamRecordRaw | undefined);
+}
 
 export type TeamRecordLoad = { ok: true; markdown: string; cardCount: number } | { ok: false; error: string };
 
