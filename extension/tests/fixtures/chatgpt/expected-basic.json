@@ -2,18 +2,72 @@
   "_note": "conversation-basic.json 을 normalizeConversation 에 넣은 기대값 (약속 6장 규칙)",
   "inProgress": false,
   "turns": [
-    { "turnId": "m-u1", "complete": true, "start": "2025-11-13T01:00:01.200Z", "end": "2025-11-13T01:00:06.000Z",
+    {
+      "turnId": "m-u1",
+      "complete": true,
+      "start": "2025-11-13T01:00:01.200Z",
+      "end": "2025-11-13T01:00:06.000Z",
       "messages": [
-        { "id": "m-u1", "role": "user", "text": "발표 자료 마감을 금요일로 정할까?", "createdAt": "2025-11-13T01:00:01.200Z" },
-        { "id": "m-a1", "role": "assistant", "text": "좋아요. 금요일 18시로 하죠", "createdAt": "2025-11-13T01:00:05.500Z" },
-        { "id": "m-a1b", "role": "assistant", "text": "담당은 민지가 맡으면 됩니다.", "createdAt": "2025-11-13T01:00:06.000Z" } ] },
-    { "turnId": "m-u2", "complete": true, "start": "2025-11-13T01:08:20.000Z", "end": "2025-11-13T01:08:25.000Z",
+        {
+          "id": "m-u1",
+          "role": "user",
+          "text": "발표 자료 마감을 금요일로 정할까?",
+          "createdAt": "2025-11-13T01:00:01.200Z"
+        },
+        {
+          "id": "m-a1",
+          "role": "assistant",
+          "text": "좋아요. 금요일 18시로 하죠",
+          "createdAt": "2025-11-13T01:00:05.500Z"
+        },
+        {
+          "id": "m-a1b",
+          "role": "assistant",
+          "text": "담당은 민지가 맡으면 됩니다.",
+          "createdAt": "2025-11-13T01:00:06.000Z"
+        }
+      ]
+    },
+    {
+      "turnId": "m-u2",
+      "complete": true,
+      "start": "2025-11-13T01:08:20.000Z",
+      "end": "2025-11-13T01:08:25.000Z",
       "messages": [
-        { "id": "m-u2", "role": "user", "text": "[첨부 1개]\n이 표 정리해 줘", "createdAt": "2025-11-13T01:08:20.000Z" },
-        { "id": "m-a2", "role": "assistant", "text": "| 항목 | 값 |\n|---|---|\n| 마감 | 금 18시 |", "createdAt": "2025-11-13T01:08:25.000Z" } ] },
-    { "turnId": "m-u3", "complete": true, "start": "2025-11-13T01:09:50.000Z", "end": "2025-11-13T01:09:55.000Z",
+        {
+          "id": "m-u2",
+          "role": "user",
+          "text": "[첨부 1개]\n이 표 정리해 줘",
+          "createdAt": "2025-11-13T01:08:20.000Z"
+        },
+        {
+          "id": "m-a2",
+          "role": "assistant",
+          "text": "| 항목 | 값 |\n|---|---|\n| 마감 | 금 18시 |",
+          "createdAt": "2025-11-13T01:08:25.000Z"
+        }
+      ]
+    },
+    {
+      "turnId": "m-u3",
+      "complete": true,
+      "start": "2025-11-13T01:09:50.000Z",
+      "end": "2025-11-13T01:09:55.000Z",
       "messages": [
-        { "id": "m-u3", "role": "user", "text": "그만", "createdAt": "2025-11-13T01:09:50.000Z" },
-        { "id": "m-a3", "role": "assistant", "text": "알겠습니다. 여기서", "createdAt": "2025-11-13T01:09:55.000Z" } ] }
-  ]
+        {
+          "id": "m-u3",
+          "role": "user",
+          "text": "그만",
+          "createdAt": "2025-11-13T01:09:50.000Z"
+        },
+        {
+          "id": "m-a3",
+          "role": "assistant",
+          "text": "알겠습니다. 여기서",
+          "createdAt": "2025-11-13T01:09:55.000Z"
+        }
+      ]
+    }
+  ],
+  "inProgressAt": null
 }

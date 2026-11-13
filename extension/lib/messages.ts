@@ -50,6 +50,7 @@ export interface SyncConversationRef {
   id: string;
   updateTime: string; // ISO (목록의 update_time 을 그대로 또는 초 → ISO)
   isArchived: boolean;
+  isTemporary: boolean; // 목록의 is_temporary_chat (없으면 false). 참이면 패스가 뺀다
   gizmoId: string | null;
 }
 
@@ -75,11 +76,13 @@ export type TabSyncResult<T> =
 export interface SyncProjectPage {
   items: SyncConversationRef[]; // update_time 최신 순
   nextCursor: string | null;
+  skippedItems: number; // 필드가 빠져 건너뛴 항목 수 (진단용)
 }
 
 export interface SyncConversationData {
   messages: CollectedMessage[]; // origin='sync', createdAt·turnId 채움, id 는 'chatgpt:<message.id>'
-  inProgress: boolean; // 마지막 답변이 생성 중이라 그 턴을 뺐음 → 커서를 올리지 않는다
+  inProgress: boolean; // 마지막 답변이 생성 중(또는 보이는 답 없음)이라 그 턴을 뺐음 → 커서를 올리지 않는다
+  inProgressAt: string | null; // 그 미완료 턴의 가장 늦은 메시지 시각 (ISO). 10분보다 오래되면 패스는 커서를 붙잡지 않는다
   skippedNoTime: number; // create_time 이 없어 뺀 턴 수
 }
 
