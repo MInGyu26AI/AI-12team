@@ -305,6 +305,13 @@ class MaskTest(unittest.TestCase):
         self.assertNoLeak(json.dumps(cards, ensure_ascii=False))  # 모델이 원문을 되돌려 줘도 카드에 안 남음
         self.assertTrue(cards[0]["masked"])
 
+    def test_other_stage_marks_count_as_masked(self):
+        # 로컬 게이트의 [비밀키], 스캐너의 [가림]이 카드에 남으면 '민감정보 가림' 배지가 붙는다 (코드 지도 미뤄 둔 #118)
+        for token in ("[비밀키]", "[가림]"):
+            raw = {"relevance": "related", "sentence": f"인증은 {token} 로 하자", "tag": "decision",
+                   "subtopic": "작업·결과물", "topic_key": "인증", "content": "인증 방식", "owner": "김하은"}
+            self.assertTrue(normalize_card(raw, source="Codex", pre_masked=False, existing_topics=[])["masked"])
+
     def test_card_masks_value_exposed_by_the_first_pass(self):
         # 첫 가림이 주민번호를 바꾼 뒤에야 바로 붙은 토큰의 경계가 생긴다. normalize_card 는 문장을 두 번 가려 이것도 지운다.
         raw = {"relevance": "related", "sentence": f"900101-1234567{SECRETS[1]} 로 푸시하자", "tag": "decision",
