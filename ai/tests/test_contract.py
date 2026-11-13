@@ -26,6 +26,20 @@ class ContractTest(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual([c['tag'] for c in result['cards']], ['decision'])
 
+    def test_guessed_assistant_decision_is_kept_for_review(self):
+        # 화자를 AI 로 잘못 추정한 사용자 결정이 검토 전에 사라지지 않는다. 확인 필요로 남고 화자 확인을 기다린다 (코드 지도 지적)
+        sentence = '응 확장은 빼자.'
+        request = dict(messages=[{**msg(1, sentence, role='assistant'), 'roleGuessed': True}])
+        llm = FakeLLM({'cards': [self.card(sentence)]})
+        result = handle_request(request, llm)
+        card = result['cards'][0]
+        self.assertEqual((card['tag'], card['evidence']['roleGuessed']), ('decision', True))
+        self.assertLess(card['confidence'], .6)
+        self.assertIn('화자 미상', llm.prompts[0])
+        # 화자를 읽은 AI 발화는 전처럼 제안으로 낮춘다
+        plain = handle_request(dict(messages=[msg(1, sentence, role='assistant')]), FakeLLM({'cards': [self.card(sentence)]}))
+        self.assertEqual(plain['cards'][0]['tag'], 'none')
+
     def test_long_sentence_is_cut_to_the_collector_limit(self):
         # 사용자 발화는 2000자까지 보내는데 수집기는 카드 칸을 1200자까지만 받는다 (코드 지도 지적)
         text = 'DB는 SQLite로 하자. ' + '가' * 1500

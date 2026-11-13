@@ -91,7 +91,7 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
     numbered = [(m, True) for m in context_messages or []] + [(m, False) for m in messages]
     for i, (m, is_ctx) in enumerate(numbered, start=1):
         text, masked = _prepare(m)
-        who = "AI" if m.get("role") == "assistant" else "사용자"
+        who = "화자 미상" if m.get("roleGuessed") else ("AI" if m.get("role") == "assistant" else "사용자")
         tag = " [참고용]" if is_ctx else ""
         lines.append(f"[{i}]{tag} {who} ({_when(m):%Y-%m-%d %H:%M}): {text}")
         info.append({"source": source_of(m), "masked": masked, "role": m.get("role"), "context": is_ctx,
@@ -164,7 +164,9 @@ def _finish_cards(raw_cards: list[dict], info: list[dict], topics: list[str],
                               enabled_subtopics=enabled)
         if card is None:
             continue
-        if meta["role"] == "assistant" and card["relevance"] == "related":
+        # 화자를 추정한 발화는 AI 규칙을 적용하지 않는다. 실제 사용자 결정일 수 있어 확인 필요로 남기고
+        # 검토함에서 화자를 확인받는다 (수집기 delivery 는 확인 전 전송을 막는다)
+        if meta["role"] == "assistant" and not meta["roleGuessed"] and card["relevance"] == "related":
             if card["tag"] in ("decision", "todo"):
                 card["tag"], card["owner"], card["due"], card["is_change"] = "none", None, None, False  # AI 말은 제안
             ai_cards_per_msg[idx] += 1
