@@ -558,3 +558,19 @@ ChatGPT 내보내기 파일도 같은 `mapping`/`current_node` 구조다. 웹 �
 | 목록 429는 빠른 연속 요청 약 13번에 나고 몇 시간 지속, 사용자 화면에도 영향. 도구들은 상세 사이 1~2초 간격, `Retry-After` 준수 | 3장 주기·속도, 11장 |
 | 콘텐츠 스크립트 요청은 Chrome 85부터 페이지 규칙. `frozen` 탭(132+)은 작업을 못 함. 알람 30초 이상 안전, 잠자기 뒤 놓친 알람 한 번, `persistAcrossSessions`는 150부터 | 5장, 3장 알람 |
 | 상세 경로가 `/conversations/{id}?num_turns=`로 바뀌었다는 미확인 보고 | P9 |
+
+## 17-6. 약속 고정과 EGM 리뷰 반영 (2026-11-13)
+
+- 구현 기준은 [sync-contract.md](sync-contract.md)다. 이 문서와 다르면 약속을 따른다.
+- 동균 님 결정으로 범위를 줄였다. 줄인 항목과 남는 한계는 약속 9장에 있다: 켬 구간 표, 수집기 계정 확인, C4-c, C5, 적응형 주기·touch·쉼 두 배.
+- 갈래는 8개로 합쳤다. 수집기 접수와 설정을 한 갈래로, 공용 파서와 탭 클라이언트를 한 갈래로 묶었다. 감지·알림 갈래가 연결부까지 맡는다.
+- 리뷰에서 바로잡은 코드 인용
+  - 이름을 보지 않는 `onAlarm`: `background.ts:76-77`
+  - 세션 시작 행을 만드는 곳: `collector/app.py:88-89`
+  - 해시 id: `chatgpt.ts:155`
+  - 기준선 표시: `auto-collect.ts:45`·`:97`
+  - `within_window`: `scanner/src/review_db.rs:90-92`
+  - 내보내기 파서: `chatgpt-export.ts:33-68`
+  - 0.2.7은 `data-message-id`를 먼저 쓰고, 없으면 `data-chatgpt-search-message-ids`의 첫 id를 쓴다(`chatgpt.ts:134-141`, 모든 전략 공통).
+  - `sendBlockedReason`은 확장 전용이다. 웹 `/collect`는 `autoCollect`로 따로 판정한다.
+  - 9장의 `sync.page`는 약속 4장의 `sync.session`·`sync.projects`·`sync.projectPage`·`sync.conversation`으로 바뀌었다.

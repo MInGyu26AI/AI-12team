@@ -1,0 +1,46 @@
+{
+  "_note": "conversation-in-progress.json 의 기대값. 마지막 턴이 생성 중이라 미완료, inProgress=true. turnsInWindows 는 턴 1만 남긴다",
+  "inProgress": true,
+  "turns": [
+    {
+      "turnId": "p-u1",
+      "complete": true,
+      "start": "2025-11-13T01:01:40.000Z",
+      "end": "2025-11-13T01:01:45.000Z",
+      "messages": [
+        {
+          "id": "p-u1",
+          "role": "user",
+          "text": "회의 시간 정하자",
+          "createdAt": "2025-11-13T01:01:40.000Z"
+        },
+        {
+          "id": "p-a1",
+          "role": "assistant",
+          "text": "화요일 3시 어때요?",
+          "createdAt": "2025-11-13T01:01:45.000Z"
+        }
+      ]
+    },
+    {
+      "turnId": "p-u2",
+      "complete": false,
+      "start": "2025-11-13T01:03:20.000Z",
+      "end": "2025-11-13T01:03:22.000Z",
+      "messages": [
+        {
+          "id": "p-u2",
+          "role": "user",
+          "text": "좋아, 안건도 정리해 줘",
+          "createdAt": "2025-11-13T01:03:20.000Z"
+        },
+        {
+          "id": "p-a2",
+          "role": "assistant",
+          "text": "안건은 1)",
+          "createdAt": "2025-11-13T01:03:22.000Z"
+        }
+      ]
+    }
+  ]
+}

@@ -42,20 +42,20 @@ export interface ExtStatus {
   counts?: Partial<Record<"reviewPending" | "deliveryPending" | "deliveryBlocked" | "classificationPending" | "classificationFailed" | "intakeIssues" | "privacyHeld" | "privacyExcluded", number>>;
   privacy?: { policy: string; model: string | null; available: boolean | null; reason: string | null }; // 로컬 개인정보 검사 상태
   // 계정 동기화 (docs/sync-contract.md 3장). 옛 수집기는 없음 → 확장은 동기화를 켜지 못하게 한다
-  syncWindows?: SyncWindow[]; // 동기화 창: 수집 기간 ∩ 동기화 켠 구간 − 일시정지 구간 (시작 순)
+  syncWindows?: SyncWindow[]; // 동기화 창: [max(세션 시작, 켠 시각), 수집 종료) − 일시정지 구간 (시작 순, 꺼져 있으면 [])
   accountSync?: AccountSyncState | null; // null = 한 번도 켠 적 없음
 }
 
-// 동기화 창 한 구간 [start, end). end=null 은 아직 열려 있음(지금 수집 중이고 동기화 켜짐)
+// 동기화 창 한 조각 [start, end). end 는 늘 있음 (수집 중이면 마지막 조각의 끝 = 수집 종료 시각)
 export interface SyncWindow {
   start: string; // ISO
-  end: string | null; // ISO
+  end: string; // ISO
 }
 
 export interface AccountSyncState {
   enabled: boolean;
-  account: string; // 묶인 ChatGPT 계정 해시 (sha256 hex 64자). 꺼도 마지막 값을 둔다
-  since: string | null; // 지금 켜진 구간의 시작(동의 시각, ISO). 꺼져 있으면 null
+  account: string; // 마지막으로 켤 때 저장한 ChatGPT 계정 해시 (소문자 hex 64자). 일치 확인은 확장이 한다
+  since: string | null; // 마지막으로 켠 시각(동의 시각, ISO). 꺼져 있으면 null
 }
 
 // 웹 → 확장 '싱크 맞추기' (rpc 메시지의 method 이름). 수집기로 넘기지 않고 background 가 처리한다:
