@@ -26,6 +26,15 @@ class ContractTest(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual([c['tag'] for c in result['cards']], ['decision'])
 
+    def test_long_sentence_is_cut_to_the_collector_limit(self):
+        # 사용자 발화는 2000자까지 보내는데 수집기는 카드 칸을 1200자까지만 받는다 (코드 지도 지적)
+        text = 'DB는 SQLite로 하자. ' + '가' * 1500
+        result = handle_request(dict(messages=[msg(1, text)]), FakeLLM({'cards': [{**self.card(text), 'content': None}]}))
+        self.assertTrue(result['ok'])
+        card = result['cards'][0]
+        self.assertEqual((len(card['sentence']), len(card['content'])), (1200, 1200))
+        self.assertTrue(text.startswith(card['evidence']['quote']))
+
     def test_guessed_role_and_source_are_preserved_for_review(self):
         sentence = 'SQLite로 결정했다.'
         request = dict(messages=[{**msg(1, sentence), 'roleGuessed': True}])

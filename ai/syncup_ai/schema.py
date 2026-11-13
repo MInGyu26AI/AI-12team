@@ -6,7 +6,7 @@ import re
 from datetime import date
 from typing import NamedTuple
 
-from .config import BELOW_LOW_CONFIDENCE, LOW_CONFIDENCE
+from .config import BELOW_LOW_CONFIDENCE, LOW_CONFIDENCE, MAX_CARD_TEXT
 from .mask import has_mask_token, mask
 
 SUBTOPICS = ("주제·목표", "자료 조사", "작업·결과물", "역할·일정", "과제 조건·피드백", "발표·제출", "기타")
@@ -102,10 +102,10 @@ def _related_card(raw: dict, sentence: str, source: str, confidence: float, mode
     content = _str_or_none(raw.get("content")) or sentence
     # 위에서 모든 값을 가렸지만 문장·내용·이유는 한 번 더 가린다. mask() 는 한 번에 끝나지 않을 수 있다
     # (앞 규칙이 바꾼 자리 뒤에서 새로 걸리는 값. 예: 주민번호에 바로 붙은 토큰).
-    sentence, content = mask(sentence)[0], mask(content)[0]
+    sentence, content = mask(sentence)[0][:MAX_CARD_TEXT], mask(content)[0][:MAX_CARD_TEXT]
     reason = _str_or_none(raw.get("reason"))
     if reason:
-        reason = mask(reason)[0]
+        reason = mask(reason)[0][:MAX_CARD_TEXT]
     # 이 카드 문장에 가림 표시가 있으면 true (발화 다른 부분만 가린 경우는 false). mask() 가 넣는 표시는 모두
     # MASK_TOKENS 에 있지만, 로컬 개인정보 게이트가 넣는 [비밀키]는 없어서 여기서 잡히지 않는다.
     masked = model_masked or has_mask_token(sentence + content)

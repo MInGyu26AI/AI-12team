@@ -11,6 +11,7 @@ CONTEXT_TURNS = 1  # 앞 배치의 마지막 N턴을 "참고용"으로만 같이
 MAX_AI_CHARS = 1200  # AI 답변은 길어서 앞부분만 발췌해 보냄 ("필요한 발췌만 외부 AI로")
 MAX_USER_CHARS = 2000
 MAX_CARDS_PER_AI_MESSAGE = 2  # AI 답변 하나에서 만들 수 있는 카드 수 상한
+MAX_CARD_TEXT = 1200  # 카드 글 한 칸의 상한. contract/card_contract.py MAX_TEXT 와 같아야 수집기가 묶음을 거절하지 않는다
 
 # ── 화면 규칙과 맞춤 (shared/labels.ts LOW_CONFIDENCE) ──
 LOW_CONFIDENCE = 0.6
