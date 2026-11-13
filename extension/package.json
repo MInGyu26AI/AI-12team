@@ -2,7 +2,7 @@
   "name": "syncup-extension",
   "description": "SyncUp Chrome extension",
   "private": true,
-  "version": "0.2.7",
+  "version": "0.2.8",
   "type": "module",
   "scripts": {
     "dev": "wxt",
