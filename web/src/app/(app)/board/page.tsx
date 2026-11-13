@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, timeOf } from "@shared/format";
-import type { Judgement, RelatedCard } from "@shared/types";
+import { alertLevel, type AlertLevel } from "@shared/labels";
+import type { RelatedCard } from "@shared/types";
 import { ConflictBanner } from "@/components/board/conflict-banner";
 import { ConflictChecks } from "@/components/board/conflict-checks";
 import { DecisionHistoryList } from "@/components/board/decision-history";
@@ -32,7 +33,7 @@ export default function BoardPage() {
   const { cards, conflicts, done } = load;
   const { decisions, todos, research, topics, lastUpdate } = boardSections(cards);
   const shown = topic ? decisions.filter((c) => topicOf(c) === topic) : decisions;
-  const flagged = new Map<string, Judgement>(conflicts.map((x) => [x.cardB.id, x.judgement]));
+  const flagged = new Map<string, AlertLevel>(conflicts.map((x) => [x.cardB.id, alertLevel(x)]));
 
   const copyRecord = async () => {
     try {

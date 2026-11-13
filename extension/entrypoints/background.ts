@@ -3,6 +3,7 @@ import type { Browser } from 'wxt/browser';
 import { appendTurns } from '@/lib/append-turns';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
+import { CONFLICT_ALARM, checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
 import { collectResultToast, type BgRequest, type TabToast } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
 import { settingsItem } from '@/lib/settings';
@@ -71,8 +72,14 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 
 export default defineBackground(() => {
   void refreshStatusOrRecordFailure();
+  void checkConflicts();
   browser.alarms.create('refresh', { periodInMinutes: 0.5 });
-  browser.alarms.onAlarm.addListener(() => void refreshStatusOrRecordFailure());
+  browser.alarms.create(CONFLICT_ALARM, { periodInMinutes: 1 });
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === CONFLICT_ALARM) void checkConflicts();
+    else void refreshStatusOrRecordFailure();
+  });
+  browser.notifications.onClicked.addListener((id) => void openBoardFromNotification(id));
   // 리스너가 Promise 를 돌려주는 응답은 Chrome 148 부터라 그 전 버전에서는 보낸 쪽이 undefined 를 받는다.
   // 그래서 sendResponse 로 답하고, true 를 돌려 답할 때까지 채널을 열어 둔다
   browser.runtime.onMessage.addListener((message: BgRequest, sender, sendResponse) => {

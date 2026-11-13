@@ -1,8 +1,8 @@
 "use client";
 
 import { fmtHM, fmtMD, parseSource } from "@shared/format";
-import { JUDGEMENT_COLOR } from "@shared/labels";
-import type { Judgement, RelatedCard } from "@shared/types";
+import { ALERT_LEVEL, type AlertLevel } from "@shared/labels";
+import type { RelatedCard } from "@shared/types";
 import { Avatar } from "@/components/avatar";
 import { CheckProgress } from "@/components/board/conflict-checks";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,7 @@ function TopicButton({ label, count, active, onClick }: { label: string; count: 
 // 가운데: 결정 타임라인 (최신순). 충돌·변경 판정이 걸린 새 결정은 빨간 테두리, 배지를 누르면 충돌 모달
 export function DecisionTimeline({ decisions, flagged, onOpenConflict }: {
   decisions: RelatedCard[];
-  flagged: Map<string, Judgement>; // 새 결정(cardB) id → 판정
+  flagged: Map<string, AlertLevel>; // 새 결정(cardB) id → 알림 단계 (충돌·확인 필요·변경)
   onOpenConflict: () => void;
 }) {
   return (
@@ -51,7 +51,7 @@ export function DecisionTimeline({ decisions, flagged, onOpenConflict }: {
       {decisions.length ? (
         <ol className="divide-y">
           {decisions.map((c) => (
-            <DecisionItem key={c.id} card={c} judgement={flagged.get(c.id)} onOpen={onOpenConflict} />
+            <DecisionItem key={c.id} card={c} level={flagged.get(c.id)} onOpen={onOpenConflict} />
           ))}
         </ol>
       ) : (
@@ -61,13 +61,13 @@ export function DecisionTimeline({ decisions, flagged, onOpenConflict }: {
   );
 }
 
-function DecisionItem({ card: c, judgement, onOpen }: { card: RelatedCard; judgement?: Judgement; onOpen: () => void }) {
+function DecisionItem({ card: c, level, onOpen }: { card: RelatedCard; level?: AlertLevel; onOpen: () => void }) {
   const src = parseSource(c.source);
   return (
     <li
       className={cn(
         "grid grid-cols-[52px_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-xl p-4 sm:grid-cols-[72px_minmax(0,1fr)] sm:p-5",
-        judgement && "border border-sensitive/50 bg-sensitive-soft/40",
+        level && ALERT_LEVEL[level].card,
       )}
     >
       <div className="text-sm">
@@ -81,9 +81,9 @@ function DecisionItem({ card: c, judgement, onOpen }: { card: RelatedCard; judge
       <div className="min-w-0 space-y-1.5">
         <div className="flex flex-wrap gap-1.5">
           {c.topic_key && <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand">{c.topic_key}</span>}
-          {judgement && (
-            <button onClick={onOpen} className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", JUDGEMENT_COLOR[judgement])}>
-              {judgement}
+          {level && (
+            <button onClick={onOpen} className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", ALERT_LEVEL[level].badge)}>
+              {ALERT_LEVEL[level].label}
             </button>
           )}
         </div>

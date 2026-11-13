@@ -28,6 +28,14 @@
   --color-ok: #2e7d32; /* 연결됨 · 참여함 · 승인 완료 */
   --color-ok-soft: #e8f5e9;
 
+  /* 팀 보드 충돌 알림 3단계 (labels.ts ALERT_LEVEL): 충돌 = 빨강, 확인 필요(확신도 0.6 미만) = 노랑, 변경 = 파랑 */
+  --color-alert-conflict: #c62828;
+  --color-alert-conflict-soft: #fbecec;
+  --color-alert-review: #a16207;
+  --color-alert-review-soft: #fef3c7;
+  --color-alert-change: #1d4ed8;
+  --color-alert-change-soft: #dbeafe;
+
   /* 간격·폭
      주의: --spacing-X 와 --container-X 이름을 겹치지 말 것. Tailwind v4 의 max-w-X 는 --spacing-X 를 먼저 쓴다.
      (예전 --spacing-page 때문에 max-w-page 가 1rem 이 되어 화면이 세로 한 글자 기둥으로 깨졌음) */

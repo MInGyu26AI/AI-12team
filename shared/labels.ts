@@ -1,7 +1,7 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
 import type { MessageSite } from "./bridge";
-import type { Card, Judgement, RelatedCard, Resolution, Tag } from "./types";
+import type { Card, Conflict, RelatedCard, Resolution, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
   decision: "결정",
@@ -37,13 +37,43 @@ export const SITE_LABEL: Record<MessageSite, string> = {
   "claude-code": "Claude Code",
 };
 
-// 충돌 판정 배지 (변경도 경고로 보여 주되 색으로 구분)
-export const JUDGEMENT_COLOR: Record<Judgement, string> = {
-  충돌: "bg-sensitive-soft text-sensitive",
-  변경: "bg-change-soft text-change",
-  같음: "bg-muted text-muted-foreground",
-  무관: "bg-muted text-muted-foreground",
+// 팀 보드 충돌 알림 3단계. 확신도 0.6 미만(또는 서버가 '확인 필요'로 판정)이면 판정과 상관없이 '확인 필요'
+export type AlertLevel = "conflict" | "review" | "change";
+
+export function alertLevel(x: Pick<Conflict, "judgement" | "confidence">): AlertLevel {
+  if ((x.confidence !== undefined && x.confidence < LOW_CONFIDENCE) || (x.judgement as string) === "확인 필요") return "review";
+  return x.judgement === "변경" ? "change" : "conflict";
+}
+
+export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; card: string; banner: string; text: string; button: string }> = {
+  conflict: {
+    label: "충돌",
+    badge: "bg-alert-conflict-soft text-alert-conflict",
+    card: "border border-alert-conflict/50 bg-alert-conflict-soft/40",
+    banner: "border-alert-conflict/40 bg-alert-conflict-soft",
+    text: "text-alert-conflict",
+    button: "bg-alert-conflict hover:bg-alert-conflict/90",
+  },
+  review: {
+    label: "확인 필요",
+    badge: "bg-alert-review-soft text-alert-review",
+    card: "border border-alert-review/50 bg-alert-review-soft/40",
+    banner: "border-alert-review/40 bg-alert-review-soft",
+    text: "text-alert-review",
+    button: "bg-alert-review hover:bg-alert-review/90",
+  },
+  change: {
+    label: "변경",
+    badge: "bg-alert-change-soft text-alert-change",
+    card: "border border-alert-change/50 bg-alert-change-soft/40",
+    banner: "border-alert-change/40 bg-alert-change-soft",
+    text: "text-alert-change",
+    button: "bg-alert-change hover:bg-alert-change/90",
+  },
 };
+
+// 배너 색·요약 순서 (심한 것부터)
+export const ALERT_ORDER: AlertLevel[] = ["conflict", "review", "change"];
 
 // 충돌 처리 이력 (팀 서버 conflicts/history). obsolete = 관련 결정이 다른 처리로 끝나 함께 닫힘
 export const RESOLUTION_LABEL: Record<Resolution | "obsolete", string> = {
