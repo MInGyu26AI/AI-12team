@@ -62,7 +62,7 @@ export function ConsentText() {
   return (
     <div className="space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
       <p className="font-medium text-gray-800">고른 프로젝트 대화만 가져오고, 승인한 것만 공유해요</p>
-      <p>· 앱·다른 기기에서 나눈 대화도 포함돼요. 임시 채팅은 빠져요.</p>
+      <p>· 앱·다른 기기에서 나눈 대화도 포함돼요. 동기화에서는 임시 채팅이 빠져요.</p>
       <p>· 민감정보를 가린 일부만 외부 AI로 보내 분류해요.</p>
       <p>· 켠 뒤 새로 생긴 대화만 가져와요. ChatGPT에서 지워도 이미 가져온 건 남아요.</p>
     </div>

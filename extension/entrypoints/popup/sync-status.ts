@@ -19,9 +19,18 @@ const STOP_TEXT: Record<SyncStopReason, string> = {
   account_mismatch: '켤 때와 다른 ChatGPT 계정이에요. 껐다가 다시 켜 주세요',
   shape_changed: 'ChatGPT 화면이 바뀌어 동기화를 멈췄어요',
   collector_off: '수집기에서 동기화가 꺼져 있어요. 다시 켜 주세요', // 껐다가 다시 켜면 풀린다
+  project_missing: '고른 프로젝트를 찾을 수 없어요. 동기화를 껐다가 다시 골라 주세요',
 };
 
-const REST_TEXT = { rate_limited: '요청 제한', forbidden: '접속 제한' } as const;
+// 마지막 패스가 오류로 끝났을 때 상태 줄에 덧붙이는 문구 (약속 5장 7의 표). 표에 없는 code 는 기본 문구
+const LAST_ERROR_TEXT: Partial<Record<NonNullable<SyncState['lastError']>['code'], string>> = {
+  network: 'ChatGPT 연결이 잠시 안 돼요. 다음 주기에 다시 해요',
+  collector: '수집기에 보내지 못했어요. 수집기가 켜져 있는지 확인해 주세요',
+  shape_changed: '일부 대화를 읽지 못했어요',
+};
+const LAST_ERROR_DEFAULT = '마지막 동기화가 실패했어요';
+
+const REST_TEXT ={ rate_limited: '요청 제한', forbidden: '접속 제한' } as const;
 
 /**
  * 스위치 아래 한 줄. 동기화가 꺼져 있으면 null.
@@ -43,7 +52,11 @@ export function syncStatusLine(state: SyncState, now = Date.now()): PopupNotice 
       return { tone: 'info', text: `동기화: 확인 중${project}` };
     default: {
       const when = state.lastPassFinishedAt ? formatAgo(state.lastPassFinishedAt, now) : '곧 첫 확인';
-      return { tone: 'info', text: `동기화: ${when}${project}` };
+      const text = `동기화: ${when}${project}`;
+      // 오류로 끝난 패스는 idle 로 돌아오고 lastError 를 남긴다 (약속 5장 7). 잠깐 안 되는 network 만 가볍게 알린다
+      if (state.mode !== 'idle' || !state.lastError) return { tone: 'info', text };
+      const { code } = state.lastError;
+      return { tone: code === 'network' ? 'info' : 'error', text: `${text}. ${LAST_ERROR_TEXT[code] ?? LAST_ERROR_DEFAULT}` };
     }
   }
 }

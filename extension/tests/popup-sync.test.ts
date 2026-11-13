@@ -80,7 +80,25 @@ describe('상태 한 줄 (syncStatusLine)', () => {
     expect(stopped('shape_changed')?.text).toMatch(/화면이 바뀌어/);
     expect(stopped('collection_paused')?.text).toMatch(/자동 수집을 다시 켜/);
     expect(stopped('collector_off')).toEqual({ tone: 'error', text: '수집기에서 동기화가 꺼져 있어요. 다시 켜 주세요' });
+    expect(stopped('project_missing')).toEqual({ tone: 'error', text: '고른 프로젝트를 찾을 수 없어요. 동기화를 껐다가 다시 골라 주세요' });
     expect(stopped(null)?.tone).toBe('error');
+  });
+
+  it('오류로 끝난 패스가 idle 로 돌아오면 상태 줄에 표의 문구를 덧붙인다', () => {
+    const failed = (code: NonNullable<SyncState['lastError']>['code'], changes: Partial<SyncState> = {}) =>
+      syncStatusLine(synced({ lastPassFinishedAt: at(-3), lastError: { code, at: at(-3) }, ...changes }), NOW);
+    const head = '동기화: 3분 전 · 해커톤 프로젝트';
+    expect(failed('network')).toEqual({ tone: 'info', text: `${head}. ChatGPT 연결이 잠시 안 돼요. 다음 주기에 다시 해요` });
+    expect(failed('collector')).toEqual({ tone: 'error', text: `${head}. 수집기에 보내지 못했어요. 수집기가 켜져 있는지 확인해 주세요` });
+    expect(failed('shape_changed')).toEqual({ tone: 'error', text: `${head}. 일부 대화를 읽지 못했어요` });
+    expect(failed('forbidden')).toEqual({ tone: 'error', text: `${head}. 마지막 동기화가 실패했어요` }); // 표에 없는 code
+  });
+
+  it('idle 이 아니거나 오류가 없으면 문구를 덧붙이지 않는다', () => {
+    const lastError = { code: 'network' as const, at: at(-3) };
+    expect(syncStatusLine(synced({ lastPassFinishedAt: at(-3), lastError: null }), NOW)?.text).toBe('동기화: 3분 전 · 해커톤 프로젝트');
+    expect(syncStatusLine(synced({ mode: 'running', lastError }), NOW)?.text).toBe('동기화: 확인 중 · 해커톤 프로젝트');
+    expect(syncStatusLine(synced({ mode: 'rest', restReason: 'rate_limited', restUntil: at(30), lastError }), NOW)?.text).toBe('쉼: 요청 제한 · 14:30에 다시');
   });
 
   it('끄기를 수집기에 아직 전하지 못했으면 꺼진 뒤에도 알린다', () => {
@@ -226,7 +244,7 @@ describe('팝업 화면 그리기', () => {
   it('동의 문구는 고른 프로젝트 대화만 가져오고 승인한 것만 공유한다는 말이 중심이다', () => {
     const html = renderToStaticMarkup(createElement(ConsentText));
     expect(html).toContain('고른 프로젝트 대화만 가져오고, 승인한 것만 공유해요');
-    expect(html).toContain('임시 채팅은 빠져요');
+    expect(html).toContain('동기화에서는 임시 채팅이 빠져요'); // 화면 수집은 임시 채팅도 가져가므로 동기화에 한정해 말한다
     expect(html).toContain('외부 AI');
   });
 
