@@ -258,6 +258,9 @@
     {"name": "국제 표기 휴대전화", "input": "+82 10-1234-5678 로 연락 줘", "absent": ["1234", "5678"], "present": ["[연락처]", "로 연락 줘"], "masked": true},
     {"name": "서울 유선전화", "input": "사무실 전화번호는 02-123-4567 이야", "absent": ["123-4567"], "present": ["[연락처]"], "masked": true},
     {"name": "지역번호 유선전화 (계좌로 오인하지 않음)", "input": "본사 031-1234-5678 로 문의", "absent": ["1234-5678"], "present": ["[연락처]"], "masked": true},
-    {"name": "인터넷전화 070", "input": "상담 070 1234 5678", "absent": ["1234 5678"], "present": ["[연락처]"], "masked": true}
+    {"name": "인터넷전화 070", "input": "상담 070 1234 5678", "absent": ["1234 5678"], "present": ["[연락처]"], "masked": true},
+    {"name": "띄어 쓴 이메일", "input": "결과물은 park.ux @ daum-example.net로 보내 줘", "absent": ["park.ux", "daum-example"], "present": ["[이메일]로 보내 줘"], "masked": true},
+    {"name": "띄어 쓴 계좌", "input": "회비는 352 0123 4567 83로 보내 줘", "absent": ["0123 4567"], "present": ["회비는 [계좌]로 보내 줘"], "masked": true},
+    {"name": "과잉 가림 없음: 띄어 쓴 날짜는 계좌가 아니다", "input": "발표는 2026 11 16 오후 2시", "absent": [], "present": ["발표는 2026 11 16 오후 2시"], "masked": false}
   ]
 }
