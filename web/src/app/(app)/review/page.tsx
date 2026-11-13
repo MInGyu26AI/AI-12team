@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, USE_MOCK } from "@/lib/api";
 import { useTeam } from "@/lib/team";
-import { useReviewCandidates, useReviewSelection } from "@/lib/use-review";
+import { useReviewCandidates, useReviewSelection, useSyncOnOpen } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
 
 type Tab = "review" | "held" | "excluded";
@@ -33,6 +33,7 @@ export default function ReviewPage() {
   const router = useRouter();
   const team = useTeam();
   const review = useReviewCandidates();
+  useSyncOnOpen(); // 후보 구독이 먼저 걸린 뒤 시작한다
   const { collector } = review;
   const selection = useReviewSelection(review.shareable);
   const [sharing, setSharing] = useState(false);

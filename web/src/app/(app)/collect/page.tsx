@@ -1,14 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Minus, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
 import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
-import { useLocalCollector } from "@/lib/local-collector";
+import { canSyncNow, useLocalCollector } from "@/lib/local-collector";
+import { syncNowSummary } from "@/lib/rpc";
 import { cn } from "@/lib/utils";
 
 // 피그마 3번: 대화 자동 수집 (브라우저 확장 상태·수집 기준·최근 수집)
@@ -17,6 +20,20 @@ export default function CollectPage() {
   const st = collector.status;
   const connected = collector.available && !!st;
   const pendingIds = new Set(collector.cards.map((c) => c.id));
+  const [syncing, setSyncing] = useState(false);
+
+  // 싱크 맞추기: 프로젝트 동기화(켜져 있을 때)와 쌓인 대화 분류를 한 번에 하고 결과를 짧게 알린다
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const { tone, text } = syncNowSummary(await collector.syncNow("button"));
+      toast[tone](text);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-content space-y-6 px-gutter py-10">
@@ -107,10 +124,10 @@ export default function CollectPage() {
             </span>
             <button
               className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium disabled:opacity-40"
-              disabled={!st.bufferedTurns || !st.autoCollect}
-              onClick={collector.flush}
+              disabled={syncing || !canSyncNow(st)}
+              onClick={syncNow}
             >
-              지금 수집하기
+              {syncing ? "맞추는 중…" : "싱크 맞추기"}
             </button>
           </div>
         )}
