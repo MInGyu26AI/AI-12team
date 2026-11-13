@@ -97,21 +97,32 @@ describe('sync.session', () => {
 });
 
 describe('sync.projects', () => {
-  it('사이드바에서 {gizmoId, name} 목록을 만들고 토큰을 Bearer 로 붙인다', async () => {
+  const sidebar = (ids: string[], cursor: string | null) => ({
+    items: ids.map((id) => ({ gizmo: { id, display: { name: `이름 ${id}` } }, conversations: { items: [], cursor: null } })),
+    cursor,
+  });
+
+  it('사이드바에서 {gizmoId, name} 목록을 만들고 토큰을 Bearer 로 붙인다 (프로젝트는 items[].gizmo 에 바로 있다)', async () => {
     const { api, calls } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': fixture('projects-sidebar.json') });
     const res = await api.handle({ type: 'sync.projects' });
     expect(res).toEqual({
       ok: true,
       account: expectedAccount,
       data: [
-        { gizmoId: 'g-p-0001synthetic', name: 'AI-12team 해커톤' },
-        { gizmoId: 'g-p-0002synthetic', name: '개인 메모' },
+        { gizmoId: 'g-p-00000000000000000000000000000001', name: 'AI-12team 해커톤' },
+        { gizmoId: 'g-p-00000000000000000000000000000002', name: '개인 메모' },
       ],
     });
     expect(calls).toEqual([
       { path: '/api/auth/session', authorization: null },
       { path: '/backend-api/gizmos/snorlax/sidebar', authorization: 'Bearer synthetic-token-not-real' },
     ]);
+  });
+
+  it('옛 추정 모양(items[].gizmo.gizmo)은 shape_changed', async () => {
+    const old = { items: [{ gizmo: { gizmo: { id: 'g-1', display: { name: 'x' } } } }], cursor: null };
+    const { api } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': old });
+    expect(await api.handle({ type: 'sync.projects' })).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
   });
 
   it('토큰은 메모리에 두고 다음 요청에서 세션을 다시 받지 않는다', async () => {
@@ -143,32 +154,40 @@ describe('sync.projects', () => {
   });
 
   it('cursor 가 있으면 다음 쪽을 이어 읽고 같은 프로젝트는 한 번만 담는다', async () => {
-    const page = (ids: string[], cursor: string | null) => ({
-      items: ids.map((id) => ({ gizmo: { gizmo: { id, display: { name: `이름 ${id}` } } } })),
-      cursor,
-    });
     const { api, paths } = apiWith({
-      '/backend-api/gizmos/snorlax/sidebar': [page(['g-1', 'g-2'], 'next-1'), page(['g-2', 'g-3'], null)],
+      '/backend-api/gizmos/snorlax/sidebar': [sidebar(['g-1', 'g-2'], 'next+1/='), sidebar(['g-2', 'g-3'], null)],
     });
     const res = await api.handle({ type: 'sync.projects' });
     expect(res.ok && (res.data as unknown as { gizmoId: string }[]).map((p) => p.gizmoId)).toEqual(['g-1', 'g-2', 'g-3']);
-    expect(paths()).toContain('/backend-api/gizmos/snorlax/sidebar?cursor=next-1');
+    expect(paths()).toContain('/backend-api/gizmos/snorlax/sidebar?cursor=next%2B1%2F%3D');
   });
 
   it('새 프로젝트가 없는 쪽이 오면 멈춘다 (같은 쪽 되풀이로 요청이 늘지 않게)', async () => {
-    const same = { items: [{ gizmo: { gizmo: { id: 'g-1', display: { name: 'a' } } } }], cursor: 'again' };
-    const { api, paths } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': same });
+    const { api, paths } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': sidebar(['g-1'], 'again') });
     const res = await api.handle({ type: 'sync.projects' });
     expect(res.ok && (res.data as unknown as unknown[]).length).toBe(1);
     expect(paths().filter((p) => p.startsWith('/backend-api/gizmos/snorlax/sidebar'))).toHaveLength(2);
   });
 
+  it('둘째 쪽부터 실패하면 이미 받은 목록으로 마친다 (사이드바의 쪽 넘기기는 실측 전)', async () => {
+    const { api } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': [sidebar(['g-1'], 'next'), status(400)] });
+    const res = await api.handle({ type: 'sync.projects' });
+    expect(res).toEqual({ ok: true, account: expectedAccount, data: [{ gizmoId: 'g-1', name: '이름 g-1' }] });
+  });
+
+  it('첫 쪽이 실패하면 그 오류를 그대로 돌려준다', async () => {
+    const { api } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': status(429, { 'Retry-After': '10' }) });
+    expect(await api.handle({ type: 'sync.projects' })).toEqual({ ok: false, error: 'rate_limited', retryAfterSec: 10, account: expectedAccount });
+  });
+
   it.each([
     ['items 가 없음', {}],
     ['items 가 배열이 아님', { items: {} }],
-    ['gizmo.gizmo.id 가 없음', { items: [{ gizmo: { gizmo: { display: { name: 'x' } } } }] }],
-    ['display.name 이 없음', { items: [{ gizmo: { gizmo: { id: 'g-1', display: {} } } }] }],
-    ['id 가 문자열이 아님', { items: [{ gizmo: { gizmo: { id: 7, display: { name: 'x' } } } }] }],
+    ['gizmo.id 가 없음', { items: [{ gizmo: { display: { name: 'x' } } }] }],
+    ['display.name 이 없음', { items: [{ gizmo: { id: 'g-1', display: {} } }] }],
+    ['display 가 없음', { items: [{ gizmo: { id: 'g-1' } }] }],
+    ['id 가 문자열이 아님', { items: [{ gizmo: { id: 7, display: { name: 'x' } } }] }],
+    ['gizmo 가 없음', { items: [{ conversations: {} }] }],
   ])('필수 필드가 어긋나면 shape_changed: %s', async (_name, body) => {
     const { api } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': body });
     expect(await api.handle({ type: 'sync.projects' })).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
@@ -176,31 +195,48 @@ describe('sync.projects', () => {
 });
 
 describe('sync.projectPage', () => {
-  const GIZMO = 'g-p-0001synthetic';
+  const GIZMO = 'g-p-00000000000000000000000000000001';
   const base = `/backend-api/gizmos/${GIZMO}/conversations`;
+  const FIRST = `${base}?limit=50&owned_only=false`;
+  const request = (cursor: string | null = null) => ({ type: 'sync.projectPage', gizmoId: GIZMO, cursor }) as const;
 
-  it('목록을 {id, updateTime(ISO), isArchived, gizmoId} 로 바꾼다 (숫자 초와 ISO 문자열 모두)', async () => {
+  it('목록을 {id, updateTime(ISO), isArchived, isTemporary, gizmoId} 로 바꾼다 (마이크로초 ISO 도 밀리초로)', async () => {
     const { api } = apiWith({ [base]: fixture('project-conversations.json') });
-    const res = await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: null });
+    const res = await api.handle(request());
     expect(res).toEqual({
       ok: true,
       account: expectedAccount,
       data: {
         items: [
-          { id: 'c0ffee00-0000-4000-8000-000000000001', updateTime: '2025-11-13T01:10:00.500Z', isArchived: false, gizmoId: GIZMO },
-          { id: 'c0ffee00-0000-4000-8000-000000000002', updateTime: '2025-11-13T01:03:22.000Z', isArchived: false, gizmoId: GIZMO },
-          { id: 'c0ffee00-0000-4000-8000-000000000003', updateTime: '2025-11-12T09:00:00.000Z', isArchived: true, gizmoId: GIZMO },
+          { id: 'c0ffee00-0000-4000-8000-000000000001', updateTime: '2025-11-13T01:10:00.500Z', isArchived: false, isTemporary: false, gizmoId: GIZMO },
+          { id: 'c0ffee00-0000-4000-8000-000000000002', updateTime: '2025-11-13T01:03:22.000Z', isArchived: false, isTemporary: false, gizmoId: GIZMO },
+          { id: 'c0ffee00-0000-4000-8000-000000000003', updateTime: '2025-11-12T09:00:00.000Z', isArchived: true, isTemporary: false, gizmoId: GIZMO },
         ],
-        nextCursor: 'synthetic-cursor-2',
+        nextCursor: 'opaque-synthetic-cursor+/=2',
       },
     });
   });
 
-  it('첫 쪽은 FIRST_PAGE_CURSOR, 다음 쪽은 받은 cursor 를 주소에 싣는다', async () => {
+  it('첫 쪽은 ?limit=50&owned_only=false 만, 다음 쪽은 &cursor=<이스케이프한 cursor> 를 붙인다', async () => {
     const { api, paths } = apiWith({ [base]: fixture('project-conversations.json') });
-    await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: null });
-    await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: 'a b/c' });
-    expect(paths().filter((p) => p.startsWith(base))).toEqual([`${base}?cursor=0`, `${base}?cursor=a%20b%2Fc`]);
+    await api.handle(request(null));
+    await api.handle(request('opaque-synthetic-cursor+/=2'));
+    await api.handle(request('a b/c'));
+    expect(paths().filter((p) => p.startsWith(base))).toEqual([
+      FIRST,
+      `${FIRST}&cursor=opaque-synthetic-cursor%2B%2F%3D2`,
+      `${FIRST}&cursor=a%20b%2Fc`,
+    ]);
+    expect(paths().some((p) => p.includes('cursor=0'))).toBe(false);
+  });
+
+  it('받은 cursor 를 다음 요청에 그대로 돌려 쓰면 같은 값이 된다 (왕복)', async () => {
+    const cursor = 'ab+/=c d%e';
+    const { api, paths } = apiWith({ [base]: { items: [{ id: 'x', update_time: 1762990000 }], cursor } });
+    const first = await api.handle(request());
+    expect(first.ok && (first.data as unknown as { nextCursor: string }).nextCursor).toBe(cursor);
+    await api.handle(request(cursor));
+    expect(decodeURIComponent(paths().at(-1)!.split('&cursor=')[1]!)).toBe(cursor);
   });
 
   it('받은 순서가 아니라 update_time 최신 순으로 돌려준다', async () => {
@@ -212,39 +248,65 @@ describe('sync.projectPage', () => {
       cursor: null,
     };
     const { api } = apiWith({ [base]: body });
-    const res = await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: null });
+    const res = await api.handle(request());
     expect(res.ok && (res.data as unknown as { items: { id: string }[] }).items.map((i) => i.id)).toEqual(['new', 'old']);
   });
 
-  it('gizmo_id 가 없으면 null, 보관 표시는 true 일 때만 true', async () => {
-    const body = { items: [{ id: 'x', update_time: 1762990000 }, { id: 'y', update_time: 1762990000, is_archived: 'yes' }], cursor: null };
+  it('숫자(유닉스 초) update_time 도 ISO 로 바꾼다', async () => {
+    const { api } = apiWith({ [base]: { items: [{ id: 'x', update_time: 1762995802.0 }], cursor: null } });
+    const res = await api.handle(request());
+    expect(res.ok && (res.data as unknown as { items: { updateTime: string }[] }).items[0]!.updateTime).toBe('2025-11-13T01:03:22.000Z');
+  });
+
+  it('gizmo_id 가 없으면 null, 보관·임시 표시는 true 일 때만 true', async () => {
+    const body = {
+      items: [
+        { id: 'x', update_time: 1762990000 },
+        { id: 'y', update_time: 1762990000, is_archived: 'yes', is_temporary_chat: 'yes' },
+        { id: 'z', update_time: 1762990000, is_archived: true, is_temporary_chat: true },
+      ],
+      cursor: null,
+    };
     const { api } = apiWith({ [base]: body });
-    const res = await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: null });
+    const res = await api.handle(request());
     expect(res.ok && (res.data as unknown as { items: unknown[] }).items).toEqual([
-      { id: 'x', updateTime: '2025-11-12T23:26:40.000Z', isArchived: false, gizmoId: null },
-      { id: 'y', updateTime: '2025-11-12T23:26:40.000Z', isArchived: false, gizmoId: null },
+      { id: 'x', updateTime: '2025-11-12T23:26:40.000Z', isArchived: false, isTemporary: false, gizmoId: null },
+      { id: 'y', updateTime: '2025-11-12T23:26:40.000Z', isArchived: false, isTemporary: false, gizmoId: null },
+      { id: 'z', updateTime: '2025-11-12T23:26:40.000Z', isArchived: true, isTemporary: true, gizmoId: null },
     ]);
+  });
+
+  it('임시 채팅(is_temporary_chat)은 isTemporary=true 로 담는다 (거르는 일은 패스가 한다)', async () => {
+    const body = { items: [{ id: 'tmp', update_time: 1762990000, is_temporary_chat: true, gizmo_id: GIZMO }], cursor: null };
+    const { api } = apiWith({ [base]: body });
+    const res = await api.handle(request());
+    expect(res.ok && (res.data as unknown as { items: { isTemporary: boolean }[] }).items[0]!.isTemporary).toBe(true);
+  });
+
+  it('cursor 가 null 이면 끝이다 (nextCursor = null)', async () => {
+    const { api } = apiWith({ [base]: { items: [{ id: 'x', update_time: 1762990000 }], cursor: null } });
+    const res = await api.handle(request());
+    expect(res.ok && (res.data as unknown as { nextCursor: string | null }).nextCursor).toBeNull();
   });
 
   it('항목이 없으면 cursor 가 와도 끝으로 본다', async () => {
     const { api } = apiWith({ [base]: { items: [], cursor: 'whatever' } });
-    const res = await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: null });
+    const res = await api.handle(request());
     expect(res).toEqual({ ok: true, account: expectedAccount, data: { items: [], nextCursor: null } });
   });
 
   it.each([
-    ['items 가 없음', {}],
-    ['id 가 없음', { items: [{ update_time: 1762990000 }] }],
-    ['update_time 이 없음', { items: [{ id: 'x' }] }],
-    ['update_time 을 읽을 수 없음', { items: [{ id: 'x', update_time: '어제' }] }],
-    ['update_time 이 숫자도 문자열도 아님', { items: [{ id: 'x', update_time: { sec: 1 } }] }],
+    ['items 가 없음', { cursor: null }],
+    ['id 가 없음', { items: [{ update_time: 1762990000 }], cursor: null }],
+    ['update_time 이 없음', { items: [{ id: 'x' }], cursor: null }],
+    ['update_time 을 읽을 수 없음', { items: [{ id: 'x', update_time: '어제' }], cursor: null }],
+    ['update_time 이 숫자도 문자열도 아님', { items: [{ id: 'x', update_time: { sec: 1 } }], cursor: null }],
+    ['cursor 가 없음', { items: [{ id: 'x', update_time: 1762990000 }] }],
+    ['cursor 가 숫자', { items: [{ id: 'x', update_time: 1762990000 }], cursor: 2 }],
+    ['cursor 가 객체', { items: [{ id: 'x', update_time: 1762990000 }], cursor: {} }],
   ])('필수 필드가 어긋나면 shape_changed: %s', async (_name, body) => {
     const { api } = apiWith({ [base]: body });
-    expect(await api.handle({ type: 'sync.projectPage', gizmoId: GIZMO, cursor: null })).toEqual({
-      ok: false,
-      error: 'shape_changed',
-      account: expectedAccount,
-    });
+    expect(await api.handle(request())).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
   });
 
   it('gizmoId 가 비어 있으면 요청하지 않고 shape_changed', async () => {
@@ -261,8 +323,9 @@ describe('sync.conversation', () => {
     expect(paths()).toContain(OPEN_CONV);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const data = res.data as unknown as { messages: Record<string, unknown>[]; inProgress: boolean; skippedNoTime: number };
+    const data = res.data as unknown as { messages: Record<string, unknown>[]; inProgress: boolean; inProgressAt: string | null; skippedNoTime: number };
     expect(data.inProgress).toBe(false);
+    expect(data.inProgressAt).toBeNull();
     expect(data.skippedNoTime).toBe(0);
     expect(data.messages.map((m) => m.id)).toEqual(['chatgpt:m-u1', 'chatgpt:m-a1', 'chatgpt:m-a1b', 'chatgpt:m-u2', 'chatgpt:m-a2', 'chatgpt:m-u3', 'chatgpt:m-a3']);
     expect(data.messages[0]).toEqual({
@@ -294,20 +357,21 @@ describe('sync.conversation', () => {
     expect(res.ok && (res.data as unknown as { messages: { turnId: string }[] }).messages.map((m) => m.turnId)).toEqual(['m-u1', 'm-u1', 'm-u1']);
   });
 
-  it('창이 없으면 메시지는 없고 inProgress 는 그대로 알린다', async () => {
+  it('창이 없으면 메시지는 없다 (inProgress·inProgressAt 은 창과 상관없이 알린다)', async () => {
     const { api } = apiWith({ [OPEN_CONV]: CONV_BASIC });
     const res = await api.handle({ type: 'sync.conversation', id: 'c0ffee00-0000-4000-8000-000000000001', windows: [] });
-    expect(res).toEqual({ ok: true, account: expectedAccount, data: { messages: [], inProgress: false, skippedNoTime: 0 } });
+    expect(res).toEqual({ ok: true, account: expectedAccount, data: { messages: [], inProgress: false, inProgressAt: null, skippedNoTime: 0 } });
   });
 
-  it('생성 중인 마지막 턴은 빼고 inProgress=true (in-progress 픽스처)', async () => {
+  it('도구 호출 노드가 완료 표시를 달아도 최종 답이 생성 중이면 그 턴을 빼고 inProgress=true (in-progress 픽스처)', async () => {
     const id = 'c0ffee00-0000-4000-8000-000000000002';
     const { api } = apiWith({ [`/backend-api/conversation/${id}`]: CONV_PROGRESS });
     const res = await api.handle({ type: 'sync.conversation', id, windows: ALL_TIME });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const data = res.data as unknown as { messages: { id: string }[]; inProgress: boolean };
+    const data = res.data as unknown as { messages: { id: string }[]; inProgress: boolean; inProgressAt: string | null };
     expect(data.inProgress).toBe(true);
+    expect(data.inProgressAt).toBe('2025-11-13T01:03:22.000Z'); // 미완료 턴의 가장 늦은 메시지 시각
     expect(data.messages.map((m) => m.id)).toEqual(['chatgpt:p-u1', 'chatgpt:p-a1']);
   });
 
@@ -391,7 +455,7 @@ describe('본문 길이', () => {
 });
 
 describe('오류 분류', () => {
-  const GIZMO = 'g-p-0001synthetic';
+  const GIZMO = 'g-p-00000000000000000000000000000001';
   const page = `/backend-api/gizmos/${GIZMO}/conversations`;
   const pageRequest = { type: 'sync.projectPage', gizmoId: GIZMO, cursor: null } as const;
 
@@ -476,8 +540,9 @@ describe('오류 분류', () => {
 });
 
 describe('401 이면 토큰을 한 번 다시 받는다', () => {
-  const GIZMO = 'g-p-0001synthetic';
+  const GIZMO = 'g-p-00000000000000000000000000000001';
   const page = `/backend-api/gizmos/${GIZMO}/conversations`;
+  const firstPage = `${page}?limit=50&owned_only=false`;
   const pageRequest = { type: 'sync.projectPage', gizmoId: GIZMO, cursor: null } as const;
   const listing = fixture('project-conversations.json');
 
@@ -490,16 +555,16 @@ describe('401 이면 토큰을 한 번 다시 받는다', () => {
     expect(res.ok).toBe(true);
     expect(calls).toEqual([
       { path: '/api/auth/session', authorization: null },
-      { path: `${page}?cursor=0`, authorization: 'Bearer synthetic-token-not-real' },
+      { path: firstPage, authorization: 'Bearer synthetic-token-not-real' },
       { path: '/api/auth/session', authorization: null },
-      { path: `${page}?cursor=0`, authorization: 'Bearer second-token' },
+      { path: firstPage, authorization: 'Bearer second-token' },
     ]);
   });
 
   it('그래도 401 이면 logged_out (더 시도하지 않는다)', async () => {
     const { api, paths } = apiWith({ [page]: status(401) });
     expect(await api.handle(pageRequest)).toEqual({ ok: false, error: 'logged_out', account: expectedAccount });
-    expect(paths()).toEqual(['/api/auth/session', `${page}?cursor=0`, '/api/auth/session', `${page}?cursor=0`]);
+    expect(paths()).toEqual(['/api/auth/session', firstPage, '/api/auth/session', firstPage]);
   });
 
   it('다시 받은 세션에 토큰이 없으면 logged_out', async () => {
@@ -519,7 +584,7 @@ describe('401 이면 토큰을 한 번 다시 받는다', () => {
     });
     await api.handle(pageRequest);
     await api.handle(pageRequest);
-    expect(calls.at(-1)).toEqual({ path: `${page}?cursor=0`, authorization: 'Bearer second-token' });
+    expect(calls.at(-1)).toEqual({ path: firstPage, authorization: 'Bearer second-token' });
     expect(calls.filter((c) => c.path === '/api/auth/session')).toHaveLength(2);
   });
 });
