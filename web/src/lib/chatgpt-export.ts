@@ -1,24 +1,9 @@
 // ChatGPT 내보내기(zip 또는 conversations.json)를 브라우저 안에서만 연다.
 // 원본 파일은 어디로도 전송하지 않는다 (CLAUDE.md §9).
 import JSZip from "jszip";
+import { normalizeConversation, type RawConversation } from "@shared/chatgpt-conversation";
 import { formatSource } from "@shared/format";
 import type { Utterance } from "@shared/utterance";
-
-interface RawNode {
-  parent?: string | null;
-  message?: {
-    author?: { role?: string };
-    content?: { parts?: unknown[] };
-    create_time?: number | null;
-  } | null;
-}
-interface RawConversation {
-  id?: string;
-  title?: string;
-  create_time?: number;
-  current_node?: string;
-  mapping?: Record<string, RawNode>;
-}
 
 export interface ExportConversation {
   id: string;
@@ -28,43 +13,24 @@ export interface ExportConversation {
 }
 
 const MAX_EXPORT_BYTES = 50 * 1024 * 1024;
-const toDate = (sec?: number | null) => (sec ? new Date(sec * 1000) : null);
+const toDate = (sec?: number | string | null) => (typeof sec === "number" && sec ? new Date(sec * 1000) : null);
 
-// current_node 에서 parent 를 따라 올라가면 화면에 보이던 대화 한 줄기 (처음 발화부터 순서대로)
-function visibleBranch(conv: RawConversation): { id: string; node: RawNode }[] {
-  const mapping = conv.mapping ?? {};
-  const branch: { id: string; node: RawNode }[] = [];
-  const seen = new Set<string>();
-  let id = conv.current_node;
-  while (id && mapping[id]) {
-    if (seen.has(id)) throw new Error("대화 파일의 연결 구조가 잘못되었습니다.");
-    seen.add(id);
-    branch.push({ id, node: mapping[id] });
-    id = mapping[id].parent ?? undefined;
-  }
-  return branch.reverse();
-}
-
+// 화면에 보이던 대화 한 줄기를 공용 파서(shared/chatgpt-conversation.ts)로 읽는다. 생성 중·미완료 턴도 그대로 넣는다 (파일은 이미 끝난 대화)
 function toUtterances(conv: RawConversation, conversationId: string): Utterance[] {
-  const out: Utterance[] = [];
-  for (const { id, node } of visibleBranch(conv)) {
-    const m = node.message;
-    const role = m?.author?.role;
-    if (role !== "user" && role !== "assistant") continue;
-    const text = (m?.content?.parts ?? []).filter((p): p is string => typeof p === "string").join("\n").trim();
-    if (!text) continue;
-    const at = toDate(m?.create_time) ?? toDate(conv.create_time) ?? new Date();
-    out.push({
-      id,
-      conversationId,
-      collectedAt: at.toISOString(),
-      roleGuessed: false,
-      speaker: role === "user" ? "user" : "ai",
-      text,
-      source: formatSource("ChatGPT", at),
+  return normalizeConversation(conv)
+    .turns.flatMap((turn) => turn.messages)
+    .map((m) => {
+      const at = (m.createdAt ? new Date(m.createdAt) : null) ?? toDate(conv.create_time) ?? new Date();
+      return {
+        id: m.id,
+        conversationId,
+        collectedAt: at.toISOString(),
+        roleGuessed: false,
+        speaker: m.role === "user" ? "user" : "ai",
+        text: m.text,
+        source: formatSource("ChatGPT", at),
+      };
     });
-  }
-  return out;
 }
 
 export async function readChatGPTExport(file: File): Promise<ExportConversation[]> {
