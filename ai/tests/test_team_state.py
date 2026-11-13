@@ -91,6 +91,19 @@ class StateTest(unittest.TestCase):
         # owner 가 없으면 승인자 이름으로 (uuid 는 안 나감)
         st = build_state([card("d1", "decision", "x", owner=None, by=U2)], members=MEMBERS)
         self.assertEqual(st["decisions"][0]["current"][0]["owner"], "이서준")
+        # 충돌 이유는 AI가 원문을 인용했어도 판정별 고정 문구로만 나간다
+        quoted = [dict(conflicts()[1], reason="원문 '로고 이름은 MemBridge로 하자'와 어긋남")]
+        st = build_state(board(), quoted)
+        self.assertEqual(st["open_conflicts"][0]["reason"], "다른 사람이 합의 없이 양립할 수 없는 값을 정함")
+        self.assertNotIn("로고 이름은", dumps(st) + render_markdown(st))
+
+    def test_updated_at_counts_later_changes(self):
+        # 충돌 처리·할 일 체크가 마지막 승인보다 늦으면 그 시각, 이르면 승인 시각
+        later = build_state(board(), conflicts(), done=["c6"], changed_at=T0 + 3600)
+        self.assertEqual(later["updated_at"], "2026-11-06T22:00+09:00")
+        earlier = build_state(board(), conflicts(), done=["c6"], changed_at=T0)
+        self.assertEqual(earlier["updated_at"], "2026-11-06T21:15+09:00")
+        self.assertEqual(build_state([], changed_at=T0)["updated_at"], "2026-11-06T21:00+09:00")
 
     def test_stable_output(self):
         again = build_state(board(), conflicts(), done=["c6"],

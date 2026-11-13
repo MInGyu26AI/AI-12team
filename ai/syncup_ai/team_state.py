@@ -9,6 +9,9 @@ from .schema import SUBTOPICS
 KST = timezone(timedelta(hours=9))
 TODO_ID = re.compile(r"(?<![A-Za-z0-9])SU-(\d+)(?![A-Za-z0-9])", re.I)
 RESOLUTION_NAMES = {"keep-existing": "기존 결정 유지", "adopt-new": "새 결정 채택", "both-valid": "둘 다 유효"}
+# 충돌 이유는 판정별 고정 문구만 쓴다. chat 판정의 이유는 AI가 원문 발화를 인용해 쓸 수 있어 Public 레포에 내보내지 않는다.
+CONFLICT_REASONS = {"충돌": "다른 사람이 합의 없이 양립할 수 없는 값을 정함", "변경": "같은 대상의 기존 결정을 새 값으로 바꿈",
+                    "같음": "기존 결정과 같은 내용", "무관": "두 결정이 함께 성립함"}
 
 
 def todo_ids(cards):
@@ -63,7 +66,7 @@ def conflict_item(conflict, members):
         "id": conflict.get("id"),
         "topic_key": clean(conflict.get("topic_key")),
         "judgement": conflict.get("judgement"),
-        "reason": clean(conflict.get("reason")),
+        "reason": CONFLICT_REASONS.get(conflict.get("judgement"), "기존 결정과 어긋날 수 있음"),
         "existing": {"card_id": a.get("id"), "content": clean(a.get("content")), "owner": owner_name(a, members)},
         "new": {"card_id": b.get("id"), "content": clean(b.get("content")), "owner": owner_name(b, members)},
     }
@@ -77,8 +80,10 @@ def conflict_item(conflict, members):
     return item
 
 
-def build_state(cards, conflicts=(), done=(), team=None, members=None):
-    """board(history=True), conflicts(history=True), done_todos 결과로 syncup.json 내용을 만든다."""
+def build_state(cards, conflicts=(), done=(), team=None, members=None, changed_at=None):
+    """board(history=True), conflicts(history=True), done_todos 결과로 syncup.json 내용을 만든다.
+
+    changed_at: 승인 말고 마지막으로 바뀐 시각(충돌 처리·할 일 체크, epoch 초). updated_at 은 이것과 승인 시각 중 늦은 쪽."""
     members = members or {}
     cards = [c for c in cards if c.get("relevance", "related") == "related" and c.get("tag") != "none"]
     ids = todo_ids(cards)
@@ -123,11 +128,11 @@ def build_state(cards, conflicts=(), done=(), team=None, members=None):
             resolved.append(item)
 
     team = {k: v for k, v in (team or {}).items() if k in ("name", "goal", "scope", "rules", "repo") and v}
-    approved_times = [c["approvedAt"] for c in cards if c.get("approvedAt")]
+    times = [c["approvedAt"] for c in cards if c.get("approvedAt")] + ([changed_at] if changed_at else [])
     return {
         "syncup_version": 1,
         "team": team,
-        "updated_at": to_kst(max(approved_times)) if approved_times else None,
+        "updated_at": to_kst(max(times)) if times else None,
         "summary": {
             "decisions": sum(len(t["current"]) for t in decisions),
             "open_conflicts": len(open_conflicts),
