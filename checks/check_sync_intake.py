@@ -343,14 +343,13 @@ class ScreenOverlap(SyncFixture):
         self.assertEqual(response['intakeIssues'], [])
 
     def test_waiting_screen_answer_without_its_question_gets_the_turn_id(self):
-        # The screen path stored the answer but not the question chatgpt:<turnId>. Each case in its own conversation.
+        # The screen path stored the answer but no question before it. Each case in its own conversation.
         configure(self.pipeline, dict(turnsPerBatch=10))
-        cases = ('question left in the screen baseline', 'question named by a text hash', 'question quarantined as too long')
+        cases = ('question asked on another device, left in the screen baseline', 'question quarantined as too long')
         for n, name in enumerate(cases):
             with self.subTest(name):
                 conversation, turn = f'c{n}', f'T{n}'
-                question = [[], [self.screen(conversation + ':hash', 'user', conversation)],
-                            [self.screen(turn, 'user', conversation, text='질' * 20001)]][n]
+                question = [[], [self.screen(turn, 'user', conversation, text='질' * 20001)]][n]
                 turn_intake.append(self.pipeline,
                                    question + [self.screen(turn + '-a', 'assistant', conversation, text='화면 답')])
                 response = turn_intake.append(self.pipeline, self.sync_turn(turn, self.at, conversation=conversation))
@@ -365,6 +364,44 @@ class ScreenOverlap(SyncFixture):
                     waiting = unbatched_turns(c, 'a', self.base)['chatgpt:' + conversation]
                 self.assertEqual([m['id'] for m in group_turns(waiting)[-1]], [f'chatgpt:{turn}-a', f'chatgpt:{turn}'],
                                  'one turn, answer first (arrival order; time order is C5)')
+
+    def test_hash_named_screen_question_pairs_with_its_screen_answer(self):
+        # The screen path named the question by a text hash; the screen rows become the turn, sync stores nothing.
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('X-a', 'assistant')])
+        response = turn_intake.append(self.pipeline, self.sync_turn('X', self.at))
+        self.assertEqual(self.skipped(response), (0, 0, 0), 'not stored and not counted as skipped')
+        self.assertEqual(response['intakeIssues'], [])
+        stored = self.stored()
+        self.assertEqual(set(stored), {'chatgpt:conv:hash', 'chatgpt:X-a'}, 'the question is stored once')
+        self.assertEqual([stored[i][0]['turnId'] for i in ('chatgpt:conv:hash', 'chatgpt:X-a')], ['X', 'X'])
+        turn_intake.append(self.pipeline, [self.screen('next', 'user'), self.screen('next-a', 'assistant')], True)
+        with connect(self.db) as c:
+            batch = json.loads(c.execute('SELECT messages FROM job_context').fetchone()[0])
+        self.assertEqual([[m['id'] for m in t] for t in group_turns(batch)],
+                         [['chatgpt:conv:hash', 'chatgpt:X-a'], ['chatgpt:next', 'chatgpt:next-a']], 'one turn')
+
+    def test_no_pair_across_another_screen_answer_or_a_taken_question(self):
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        cases = {'another screen answer between': lambda conv: [self.screen(conv + ':hash', 'user', conv),
+                                                                self.screen(conv + '-other', 'assistant', conv)],
+                 'question with a turnId': lambda conv: [self.screen(conv + ':hash', 'user', conv, turnId='Y')]}
+        for n, (name, before) in enumerate(cases.items()):
+            with self.subTest(name):
+                conversation, turn = f'c{n}', f'T{n}'
+                turn_intake.append(self.pipeline, before(conversation) + [self.screen(turn + '-a', 'assistant', conversation)])
+                response = turn_intake.append(self.pipeline, self.sync_turn(turn, self.at, conversation=conversation))
+                self.assertEqual(self.skipped(response), (0, 1, 1), 'the sync question is stored, as with no pair')
+                self.assertNotEqual(self.stored()[f'chatgpt:{conversation}:hash'][0].get('turnId'), turn)
+
+    def test_a_batched_question_is_no_pair(self):
+        # Flushed while the answer was still being generated: the hash question was classified alone.
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user')], True)
+        turn_intake.append(self.pipeline, [self.screen('X-a', 'assistant')])
+        response = turn_intake.append(self.pipeline, self.sync_turn('X', self.at))
+        self.assertEqual(self.skipped(response), (0, 1, 1))
+        self.assertNotIn('turnId', self.stored()['chatgpt:conv:hash'][0])
 
     def test_only_the_turns_own_answer_ids_stop_it_without_a_question(self):
         turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('other-node', 'assistant')])
