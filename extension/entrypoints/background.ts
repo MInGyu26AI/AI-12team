@@ -4,7 +4,7 @@ import type { Browser } from 'wxt/browser';
 import { EXT_SYNC_NOW, type SyncNowParams } from '@shared/bridge';
 import { appendTurns } from '@/lib/append-turns';
 import { runSyncPass } from '@/lib/chatgpt-sync/pass';
-import { ensureSyncAlarm, listSyncProjects, setSync, syncNow } from '@/lib/chatgpt-sync/scheduler';
+import { listSyncProjects, retryCollectorOff, setSync, startSyncScheduler, syncNow } from '@/lib/chatgpt-sync/scheduler';
 import { SYNC_ALARM } from '@/lib/chatgpt-sync/state';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
@@ -115,9 +115,12 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 export default defineBackground(() => {
   void refreshStatusOrRecordFailure();
   browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 0.5 });
-  void ensureSyncAlarm();
+  void startSyncScheduler();
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === REFRESH_ALARM) void refreshStatusOrRecordFailure();
+    if (alarm.name === REFRESH_ALARM) {
+      void refreshStatusOrRecordFailure();
+      void retryCollectorOff(); // 못 전한 동기화 끄기가 있으면 다시 보낸다
+    }
     if (alarm.name === SYNC_ALARM) void runSyncPass();
   });
   browser.runtime.onStartup.addListener(() => void runSyncPass());
