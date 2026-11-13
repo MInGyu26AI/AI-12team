@@ -53,7 +53,9 @@ export interface NormalizedTurn {
   messages: NormalizedMessage[];
   start: string | null; // 턴 안 메시지 시각의 최소 (ISO). 시각 없는 메시지가 있으면 null
   end: string | null; // 최대
-  complete: boolean; // 마지막 보이는 assistant 노드가 finished_successfully + end_turn=true 인지 (사용자가 멈춘 답도 완료). 보이는 답이 없으면 false
+  // 마지막 턴: 마지막 보이는 assistant 노드가 finished_successfully + end_turn=true 인지 (사용자가 멈춘 답도 완료). 보이는 답이 없으면 false
+  // 마지막이 아닌 턴: 뒤에 다음 사용자 메시지가 이어졌으므로 늘 true (보이는 답이 없으면 질문만 담은 턴)
+  complete: boolean;
 }
 
 export interface NormalizedConversation {
@@ -149,7 +151,7 @@ function visibleMessage(m: RawMessage, nodeId: string): NormalizedMessage | null
 
 // ── 턴과 완료 ──
 /**
- * 턴의 마지막 보이는 assistant 노드가 끝났는지 (P7 실측으로 확정).
+ * 마지막 턴의 마지막 보이는 assistant 노드가 끝났는지 (P7 실측으로 확정).
  * status 가 finished_successfully 이고 end_turn 이 true 일 때만 완료다. is_complete·finish_details 는 쓰지 않는다:
  * 도구 호출 노드(recipient=web.run 등)는 최종 답이 생성 중일 때도 완료 표시를 달고 있고, 사용자가 멈춘 답도 같은 값이다.
  */
@@ -184,7 +186,7 @@ export function normalizeConversation(conv: RawConversation): NormalizedConversa
     if (message.role === "assistant") current.lastAnswer = raw;
   }
 
-  const turns = drafts.map<NormalizedTurn>(({ turnId, messages, lastAnswer }) => {
+  const turns = drafts.map<NormalizedTurn>(({ turnId, messages, lastAnswer }, index) => {
     const times = messages.map((m) => (m.createdAt === null ? null : Date.parse(m.createdAt)));
     const timed = times.every((t): t is number => t !== null);
     return {
@@ -192,7 +194,8 @@ export function normalizeConversation(conv: RawConversation): NormalizedConversa
       messages,
       start: timed ? new Date(Math.min(...times)).toISOString() : null,
       end: timed ? new Date(Math.max(...times)).toISOString() : null,
-      complete: lastAnswer !== null && isDone(lastAnswer),
+      // 마지막이 아닌 턴은 뒤에 다음 사용자 메시지가 이어졌으니 생성 중일 수 없다. 길이 한도로 끊긴 답(end_turn=false)·이미지만 있는 답·오류로 끝난 답이 영영 빠지지 않게 늘 완료로 본다
+      complete: index < drafts.length - 1 || (lastAnswer !== null && isDone(lastAnswer)),
     };
   });
   const last = turns.at(-1);

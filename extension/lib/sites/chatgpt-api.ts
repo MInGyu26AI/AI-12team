@@ -20,8 +20,12 @@ import type {
 export const MAX_MESSAGE_TEXT = 20000;
 /** 사이드바(프로젝트 목록)를 cursor 로 이어 읽을 때의 상한. 사이드바의 쪽 넘기기는 실측 전이라 짧게 둔다 */
 const MAX_PROJECT_PAGES = 5;
-/** 프로젝트 대화 목록 한 쪽의 크기와 소유자 조건 (실측 11/13: 화면이 부르는 값) */
-const PAGE_QUERY = 'limit=50&owned_only=false';
+/**
+ * 프로젝트 대화 목록 한 쪽의 크기와 소유자 조건.
+ * owned_only=true 는 내 대화만 받기 위한 것이라 바꾸지 않는다: 공유 프로젝트에서 false 는 다른 계정의 대화까지 돌려줬고(11/13 실측),
+ * 그러면 남의 대화가 내 발화로 들어가 외부 AI 분류까지 간다.
+ */
+const PAGE_QUERY = 'limit=50&owned_only=true';
 
 const SESSION_PATH = '/api/auth/session';
 const PROJECTS_PATH = '/backend-api/gizmos/snorlax/sidebar';
@@ -207,7 +211,8 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     return started.ok ? { ok: true, account: started.session.account, data: null } : failed(started, session?.account);
   }
 
-  // 사이드바: items[].gizmo.id · items[].gizmo.display.name 이 필수 (실측 11/13: .gizmo.gizmo 가 아니다)
+  // 사이드바: items[].gizmo.id · items[].gizmo.display.name 이 항목의 필수 필드 (실측 11/13: .gizmo.gizmo 가 아니다).
+  // 필드가 빠진 항목은 그 항목만 건너뛰고, 항목이 있는데 모두 건너뛴 경우에만 모양이 바뀐 것(null)으로 본다. items 배열이 아니면 null
   function parseSidebar(json: unknown): { projects: SyncProject[]; cursor: string | null } | null {
     const body = asRecord(json);
     if (!body || !Array.isArray(body.items)) return null;
@@ -216,9 +221,9 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
       const gizmo = asRecord(asRecord(item)?.gizmo);
       const id = gizmo?.id;
       const name = asRecord(gizmo?.display)?.name;
-      if (typeof id !== 'string' || !id || typeof name !== 'string') return null;
-      projects.push({ gizmoId: id, name });
+      if (typeof id === 'string' && id && typeof name === 'string') projects.push({ gizmoId: id, name });
     }
+    if (body.items.length > 0 && projects.length === 0) return null;
     return { projects, cursor: cursorOf(body.cursor) };
   }
 
@@ -244,7 +249,8 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     return done(account, all);
   }
 
-  // 프로젝트 대화 목록: items[].id · items[].update_time · cursor(문자열 또는 null) 가 필수
+  // 프로젝트 대화 목록: 최상위는 items 배열과 cursor(문자열 또는 null)가 필수. 항목은 id · update_time 이 필수이고,
+  // 빠진 항목은 그 항목만 건너뛴다(skippedItems). 항목이 있는데 모두 건너뛴 경우에만 모양이 바뀐 것(null)으로 본다
   function parseProjectPage(json: unknown): SyncProjectPage | null {
     const body = asRecord(json);
     if (!body || !Array.isArray(body.items)) return null;
@@ -253,7 +259,7 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     for (const raw of body.items) {
       const item = asRecord(raw);
       const updateTime = isoOf(item?.update_time);
-      if (!item || typeof item.id !== 'string' || !item.id || updateTime === null) return null;
+      if (!item || typeof item.id !== 'string' || !item.id || updateTime === null) continue;
       items.push({
         id: item.id,
         updateTime,
@@ -262,8 +268,10 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
         gizmoId: typeof item.gizmo_id === 'string' ? item.gizmo_id : null,
       });
     }
+    const skippedItems = body.items.length - items.length;
+    if (body.items.length > 0 && items.length === 0) return null;
     items.sort((a, b) => Date.parse(b.updateTime) - Date.parse(a.updateTime)); // update_time 최신 순 (같으면 받은 순서)
-    return { items, nextCursor: items.length ? cursorOf(body.cursor) : null }; // cursor 가 null(또는 빈 문자열)이면 끝
+    return { items, nextCursor: items.length ? cursorOf(body.cursor) : null, skippedItems }; // cursor 가 null(또는 빈 문자열)이면 끝
   }
 
   const projectPage = (gizmoId: string, cursor: string | null) => read(projectPagePath(gizmoId, cursor), parseProjectPage);

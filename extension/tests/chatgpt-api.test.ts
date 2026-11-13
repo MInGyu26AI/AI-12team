@@ -180,6 +180,36 @@ describe('sync.projects', () => {
     expect(await api.handle({ type: 'sync.projects' })).toEqual({ ok: false, error: 'rate_limited', retryAfterSec: 10, account: expectedAccount });
   });
 
+  it('항목 하나에 필드가 없으면 그 항목만 건너뛰고 나머지 프로젝트는 돌려준다', async () => {
+    const body = {
+      items: [
+        { gizmo: { id: 'g-1', display: { name: '하나' } } },
+        { gizmo: { display: { name: '이름만 있음' } } },
+        { gizmo: { id: 'g-3' } },
+        { conversations: {} },
+        null,
+        { gizmo: { id: 'g-5', display: { name: '다섯' } } },
+      ],
+      cursor: null,
+    };
+    const { api } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': body });
+    expect(await api.handle({ type: 'sync.projects' })).toEqual({
+      ok: true,
+      account: expectedAccount,
+      data: [
+        { gizmoId: 'g-1', name: '하나' },
+        { gizmoId: 'g-5', name: '다섯' },
+      ],
+    });
+  });
+
+  it('항목이 하나 이상인데 모두 건너뛰었을 때만 shape_changed, 항목이 없으면 빈 목록', async () => {
+    const allBad = apiWith({ '/backend-api/gizmos/snorlax/sidebar': { items: [{ gizmo: {} }, { gizmo: { id: 'g-1' } }], cursor: null } });
+    expect(await allBad.api.handle({ type: 'sync.projects' })).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
+    const empty = apiWith({ '/backend-api/gizmos/snorlax/sidebar': { items: [], cursor: null } });
+    expect(await empty.api.handle({ type: 'sync.projects' })).toEqual({ ok: true, account: expectedAccount, data: [] });
+  });
+
   it.each([
     ['items 가 없음', {}],
     ['items 가 배열이 아님', { items: {} }],
@@ -188,7 +218,7 @@ describe('sync.projects', () => {
     ['display 가 없음', { items: [{ gizmo: { id: 'g-1' } }] }],
     ['id 가 문자열이 아님', { items: [{ gizmo: { id: 7, display: { name: 'x' } } }] }],
     ['gizmo 가 없음', { items: [{ conversations: {} }] }],
-  ])('필수 필드가 어긋나면 shape_changed: %s', async (_name, body) => {
+  ])('필수 필드가 어긋나면 shape_changed (항목이 하나뿐이면 모두 건너뛴 것): %s', async (_name, body) => {
     const { api } = apiWith({ '/backend-api/gizmos/snorlax/sidebar': body });
     expect(await api.handle({ type: 'sync.projects' })).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
   });
@@ -197,7 +227,7 @@ describe('sync.projects', () => {
 describe('sync.projectPage', () => {
   const GIZMO = 'g-p-00000000000000000000000000000001';
   const base = `/backend-api/gizmos/${GIZMO}/conversations`;
-  const FIRST = `${base}?limit=50&owned_only=false`;
+  const FIRST = `${base}?limit=50&owned_only=true`;
   const request = (cursor: string | null = null) => ({ type: 'sync.projectPage', gizmoId: GIZMO, cursor }) as const;
 
   it('목록을 {id, updateTime(ISO), isArchived, isTemporary, gizmoId} 로 바꾼다 (마이크로초 ISO 도 밀리초로)', async () => {
@@ -213,11 +243,12 @@ describe('sync.projectPage', () => {
           { id: 'c0ffee00-0000-4000-8000-000000000003', updateTime: '2025-11-12T09:00:00.000Z', isArchived: true, isTemporary: false, gizmoId: GIZMO },
         ],
         nextCursor: 'opaque-synthetic-cursor+/=2',
+        skippedItems: 0,
       },
     });
   });
 
-  it('첫 쪽은 ?limit=50&owned_only=false 만, 다음 쪽은 &cursor=<이스케이프한 cursor> 를 붙인다', async () => {
+  it('첫 쪽은 ?limit=50&owned_only=true 만, 다음 쪽은 &cursor=<이스케이프한 cursor> 를 붙인다', async () => {
     const { api, paths } = apiWith({ [base]: fixture('project-conversations.json') });
     await api.handle(request(null));
     await api.handle(request('opaque-synthetic-cursor+/=2'));
@@ -228,6 +259,7 @@ describe('sync.projectPage', () => {
       `${FIRST}&cursor=a%20b%2Fc`,
     ]);
     expect(paths().some((p) => p.includes('cursor=0'))).toBe(false);
+    expect(paths().some((p) => p.includes('owned_only=false'))).toBe(false); // 공유 프로젝트에서 false 는 남의 대화까지 돌려준다
   });
 
   it('받은 cursor 를 다음 요청에 그대로 돌려 쓰면 같은 값이 된다 (왕복)', async () => {
@@ -292,7 +324,7 @@ describe('sync.projectPage', () => {
   it('항목이 없으면 cursor 가 와도 끝으로 본다', async () => {
     const { api } = apiWith({ [base]: { items: [], cursor: 'whatever' } });
     const res = await api.handle(request());
-    expect(res).toEqual({ ok: true, account: expectedAccount, data: { items: [], nextCursor: null } });
+    expect(res).toEqual({ ok: true, account: expectedAccount, data: { items: [], nextCursor: null, skippedItems: 0 } });
   });
 
   it.each([
@@ -304,9 +336,54 @@ describe('sync.projectPage', () => {
     ['cursor 가 없음', { items: [{ id: 'x', update_time: 1762990000 }] }],
     ['cursor 가 숫자', { items: [{ id: 'x', update_time: 1762990000 }], cursor: 2 }],
     ['cursor 가 객체', { items: [{ id: 'x', update_time: 1762990000 }], cursor: {} }],
-  ])('필수 필드가 어긋나면 shape_changed: %s', async (_name, body) => {
+  ])('필수 필드가 어긋나면 shape_changed (항목이 하나뿐이면 모두 건너뛴 것): %s', async (_name, body) => {
     const { api } = apiWith({ [base]: body });
     expect(await api.handle(request())).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
+  });
+
+  it('owned_only=true 로만 부른다 (남의 대화가 내 발화로 들어가지 않게)', async () => {
+    const { api, paths } = apiWith({ [base]: fixture('project-conversations.json') });
+    await api.handle(request());
+    await api.handle(request('next'));
+    const listCalls = paths().filter((p) => p.startsWith(base));
+    expect(listCalls).toHaveLength(2);
+    for (const path of listCalls) {
+      expect(new URL(path, 'https://chatgpt.com').searchParams.get('owned_only')).toBe('true');
+      expect(new URL(path, 'https://chatgpt.com').searchParams.get('limit')).toBe('50');
+    }
+  });
+
+  it('항목 하나에 필드가 없으면 그 항목만 건너뛰고 skippedItems 에 센다', async () => {
+    const body = {
+      items: [
+        { id: 'ok-1', update_time: '2025-11-13T05:00:00Z' },
+        { update_time: '2025-11-13T04:00:00Z' }, // id 없음
+        { id: 'bad-time', update_time: '어제' },
+        { id: 'no-time' },
+        null,
+        'x',
+        { id: 'ok-2', update_time: '2025-11-13T03:00:00Z' },
+      ],
+      cursor: 'more',
+    };
+    const { api } = apiWith({ [base]: body });
+    const res = await api.handle(request());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const data = res.data as unknown as { items: { id: string }[]; nextCursor: string | null; skippedItems: number };
+    expect(data.items.map((i) => i.id)).toEqual(['ok-1', 'ok-2']);
+    expect(data.skippedItems).toBe(5);
+    expect(data.nextCursor).toBe('more');
+  });
+
+  it('항목이 하나 이상인데 모두 건너뛰었을 때만 shape_changed', async () => {
+    const { api } = apiWith({ [base]: { items: [{ id: 'a' }, { update_time: 1762990000 }], cursor: null } });
+    expect(await api.handle(request())).toEqual({ ok: false, error: 'shape_changed', account: expectedAccount });
+  });
+
+  it('항목이 하나도 없는 목록은 정상이다 (skippedItems 0)', async () => {
+    const { api } = apiWith({ [base]: { items: [], cursor: null } });
+    expect(await api.handle(request())).toEqual({ ok: true, account: expectedAccount, data: { items: [], nextCursor: null, skippedItems: 0 } });
   });
 
   it('gizmoId 가 비어 있으면 요청하지 않고 shape_changed', async () => {
@@ -542,7 +619,7 @@ describe('오류 분류', () => {
 describe('401 이면 토큰을 한 번 다시 받는다', () => {
   const GIZMO = 'g-p-00000000000000000000000000000001';
   const page = `/backend-api/gizmos/${GIZMO}/conversations`;
-  const firstPage = `${page}?limit=50&owned_only=false`;
+  const firstPage = `${page}?limit=50&owned_only=true`;
   const pageRequest = { type: 'sync.projectPage', gizmoId: GIZMO, cursor: null } as const;
   const listing = fixture('project-conversations.json');
 
