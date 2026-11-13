@@ -15,6 +15,7 @@ import {
 import { selectionMessage } from '@/lib/selection';
 import { isConfigured, sendBlockedReason, settingsItem, type Settings } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForHost, type SiteAdapter } from '@/lib/sites';
+import { createChatgptApi, isSyncRequest } from '@/lib/sites/chatgpt-api';
 
 type Trigger = Extract<BgRequest, { type: 'collect' }>['trigger'];
 
@@ -60,6 +61,7 @@ export default defineContentScript({
       return false;
     };
     wireSendButtons(site, overlay, isReady, autoCollect.markSeen);
+    listenForSync(site);
     listenForPingAndToast(site, overlay);
   },
 });
@@ -113,5 +115,17 @@ function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay) {
       selector,
       guessedRoles,
     } satisfies TabPingResult);
+  });
+}
+
+// 계정 동기화: 백그라운드가 보내는 `sync.*` 요청만 탭 클라이언트(lib/sites/chatgpt-api.ts)로 넘기고 sendResponse 로 답한다
+// (ping 과 같은 방식. Promise 를 돌려주는 답은 Chrome 148 미만에서 닿지 않는다). 다른 메시지는 건드리지 않는다
+function listenForSync(site: SiteAdapter) {
+  if (site.id !== 'chatgpt') return; // 내부 API 주소가 ChatGPT 것이다. 다른 사이트 탭에서는 답하지 않는다
+  const api = createChatgptApi();
+  browser.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
+    if (!isSyncRequest(msg)) return;
+    void api.handle(msg).then(sendResponse);
+    return true; // 답을 기다리는 동안 채널을 열어 둔다
   });
 }
