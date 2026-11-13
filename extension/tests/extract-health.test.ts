@@ -7,6 +7,7 @@ import {
   RATIO_MIN_MESSAGES,
   assessExtractHealth,
   formatExtractDiagnostic,
+  healthWarning,
   summarizeExtract,
   type ExtractSummary,
 } from '@/lib/extract-health';
@@ -171,5 +172,25 @@ describe('formatExtractDiagnostic', () => {
 
   it('전략 기록이 없으면 그렇다고 적는다', () => {
     expect(formatExtractDiagnostic(summary())).toContain('전략별 개수: (기록 없음)');
+  });
+});
+
+describe('healthWarning (팝업 안내)', () => {
+  it('정상이면 null 이다', () => {
+    expect(healthWarning(summary())).toBeNull();
+    expect(healthWarning(summary({ onConversation: false, messageCount: 0, selector: null }))).toBeNull();
+  });
+
+  it('이유를 문장으로 잇고 진단 글을 함께 돌려준다', () => {
+    const warning = healthWarning(summary({ messageCount: 0, selector: null, tried: [{ name: 'author-role', count: 0 }] }))!;
+    expect(warning.message).toContain('대화 화면인데 메시지를 한 건도 읽지 못했어요');
+    expect(warning.message).toContain('진단을 복사해 팀에 알려 주세요');
+    expect(warning.diagnostics).toBe(formatExtractDiagnostic(summary({ messageCount: 0, selector: null, tried: [{ name: 'author-role', count: 0 }] })));
+  });
+
+  it('이유가 여럿이면 모두 문장으로 잇는다', () => {
+    const warning = healthWarning(summary({ selector: 'repeated-blocks', messageCount: 10, guessedRoles: 5 }))!;
+    expect(warning.message).toContain('짐작으로 읽고 있어요');
+    expect(warning.message).toContain('누가 말했는지 읽지 못해');
   });
 });

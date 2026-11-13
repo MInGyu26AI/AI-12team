@@ -16,6 +16,8 @@ import { selectionMessage } from '@/lib/selection';
 import { isConfigured, sendBlockedReason, settingsItem, type Settings } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForHost, type SiteAdapter } from '@/lib/sites';
 import { createChatgptApi, isSyncRequest } from '@/lib/sites/chatgpt-api';
+import { countEmptyBodies } from '@/lib/sites/chatgpt-health';
+import { fetchTeamRecord } from '@/lib/team-record';
 
 type Trigger = Extract<BgRequest, { type: 'collect' }>['trigger'];
 
@@ -35,7 +37,7 @@ export default defineContentScript({
     if (!site) return;
 
     let settings: Settings | null = null;
-    const overlay = createChatOverlay();
+    const overlay = createChatOverlay({ fetchTeamRecord });
     // 우리 버튼을 먼저 붙이고 나서 화면 변화를 지켜본다 (붙이는 것 자체는 화면 변화로 세지 않게)
     document.body.append(overlay.host);
     const autoCollect = startAutoCollect(ctx, {
@@ -107,13 +109,16 @@ function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay) {
   browser.runtime.onMessage.addListener((msg: TabPing | TabToast, _sender, sendResponse) => {
     if (msg?.type === 'toast') overlay.showToast(msg.text, msg.tone);
     if (msg?.type !== 'ping') return;
-    const { messages, selector, guessedRoles } = site.extract();
+    const result = site.extract();
+    // tried · emptyBodies 는 화면 구조 변경 감지(lib/extract-health.ts)용. 개수뿐이고 대화 내용은 없다. 빈 본문 수는 ChatGPT 만 센다
     sendResponse({
       site: site.label,
       onConversation: site.isConversationPage(),
-      messageCount: messages.length,
-      selector,
-      guessedRoles,
+      messageCount: result.messages.length,
+      selector: result.selector,
+      guessedRoles: result.guessedRoles,
+      tried: result.tried,
+      emptyBodies: site.id === 'chatgpt' ? countEmptyBodies(result) : undefined,
     } satisfies TabPingResult);
   });
 }

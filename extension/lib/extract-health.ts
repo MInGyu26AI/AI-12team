@@ -83,6 +83,22 @@ export function assessExtractHealth(summary: ExtractSummary): ExtractHealth {
   return reasons.length ? { status: 'warn', reasons } : { status: 'ok', reasons: [] };
 }
 
+/** 팝업 안내(StructureWarning)에 그대로 넣는 모양: 안내 문구 + 복사할 진단 글 */
+export interface HealthWarning {
+  message: string;
+  diagnostics: string;
+}
+
+/** 정상이면 null, 아니면 이유를 문장으로 이은 안내와 진단 글 */
+export function healthWarning(summary: ExtractSummary): HealthWarning | null {
+  const health = assessExtractHealth(summary);
+  if (health.status === 'ok') return null;
+  return {
+    message: [...health.reasons.map((r) => `${r.message}.`), '진단을 복사해 팀에 알려 주세요.'].join(' '),
+    diagnostics: formatExtractDiagnostic(summary),
+  };
+}
+
 /** ExtractResult 와 "대화 화면 여부"로 요약을 만든다. emptyBodies 를 알면 함께 넘긴다 */
 export const summarizeExtract = (
   onConversation: boolean,

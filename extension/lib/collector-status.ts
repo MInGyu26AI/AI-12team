@@ -1,6 +1,7 @@
 // 로컬 수집기 상태를 확장 저장소(설정 · 검토 대기 카드 · 배지)에 옮기고, 팝업에 보일 마지막 오류를 정한다.
 import type { ExtStatus } from '@shared/bridge';
 import type { RelatedCard } from '@shared/types';
+import { announceCandidates } from './candidate-notice';
 import { CollectorUnreachable, errorText, rpc } from './collector-rpc';
 import { collectStateItem, pendingItem, settingsFromStatus, settingsItem, shareableCount, type CollectState } from './settings';
 
@@ -16,6 +17,7 @@ export async function refreshStatus() {
   if (state.lastError && clearedByRefresh(state)) await collectStateItem.setValue({ lastError: null });
   const shareable = shareableCount(result.cards);
   await browser.action.setBadgeText({ text: shareable ? String(shareable) : '' });
+  await announceCandidates(shareable); // 검토할 카드가 늘었으면 시스템 알림 (던지지 않는다. lib/candidate-notice.ts)
   return result;
 }
 

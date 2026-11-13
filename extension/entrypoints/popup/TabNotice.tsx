@@ -9,7 +9,7 @@ type TabStatus =
   | { kind: 'no-script' } // 콘텐츠 스크립트 응답 없음 (설치 전에 열린 탭 등)
   | { kind: 'ok'; ping: TabPingResult };
 
-async function checkTab(): Promise<TabStatus> {
+export async function checkTab(): Promise<TabStatus> {
   const [active] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!active?.id || !siteForUrl(active.url ?? '')) return { kind: 'not-chat' };
   try {

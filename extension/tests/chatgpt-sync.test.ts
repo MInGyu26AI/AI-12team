@@ -901,7 +901,8 @@ describe('알람과 시작', () => {
     await fakeBrowser.alarms.onAlarm.trigger({ name: 'refresh', scheduledTime: clock, persistAcrossSessions: false });
     await settle();
     expect(calledMethods()).toEqual(['candidates.list']);
-    expect(tabCalls).toHaveLength(0);
+    // 탭에는 화면 읽기 점검 ping 만 간다 (lib/tab-health.ts). sync.* 요청은 없다
+    expect(tabCalls.map((c) => c.request.type as string)).toEqual(['ping']);
   });
 
   it('chatgpt-sync 알람은 패스를 돌고 상태 새로 고침은 하지 않는다', async () => {

@@ -3,6 +3,7 @@
 import type { Browser } from 'wxt/browser';
 import { EXT_SYNC_NOW, type SyncNowParams } from '@shared/bridge';
 import { appendTurns } from '@/lib/append-turns';
+import { listenNoticeClick } from '@/lib/candidate-notice';
 import { runSyncPass } from '@/lib/chatgpt-sync/pass';
 import { listSyncProjects, retryCollectorOff, setSync, startSyncScheduler, syncNow } from '@/lib/chatgpt-sync/scheduler';
 import { SYNC_ALARM } from '@/lib/chatgpt-sync/state';
@@ -12,6 +13,7 @@ import { collectResultToast, type BgRequest, type BgResponse, type TabToast, typ
 import { selectionMessage } from '@/lib/selection';
 import { sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
+import { checkChatTabs } from '@/lib/tab-health';
 import { isTrustedWebOrigin } from '@/lib/web-url';
 
 const SELECTION_MENU_ID = 'syncup-send-selection';
@@ -113,6 +115,7 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 }
 
 export default defineBackground(() => {
+  listenNoticeClick(); // 알림을 누르면 서비스 워커가 깨어나므로, 리스너는 비동기 작업 앞 동기 구간에서 붙인다
   void refreshStatusOrRecordFailure();
   browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 0.5 });
   void startSyncScheduler();
@@ -120,6 +123,7 @@ export default defineBackground(() => {
     if (alarm.name === REFRESH_ALARM) {
       void refreshStatusOrRecordFailure();
       void retryCollectorOff(); // 못 전한 동기화 끄기가 있으면 다시 보낸다
+      void checkChatTabs(); // 채팅 탭의 화면 읽기가 이상하면 그 탭 배지에 `!` (lib/tab-health.ts)
     }
     if (alarm.name === SYNC_ALARM) void runSyncPass();
   });

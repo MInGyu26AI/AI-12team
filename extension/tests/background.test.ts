@@ -4,8 +4,9 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ExtStatus } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
+import { NOTICE_ID, noticeBaselineItem } from '@/lib/candidate-notice';
 import { collectStateItem, settingsItem } from '@/lib/settings';
-import { LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
+import { DEFAULT_WEB_URL, LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
 
 const STATUS: ExtStatus = {
   version: '1',
@@ -186,5 +187,76 @@ describe('팝업에 보이는 마지막 오류', () => {
     const result = await send({ type: 'rpc', method: 'privacy.list', params: {} }, fromPage('http://localhost:3000/review'));
     expect(result).toEqual({ ok: false, error: '팀 접근 불가' });
     expect(await lastError()).toBeNull();
+  });
+});
+
+describe('검토할 카드 알림 (candidate-notice)', () => {
+  const cards = (count: number) => Array.from({ length: count }, (_, i) => ({ id: `c${i}`, relevance: 'related', tag: 'decision' }));
+  const refreshWith = async (count: number) => {
+    overrides['candidates.list'] = { ok: true, result: { cards: cards(count), status: STATUS } };
+    await send({ type: 'refresh' }, fromPopup());
+  };
+  const messages = (notify: { mock: { calls: unknown[][] } }) => notify.mock.calls.map(([, options]) => (options as { message: string }).message);
+
+  it('공유 후보가 늘었을 때만 "검토할 카드 N개" 알림을 띄우고, 같은 수로는 다시 띄우지 않는다', async () => {
+    const notify = vi.spyOn(fakeBrowser.notifications, 'create');
+    await refreshWith(2); // 시작할 때 0개를 봤으니 늘었다
+    await refreshWith(2);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(NOTICE_ID, expect.objectContaining({ type: 'basic', message: '검토할 카드 2개' }));
+    await refreshWith(1); // 하나 승인
+    expect(notify).toHaveBeenCalledTimes(1);
+    await refreshWith(3);
+    expect(messages(notify)).toEqual(['검토할 카드 2개', '검토할 카드 3개']);
+  });
+
+  it('처음 시작할 때(이전 수를 본 적 없음)는 이미 있는 카드로 알리지 않는다', async () => {
+    const notify = vi.spyOn(fakeBrowser.notifications, 'create');
+    await noticeBaselineItem.removeValue();
+    await refreshWith(5);
+    expect(notify).not.toHaveBeenCalled();
+    expect(await noticeBaselineItem.getValue()).toBe(5);
+  });
+
+  it('알림이 실패해도 상태 새로 고침은 성공하고 팝업 오류도 남지 않는다', async () => {
+    vi.spyOn(fakeBrowser.notifications, 'create').mockRejectedValue(new Error('notifications disabled'));
+    await refreshWith(2);
+    expect(await lastError()).toBeNull();
+    expect(fakeBrowser.action.setBadgeText).toHaveBeenCalledWith({ text: '2' });
+  });
+
+  it('알림을 누르면 개인 검토함(/review)을 열고, 다른 알림은 무시한다', async () => {
+    const open = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as never);
+    await fakeBrowser.notifications.onClicked.trigger('other-notice');
+    await settle();
+    expect(open).not.toHaveBeenCalled();
+    await fakeBrowser.notifications.onClicked.trigger(NOTICE_ID);
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith({ url: `${DEFAULT_WEB_URL}/review` }));
+  });
+});
+
+describe('채팅 탭 화면 읽기 점검 (tab-health)', () => {
+  it('refresh 알람마다 채팅 탭을 점검하고, 이상이 이어지면 그 탭에만 `!` 배지를 건다', async () => {
+    vi.spyOn(fakeBrowser.tabs, 'query').mockImplementation((async () => [{ id: 5 }]) as never);
+    vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue({
+      site: 'ChatGPT',
+      onConversation: true,
+      messageCount: 0,
+      selector: null,
+      guessedRoles: 0,
+    } as never);
+    const setBadge = vi.mocked(fakeBrowser.action.setBadgeText);
+    setBadge.mockClear();
+    const tick = () => fakeBrowser.alarms.onAlarm.trigger({ name: 'refresh', scheduledTime: Date.now(), persistAcrossSessions: false });
+
+    await tick();
+    await settle();
+    expect(setBadge).not.toHaveBeenCalledWith({ tabId: 5, text: '!' });
+    await tick();
+    await vi.waitFor(() => expect(setBadge).toHaveBeenCalledWith({ tabId: 5, text: '!' }));
+    // `!` 는 탭 단위로만 걸고, 전역 배지(tabId 없음)는 덮지 않는다
+    const warned = setBadge.mock.calls.map(([details]) => details as { tabId?: number; text?: string | null }).filter((d) => d.text === '!');
+    expect(warned.length).toBeGreaterThan(0);
+    expect(warned.every((d) => d.tabId === 5)).toBe(true);
   });
 });

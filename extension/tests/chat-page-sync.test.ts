@@ -79,7 +79,9 @@ describe('채팅 화면의 sync.* 메시지', () => {
     const sendResponse = vi.fn();
     const returned = listeners.map((listener) => listener({ type: 'ping' }, {}, sendResponse));
     expect(returned.every((r) => r === undefined)).toBe(true);
-    expect(sendResponse).toHaveBeenCalledWith({ site: 'ChatGPT', onConversation: true, messageCount: 0, selector: null, guessedRoles: 0 });
+    expect(sendResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ site: 'ChatGPT', onConversation: true, messageCount: 0, selector: null, guessedRoles: 0 }),
+    );
   });
 
   it('ping·toast 리스너가 마지막으로 등록된다 (chat-page-messages 시험이 마지막 리스너를 ping 용으로 본다)', () => {

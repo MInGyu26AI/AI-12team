@@ -36,6 +36,9 @@ export type TabPingResult = {
   messageCount: number;
   selector: string | null; // 실제로 먹힌 전략 이름 (없으면 못 읽음)
   guessedRoles: number;
+  // 아래 둘은 화면 구조 변경 감지(lib/extract-health.ts)용 선택 필드. 오래된 콘텐츠 스크립트는 보내지 않는다. 대화 내용은 담지 않는다
+  emptyBodies?: number; // 글이 비어 메시지로 세지 않은 요소 수 (ChatGPT 만 센다. 모르면 생략)
+  tried?: { name: string; count: number }[]; // 전략별로 잡힌 요소 수 (진단 복사용)
 };
 
 // ── 계정 동기화: 백그라운드 → chatgpt.com 콘텐츠 스크립트 (docs/sync-contract.md 4장) ──
