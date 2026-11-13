@@ -15,6 +15,10 @@ MESSAGE_FIELDS = ('id', 'text', 'conversationId', 'site', 'role', 'collectedAt')
 SYNC_FIELDS = ('origin', 'createdAt', 'turnId')
 ORIGINS = ('screen', 'sync')
 INTAKE_SITES = ('chatgpt', 'manual', 'chatgpt-export')
+# '팀 기록 불러오기' pastes the team board (web/src/lib/board-markdown.ts, head line '# 싱크업 팀 기록 (date)') and, from
+# the extension, the end line after it (sync-contract.md 8장). Pasted back into a chat, it is not the user's own words.
+TEAM_RECORD_HEAD = '# 싱크업 팀 기록'
+TEAM_RECORD_END = '<!-- 싱크업 팀 기록 끝 -->'
 MAX_MESSAGE_TEXT = 20000
 MAX_MESSAGE_FIELD = 1200
 MAX_APPEND = 200
@@ -136,42 +140,86 @@ def _in_window(turn, windows):
     return any(start <= min(times) and max(times) < end for start, end in windows)
 
 
-def _on_screen(c, identifier):
-    """Whether the screen path stored the intake row with this id."""
-    row = c.execute('SELECT message FROM intake WHERE id=?', (identifier,)).fetchone()
-    return bool(row) and json.loads(row[0]).get('origin', 'screen') == 'screen'
+def _row(c, identifier):
+    return c.execute('SELECT rowid,id,job,message FROM intake WHERE id=?', (identifier,)).fetchone()
+
+
+def _screen_row(c, identifier):
+    """The intake row with this id when the screen path stored it, else None."""
+    row = _row(c, identifier)
+    return row if row and json.loads(row['message']).get('origin', 'screen') == 'screen' else None
+
+
+def _fill_turn_id(c, row, turn_id):
+    """Give a stored row the sync turn's turnId, text unchanged, so batch.group_turns pairs it with the sync turn."""
+    saved = json.loads(row['message'])
+    if 'turnId' not in saved:
+        c.execute('UPDATE intake SET message=? WHERE id=?',
+                  (json.dumps(dict(saved, turnId=turn_id), ensure_ascii=False), row['id']))
 
 
 def _screen_has_turn(c, team_id, start, turn):
     """C4-b: True when this sync turn must not be taken because the screen path already has it.
 
-    Without a stored question (chatgpt:<turnId>): one of the turn's answers is a screen row. The screen question had a
-    hash id or was quarantined, and taking the turn would add a question without its answer or classify it twice.
+    Without a stored question (chatgpt:<turnId>), some of the turn's answers may be screen rows: the screen question
+    was left in the baseline, had a hash id or was quarantined. Batched, the turn is skipped (its answer was classified).
+    Not batched yet, they get the turnId and the turn is taken: the question is new, the answers are duplicates.
     With a stored question: a screen answer follows it before the conversation's next screen question (a later turn's
     answer is not this turn's), or the question is already batched. Taking the turn would repeat it or add answers
-    without their question. A stored question still waiting for its answer gets the turnId (text unchanged), so
-    batch.group_turns pairs it with the sync answer.
+    without their question. A stored question still waiting for its answer gets the turnId.
     """
     conversation, turn_id = _sync_turn(turn[0])
-    identifier = intake_id(team_id, start, dict(site='chatgpt', conversationId=conversation, id='chatgpt:' + turn_id))
-    question = c.execute('SELECT rowid,job,message FROM intake WHERE id=?', (identifier,)).fetchone()
+    head = dict(site='chatgpt', conversationId=conversation, id='chatgpt:' + turn_id)
+    question = _row(c, intake_id(team_id, start, head))
     if not question:
-        return any(_on_screen(c, intake_id(team_id, start, m)) for m in turn if m['role'] == 'assistant')
+        answers = [_screen_row(c, intake_id(team_id, start, m)) for m in turn if m['role'] == 'assistant']
+        answers = [r for r in answers if r]
+        if any(r['job'] is not None for r in answers):
+            return True
+        for row in answers:
+            _fill_turn_id(c, row, turn_id)
+        return False
     if question['job'] is not None or c.execute(SCREEN_ANSWER, dict(
             team=team_id, conversation='chatgpt:' + conversation, question=question['rowid'], session=start)).fetchone():
         return True
-    saved = json.loads(question['message'])
-    if 'turnId' not in saved:
-        c.execute('UPDATE intake SET message=? WHERE id=?',
-                  (json.dumps(dict(saved, turnId=turn_id), ensure_ascii=False), identifier))
+    _fill_turn_id(c, question, turn_id)
     return False
+
+
+def without_team_record(text):
+    """text without the team records '팀 기록 불러오기' pasted into it, or None when it has none.
+
+    A record runs from its head line through its end line, or through the end of the text when the end line is missing.
+    """
+    kept, inside, found = [], False, False
+    for line in text.split('\n'):
+        if inside:
+            inside = line.strip() != TEAM_RECORD_END
+        elif line.strip().startswith(TEAM_RECORD_HEAD):
+            inside = found = True
+        else:
+            kept.append(line)
+    return '\n'.join(kept).strip() if found else None
+
+
+def _own_words(messages):
+    """(messages with pasted team records cut from user text, how many user messages were nothing else)."""
+    kept, skipped = [], 0
+    for m in messages:
+        text = without_team_record(m['text']) if m['role'] == 'user' else None
+        if text == '':
+            skipped += 1
+        else:
+            kept.append(m if text is None else dict(m, text=text))
+    return kept, skipped
 
 
 def append(pipeline, messages, flush=False):
     """turns.append: store valid turns, quarantine invalid ones, queue every batch that is ready.
 
     Account sync turns (origin 'sync') are kept only inside the sync windows and when the screen path has not
-    already taken them (sync-contract.md 3-3); screen-path calls answer 0 for the three turn counts.
+    already taken them; pasted team records leave every user message before storing (sync-contract.md 3-3).
+    Screen-path calls answer 0 for the three turn counts.
     """
     if not isinstance(messages, list) or not 0 < len(messages) <= MAX_APPEND:
         raise ValueError('발화는 한 번에 1~200개를 보내세요.')
@@ -193,13 +241,15 @@ def append(pipeline, messages, flush=False):
         windows = sync_windows(c, s)
         outside = {key for key, turn in turns.items() if not _in_window(turn, windows)}
         skipped = {key for key in turns.keys() - outside if _screen_has_turn(c, team_id, s['start'], turns[key])}
-        dropped, stored = outside | skipped, []
-        for m in clean:
-            if _sync_turn(m) not in dropped and store_messages(c, [m], team_id, s['start'], issues):
+        kept, team_records = _own_words([m for m in clean if _sync_turn(m) not in outside | skipped])
+        stored = []
+        for m in kept:
+            if store_messages(c, [m], team_id, s['start'], issues):
                 stored.append(m)
         batch_queue.queue_ready_batches(c, team_id, context, flush)
     return dict(newMessages=len(stored), queued=bool(clean), intakeIssues=issues, outsideWindow=len(outside),
-                skippedTurns=len(skipped), newTurns=len({_sync_turn(m) for m in stored} - {None}))
+                skippedTurns=len(skipped), newTurns=len({_sync_turn(m) for m in stored} - {None}),
+                teamRecordSkipped=team_records)
 
 
 def _scanned_messages(job):

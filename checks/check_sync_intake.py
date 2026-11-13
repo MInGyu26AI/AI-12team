@@ -9,6 +9,7 @@ import math
 import time
 
 from ai.syncup_ai.batch import group_turns
+from batch_queue import unbatched_turns
 from collection_settings import configure, read_options, sync_windows, write_options
 from collection_status import collection_status
 from local_fixtures import PipelineFixture
@@ -18,7 +19,7 @@ import turn_intake
 
 ACCOUNT = '0123456789abcdef' * 4
 OTHER_ACCOUNT = 'f' * 64
-COUNTS = ('outsideWindow', 'skippedTurns', 'newTurns')
+COUNTS = ('outsideWindow', 'skippedTurns', 'newTurns', 'teamRecordSkipped')
 # Keys a screen-path message is stored with, before and after this change.
 SCREEN_KEYS = set(turn_intake.MESSAGE_FIELDS) | {'roleGuessed', 'session', 'masked'}
 
@@ -92,7 +93,7 @@ class ScreenPath(SyncFixture):
                                                       self.screen('a', 'assistant', conversationTitle='제목')])
         self.assertEqual(set(response), {'newMessages', 'queued', 'intakeIssues', *COUNTS})
         self.assertEqual((response['newMessages'], response['queued'], response['intakeIssues']), (2, True, []))
-        self.assertEqual([response[k] for k in COUNTS], [0, 0, 0])
+        self.assertEqual([response[k] for k in COUNTS], [0, 0, 0, 0])
         stored = self.stored()
         for message, job in stored.values():
             self.assertEqual(set(message), SCREEN_KEYS, 'no origin, createdAt, turnId or other extra field')
@@ -332,22 +333,38 @@ class ScreenOverlap(SyncFixture):
         self.assertEqual(stored['chatgpt:A1'][0]['origin'], 'sync')
         self.assertEqual(stored['chatgpt:Q1'][0]['turnId'], 'Q1')
 
-    def test_hash_named_screen_question_with_its_answer_is_skipped(self):
-        # The screen path named the question by a text hash, so no question chatgpt:X is stored; its answer is.
+    def test_batched_screen_answer_without_its_question_is_skipped(self):
+        # The screen path named the question by a text hash, so no question chatgpt:X is stored; its answer is batched.
         turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('X-a', 'assistant', text='렌더된 답')])
+        self.assertIsNotNone(self.stored()['chatgpt:X-a'][1])
         response = turn_intake.append(self.pipeline, self.sync_turn('X', self.at, answer_text='**마크다운** 답'))
-        self.assertEqual(self.skipped(response), (1, 0, 0), 'no question without its answer, no second classification')
+        self.assertEqual(self.skipped(response), (1, 0, 0), 'its answer was classified; no question without it')
         self.assertEqual(set(self.stored()), {'chatgpt:conv:hash', 'chatgpt:X-a'})
         self.assertEqual(response['intakeIssues'], [])
 
-    def test_quarantined_screen_question_with_its_answer_is_skipped(self):
-        screen = turn_intake.append(self.pipeline, [self.screen('X', 'user', text='질' * 20001),
-                                                    self.screen('X-a', 'assistant')])
-        self.assertEqual([i['reason'] for i in screen['intakeIssues']], ['invalid_message'])
-        response = turn_intake.append(self.pipeline, [self.sync('X', 'user', self.at, 'X', text='질' * 19999 + '…'),
-                                                      self.sync('X-a', 'assistant', self.at + 1, 'X')])
-        self.assertEqual(self.skipped(response), (1, 0, 0))
-        self.assertEqual(set(self.stored()), {'chatgpt:X-a'})
+    def test_waiting_screen_answer_without_its_question_gets_the_turn_id(self):
+        # The screen path stored the answer but not the question chatgpt:<turnId>. Each case in its own conversation.
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        cases = ('question left in the screen baseline', 'question named by a text hash', 'question quarantined as too long')
+        for n, name in enumerate(cases):
+            with self.subTest(name):
+                conversation, turn = f'c{n}', f'T{n}'
+                question = [[], [self.screen(conversation + ':hash', 'user', conversation)],
+                            [self.screen(turn, 'user', conversation, text='질' * 20001)]][n]
+                turn_intake.append(self.pipeline,
+                                   question + [self.screen(turn + '-a', 'assistant', conversation, text='화면 답')])
+                response = turn_intake.append(self.pipeline, self.sync_turn(turn, self.at, conversation=conversation))
+                self.assertEqual(self.skipped(response), (0, 1, 1), 'the question is taken from sync')
+                self.assertEqual(response['intakeIssues'], [], 'the answer is a duplicate, not a change')
+                stored = self.stored()
+                answer, question_row = stored[f'chatgpt:{turn}-a'][0], stored[f'chatgpt:{turn}'][0]
+                self.assertEqual((answer['turnId'], answer['text']), (turn, '화면 답'), 'turnId added, text unchanged')
+                self.assertNotIn('origin', answer)
+                self.assertEqual(question_row['origin'], 'sync')
+                with connect(self.db) as c:
+                    waiting = unbatched_turns(c, 'a', self.base)['chatgpt:' + conversation]
+                self.assertEqual([m['id'] for m in group_turns(waiting)[-1]], [f'chatgpt:{turn}-a', f'chatgpt:{turn}'],
+                                 'one turn, answer first (arrival order; time order is C5)')
 
     def test_only_the_turns_own_answer_ids_stop_it_without_a_question(self):
         turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('other-node', 'assistant')])
@@ -416,6 +433,59 @@ class DifferentOrigin(SyncFixture):
         self.assertEqual((changed['skippedTurns'], changed['newTurns']), (0, 0))
 
 
+class TeamRecords(SyncFixture):
+    """'팀 기록 불러오기' pasted into a question leaves the user's text before it is stored."""
+    RECORD = '# 싱크업 팀 기록 (2026. 11. 13.)\n\n아래는 우리 팀이 지금까지 합의한 내용입니다.\n\n## 작업·결과물\n- [결정] DB: DB = SQLite'
+    END = '<!-- 싱크업 팀 기록 끝 -->'
+
+    def stored_text(self, text, site='chatgpt'):
+        """(stored text or None, teamRecordSkipped) of one screen-path question with this text."""
+        response = turn_intake.append(self.pipeline, [dict(self.screen('q', 'user', text=text), site=site)])
+        stored = self.stored().get('chatgpt:q')
+        return (stored[0]['text'] if stored else None), response['teamRecordSkipped']
+
+    def test_a_record_is_cut_through_its_end_line(self):
+        self.assertEqual(self.stored_text(f'{self.RECORD}\n\n{self.END}\n\n이 기준으로 발표 순서를 정해 줘'),
+                         ('이 기준으로 발표 순서를 정해 줘', 0))
+
+    def test_without_an_end_line_the_record_runs_to_the_end(self):
+        self.assertEqual(self.stored_text(f'발표 순서를 정해 줘\n\n{self.RECORD}'), ('발표 순서를 정해 줘', 0))
+
+    def test_every_record_is_cut(self):
+        self.assertEqual(self.stored_text(f'앞\n{self.RECORD}\n{self.END}\n가운데\n{self.RECORD}'), ('앞\n가운데', 0))
+
+    def test_a_question_that_is_only_a_record_is_not_stored(self):
+        cases = {'with the end line': (f'{self.RECORD}\n\n{self.END}\n', 'chatgpt'),
+                 'without it (web copy)': (self.RECORD, 'chatgpt'), 'pasted into the web': (self.RECORD, 'manual')}
+        for name, (text, site) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.stored_text(text, site), (None, 1))
+        self.assertEqual(self.count('SELECT count(*) FROM intake'), 0)
+        self.assertEqual(self.count('SELECT count(*) FROM intake_issues'), 0, 'not quarantined either')
+
+    def test_answers_and_other_headings_are_kept(self):
+        answer = self.screen('a', 'assistant', text=self.RECORD)
+        own_heading = self.screen('h', 'user', text='## 싱크업 팀 기록 정리 방법')
+        response = turn_intake.append(self.pipeline, [own_heading, answer])
+        self.assertEqual((response['newMessages'], response['teamRecordSkipped']), (2, 0))
+        self.assertEqual(self.stored()['chatgpt:a'][0]['text'], self.RECORD)
+
+    def test_sync_question_that_is_only_a_record(self):
+        self.turn_on(self.base)
+        turn = [self.sync('X', 'user', self.base + 900, 'X', text=f'{self.RECORD}\n{self.END}'),
+                self.sync('X-a', 'assistant', self.base + 901, 'X')]
+        response = turn_intake.append(self.pipeline, turn)
+        self.assertEqual((response['teamRecordSkipped'], response['newMessages'], response['newTurns']), (1, 1, 1))
+        self.assertEqual(set(self.stored()), {'chatgpt:X-a'})
+
+    def test_the_change_check_compares_the_cut_text(self):
+        self.assertEqual(self.stored_text(f'{self.RECORD}\n{self.END}\n질문'), ('질문', 0))
+        same = turn_intake.append(self.pipeline, [self.screen('q', 'user', text='질문')])
+        self.assertEqual(same['intakeIssues'], [], 'the same words without the record are no change')
+        changed = turn_intake.append(self.pipeline, [self.screen('q', 'user', text=f'{self.RECORD}\n{self.END}\n다른 질문')])
+        self.assertEqual([i['reason'] for i in changed['intakeIssues']], ['message_changed'])
+
+
 class Response(SyncFixture):
     def test_counts_of_one_mixed_call(self):
         configure(self.pipeline, dict(turnsPerBatch=10))
@@ -427,7 +497,7 @@ class Response(SyncFixture):
                     + [bad])
         response = dispatch(self.pipeline, 'turns.append', dict(messages=messages))
         self.assertEqual({k: v for k, v in response.items() if k != 'intakeIssues'},
-                         dict(newMessages=4, queued=True, outsideWindow=1, skippedTurns=1, newTurns=2))
+                         dict(newMessages=4, queued=True, outsideWindow=1, skippedTurns=1, newTurns=2, teamRecordSkipped=0))
         self.assertEqual([i['reason'] for i in response['intakeIssues']], ['invalid_message'])
 
     def test_every_turn_outside_still_answers_queued(self):
