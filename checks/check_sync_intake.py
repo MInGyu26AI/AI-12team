@@ -295,19 +295,63 @@ class WindowBoundaries(SyncFixture):
 
 
 class ScreenOverlap(SyncFixture):
-    """C4-b: a sync turn whose question chatgpt:<turnId> the screen path already stored."""
+    """C4-b: a sync turn the screen path may already have."""
     def setUp(self):
         super().setUp()
         self.turn_on(self.base)
         self.at = self.base + 900
 
+    def skipped(self, response):
+        return response['skippedTurns'], response['newMessages'], response['newTurns']
+
     def test_screen_turn_with_an_answer_is_skipped(self):
         configure(self.pipeline, dict(turnsPerBatch=10))
         turn_intake.append(self.pipeline, [self.screen('X', 'user'), self.screen('first-node', 'assistant')])
         response = turn_intake.append(self.pipeline, self.sync_turn('X', self.at))
-        self.assertEqual((response['skippedTurns'], response['newMessages'], response['newTurns']), (1, 0, 0))
+        self.assertEqual(self.skipped(response), (1, 0, 0))
         self.assertEqual(set(self.stored()), {'chatgpt:X', 'chatgpt:first-node'},
                          'skipped even when the screen answer has another id')
+
+    def test_an_answer_before_the_next_screen_question_counts(self):
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        turn_intake.append(self.pipeline, [self.screen('X', 'user'), self.screen('first-node', 'assistant'),
+                                           self.screen('Y', 'user')])
+        self.assertEqual(self.skipped(turn_intake.append(self.pipeline, self.sync_turn('X', self.at))), (1, 0, 0))
+
+    def test_a_later_turns_answer_is_not_this_turns(self):
+        # The screen answer A1 was too long and went to quarantine; only the next turn Q2/A2 has a screen answer.
+        configure(self.pipeline, dict(turnsPerBatch=10))
+        screen = turn_intake.append(self.pipeline, [
+            self.screen('Q1', 'user'), self.screen('A1', 'assistant', text='코' * 20001),
+            self.screen('Q2', 'user'), self.screen('A2', 'assistant')])
+        self.assertEqual([i['reason'] for i in screen['intakeIssues']], ['invalid_message'])
+        response = turn_intake.append(self.pipeline, [self.sync('Q1', 'user', self.at, 'Q1'),
+                                                      self.sync('A1', 'assistant', self.at + 1, 'Q1', text='코' * 19999 + '…')])
+        self.assertEqual(self.skipped(response), (0, 1, 1), 'A1 is taken from sync, not lost')
+        stored = self.stored()
+        self.assertEqual(stored['chatgpt:A1'][0]['origin'], 'sync')
+        self.assertEqual(stored['chatgpt:Q1'][0]['turnId'], 'Q1')
+
+    def test_hash_named_screen_question_with_its_answer_is_skipped(self):
+        # The screen path named the question by a text hash, so no question chatgpt:X is stored; its answer is.
+        turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('X-a', 'assistant', text='렌더된 답')])
+        response = turn_intake.append(self.pipeline, self.sync_turn('X', self.at, answer_text='**마크다운** 답'))
+        self.assertEqual(self.skipped(response), (1, 0, 0), 'no question without its answer, no second classification')
+        self.assertEqual(set(self.stored()), {'chatgpt:conv:hash', 'chatgpt:X-a'})
+        self.assertEqual(response['intakeIssues'], [])
+
+    def test_quarantined_screen_question_with_its_answer_is_skipped(self):
+        screen = turn_intake.append(self.pipeline, [self.screen('X', 'user', text='질' * 20001),
+                                                    self.screen('X-a', 'assistant')])
+        self.assertEqual([i['reason'] for i in screen['intakeIssues']], ['invalid_message'])
+        response = turn_intake.append(self.pipeline, [self.sync('X', 'user', self.at, 'X', text='질' * 19999 + '…'),
+                                                      self.sync('X-a', 'assistant', self.at + 1, 'X')])
+        self.assertEqual(self.skipped(response), (1, 0, 0))
+        self.assertEqual(set(self.stored()), {'chatgpt:X-a'})
+
+    def test_only_the_turns_own_answer_ids_stop_it_without_a_question(self):
+        turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('other-node', 'assistant')])
+        self.assertEqual(self.skipped(turn_intake.append(self.pipeline, self.sync_turn('X', self.at))), (0, 2, 1))
 
     def test_screen_question_waiting_for_its_answer_gets_the_turn_id(self):
         turn_intake.append(self.pipeline, [self.screen('X', 'user', text='화면 질문')])
@@ -347,13 +391,14 @@ class DifferentOrigin(SyncFixture):
         self.at = self.base + 900
 
     def test_screen_then_sync_is_a_duplicate(self):
-        # The screen path named the question by a text hash, so no stored question chatgpt:X stops the turn.
-        turn_intake.append(self.pipeline, [self.screen('conv:hash', 'user'), self.screen('X-a', 'assistant', text='렌더된 답')])
-        response = turn_intake.append(self.pipeline, self.sync_turn('X', self.at, answer_text='**마크다운** 답'))
+        # A screen question still waiting for its answer: C4-b lets the turn through and C4-a meets the question.
+        turn_intake.append(self.pipeline, [self.screen('X', 'user', text='렌더된 질문')])
+        response = turn_intake.append(self.pipeline, [self.sync('X', 'user', self.at, 'X', text='**마크다운** 질문'),
+                                                      self.sync('X-a', 'assistant', self.at + 1, 'X')])
         self.assertEqual((response['newMessages'], response['newTurns'], response['intakeIssues']), (1, 1, []))
-        answer = self.stored()['chatgpt:X-a'][0]
-        self.assertEqual(answer['text'], '렌더된 답', 'the row stored first stays')
-        self.assertNotIn('origin', answer)
+        question = self.stored()['chatgpt:X'][0]
+        self.assertEqual(question['text'], '렌더된 질문', 'the row stored first stays')
+        self.assertNotIn('origin', question)
 
     def test_sync_then_screen_is_a_duplicate(self):
         turn_intake.append(self.pipeline, self.sync_turn('X', self.at, answer_text='**마크다운** 답'))
