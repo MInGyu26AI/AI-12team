@@ -89,6 +89,19 @@ function textOf(el: HTMLElement) {
 // 다른 후보 안에 들어 있는 요소는 빼고 가장 바깥 것만
 const outermost = (nodes: HTMLElement[]) => nodes.filter((n) => !nodes.some((o) => o !== n && o.contains(n)));
 
+// 화면에 보이는 요소인지. ChatGPT 는 다른 대화로 옮겨도 앞 대화의 메시지 요소를 페이지에 남겨 두고 조상에 display:none 을 건다(리허설 실측).
+// 그런 요소는 읽지 않는다. [hidden] 조상이 있으면 숨김이다(일부 DOM 구현은 [hidden] 을 display:none 으로 계산하지 않는다).
+// checkVisibility() 가 true 면 보이는 것이다. false 이거나 없을 때(jsdom 등)는 display: contents 요소도 false 를 주기 때문에,
+// 자신부터 조상까지 display:none 이 실제로 있는지를 직접 본다
+function isVisible(el: HTMLElement): boolean {
+  if (el.closest('[hidden]')) return false;
+  if (typeof el.checkVisibility === 'function' && el.checkVisibility()) return true;
+  for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+    if (getComputedStyle(n).display === 'none') return false;
+  }
+  return true;
+}
+
 // 마지막 수단: main 안에서 같은 태그 자식이 가장 많은(4개 이상) 컨테이너의 자식들
 function repeatedBlocks(): HTMLElement[] {
   const main = document.querySelector('main');
@@ -187,7 +200,7 @@ export const chatgpt: SiteAdapter = {
     const tried: ExtractResult['tried'] = [];
     for (const { name, nodes } of STRATEGIES) {
       const found = nodes()
-        .filter((el) => !el.closest(SELECTORS.notice))
+        .filter((el) => !el.closest(SELECTORS.notice) && isVisible(el))
         .map((el) => ({ el, text: textOf(el) }))
         .filter((x) => x.text.length > 0 && !NOTICE_TEXT.test(x.text));
       tried.push({ name, count: found.length });
