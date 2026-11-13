@@ -53,6 +53,18 @@ def _prepare(m: dict) -> tuple[str, bool]:
     return text, masked or bool(m.get('masked'))
 
 
+def _team_criteria(context: dict) -> list[str]:
+    """팀이 정한 목표·범위·규칙 (2차 최종 회의 '프로젝트 방향성 기준'). 없으면 아무 줄도 넣지 않는다."""
+    rules = context.get("teamRules") or []
+    if isinstance(rules, str):
+        rules = [rules]
+    lines = [f"- 팀 목표: {context['teamGoal']}"] if context.get("teamGoal") else []
+    if context.get("teamScope"):
+        lines.append(f"- 팀 범위: {context['teamScope']}")
+    lines += [f"- 팀 규칙: {r}" for r in rules if isinstance(r, str) and r.strip()]
+    return lines
+
+
 def build_user_prompt(context: dict, messages: list[dict], context_messages: list[dict] | None = None) -> tuple[str, list[dict]]:
     """AI 에 보낼 사용자 메시지와 번호별 발화 정보 [{source, masked, role, context}]."""
     user = context.get("userName", "")
@@ -71,6 +83,7 @@ def build_user_prompt(context: dict, messages: list[dict], context_messages: lis
         f"- 기존 세부 주제: {', '.join(topics) if topics else '(없음)'}",
         "- 기존 팀 결정:",
         *([f"  - [{d.get('topic_key')}] {d.get('content')}" for d in decisions] or ["  (없음)"]),
+        *_team_criteria(context),
         "",
         "# 발화",
     ]

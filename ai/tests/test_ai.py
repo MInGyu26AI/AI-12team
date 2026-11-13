@@ -21,6 +21,15 @@ class ClassifyTest(unittest.TestCase):
         llm = FakeLLM({"cards": cards})
         return classify({"context": {**CTX, **ctx}, "messages": messages}, llm), llm
 
+    def test_team_criteria_only_when_given(self):
+        card = [{"msg": 1, "relevance": "related", "sentence": "x", "subtopic": "기타", "tag": "decision",
+                 "topic_key": "t", "content": "x", "owner": None, "confidence": 0.9}]
+        _, plain = self.run_cls([msg(1, "x")], card)
+        self.assertNotIn("팀 목표", plain.prompts[0])
+        _, given = self.run_cls([msg(1, "x")], card, teamGoal="흩어진 결정 모으기", teamRules=["ChatGPT만 지원"])
+        self.assertIn("- 팀 목표: 흩어진 결정 모으기", given.prompts[0])
+        self.assertIn("- 팀 규칙: ChatGPT만 지원", given.prompts[0])
+
     def test_masks_before_sending_and_source(self):
         cards, llm = self.run_cls(
             [msg(1, "발표 자료는 010-1234-5678로 보내 줘.")],
