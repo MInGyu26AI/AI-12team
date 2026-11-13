@@ -58,6 +58,13 @@ describe('픽스처', () => {
     expect(normalizeConversation(fixture('conversation-in-progress.json'))).toEqual(expectedOf('expected-in-progress.json'));
   });
 
+  it('in-progress 픽스처: 도구 호출 노드가 완료 표시를 달아도 최종 답이 생성 중이면 턴 2 미완료, inProgressAt = 그 턴의 가장 늦은 시각', () => {
+    const result = normalizeConversation(fixture('conversation-in-progress.json'));
+    expect(result.inProgress).toBe(true);
+    expect(result.inProgressAt).toBe('2025-11-13T01:03:22.000Z');
+    expect(result.turns.map((t) => [t.turnId, t.complete])).toEqual([['p-u1', true], ['p-u2', false]]);
+  });
+
   it('생성 중인 마지막 턴은 turnsInWindows 가 뺀다 (턴 1만 남음)', () => {
     const { turns } = normalizeConversation(fixture('conversation-in-progress.json'));
     const windows: SyncWindow[] = [{ start: '2025-11-13T00:00:00.000Z', end: '2025-11-13T02:00:00.000Z' }];
@@ -88,8 +95,8 @@ describe('줄기', () => {
   });
 
   it('mapping 이 비어 있으면 턴도 없고 inProgress 도 false', () => {
-    expect(normalizeConversation({ mapping: {} })).toEqual({ turns: [], inProgress: false });
-    expect(normalizeConversation({})).toEqual({ turns: [], inProgress: false });
+    expect(normalizeConversation({ mapping: {} })).toEqual({ turns: [], inProgress: false, inProgressAt: null });
+    expect(normalizeConversation({})).toEqual({ turns: [], inProgress: false, inProgressAt: null });
   });
 });
 
@@ -267,44 +274,84 @@ describe('턴', () => {
   });
 });
 
-describe('완료', () => {
+describe('완료 (P7 실측: 마지막 보이는 assistant 노드가 finished_successfully + end_turn=true)', () => {
   const lastAnswer = (extra: Partial<RawMessage>) =>
-    normalizeConversation(chain([message('u1', 'user', '질문', T0), message('a1', 'assistant', '답', T0 + 1, { end_turn: null, ...extra })]));
+    normalizeConversation(chain([message('u1', 'user', '질문', T0), message('a1', 'assistant', '답', T0 + 1, { status: undefined, end_turn: null, ...extra })]));
+  const completeOf = (extra: Partial<RawMessage>) => lastAnswer(extra).turns[0]!.complete;
 
-  it('metadata.is_complete === true 면 완료', () => {
-    expect(lastAnswer({ metadata: { is_complete: true } }).turns[0]!.complete).toBe(true);
+  it('status 가 finished_successfully 이고 end_turn 이 true 이면 완료', () => {
+    expect(completeOf({ status: 'finished_successfully', end_turn: true })).toBe(true);
   });
 
-  it('end_turn === true 면 완료', () => {
-    expect(lastAnswer({ end_turn: true }).turns[0]!.complete).toBe(true);
+  it('사용자가 멈춘 답도 같은 값이라 완료로 받는다', () => {
+    expect(completeOf({ status: 'finished_successfully', end_turn: true, metadata: { is_complete: true, finish_details: { type: 'stop' } } })).toBe(true);
   });
 
-  it.each(['stop', 'interrupted', 'max_tokens'])('finish_details.type 이 %s 면 완료', (type) => {
-    expect(lastAnswer({ metadata: { finish_details: { type } } }).turns[0]!.complete).toBe(true);
+  it.each([['in_progress'], ['finished_partial_completion'], ['error'], [undefined]])('end_turn 이 true 여도 status 가 %s 이면 미완료', (status) => {
+    expect(completeOf({ status, end_turn: true })).toBe(false);
   });
 
-  it('완료 표시가 하나도 없으면 미완료 (status 의 다른 값은 판단에 쓰지 않는다)', () => {
-    expect(lastAnswer({ status: 'finished_successfully', metadata: {} }).turns[0]!.complete).toBe(false);
-    expect(lastAnswer({ status: 'finished_successfully', metadata: { finish_details: { type: 'length' } } }).turns[0]!.complete).toBe(false);
+  it.each([[false], [null], [undefined]])('status 가 finished_successfully 여도 end_turn 이 %s 이면 미완료', (endTurn) => {
+    expect(completeOf({ status: 'finished_successfully', end_turn: endTurn })).toBe(false);
   });
 
-  it('완료 표시가 있으면 status 가 finished_partial_completion 이어도 완료', () => {
-    expect(lastAnswer({ status: 'finished_partial_completion', metadata: { finish_details: { type: 'interrupted' } } }).turns[0]!.complete).toBe(true);
+  it('is_complete 와 finish_details 는 판단에 쓰지 않는다 (OR 규칙 없음)', () => {
+    expect(completeOf({ status: 'finished_successfully', metadata: { is_complete: true } })).toBe(false);
+    for (const type of ['stop', 'interrupted', 'max_tokens']) {
+      expect(completeOf({ status: 'finished_successfully', metadata: { finish_details: { type } } })).toBe(false);
+      expect(completeOf({ metadata: { is_complete: true, finish_details: { type } } })).toBe(false);
+    }
   });
 
-  it('status 가 in_progress 면 다른 완료 표시가 있어도 미완료', () => {
-    const result = lastAnswer({ status: 'in_progress', end_turn: true, metadata: { is_complete: true } });
+  it('생성 중이면 다른 완료 표시가 있어도 미완료이고 inProgress=true', () => {
+    const result = lastAnswer({ status: 'in_progress', end_turn: true, metadata: { is_complete: true, finish_details: { type: 'stop' } } });
     expect(result.turns[0]!.complete).toBe(false);
     expect(result.inProgress).toBe(true);
   });
 
-  it('턴의 마지막 assistant 메시지로 판단한다 (앞 답변이 끝났어도 마지막이 안 끝났으면 미완료)', () => {
+  it('도구 호출 노드(recipient=web.run)가 완료 표시를 달고 있어도 최종 답이 생성 중이면 미완료', () => {
+    const toolCall = message('tool', 'assistant', '{"search":"x"}', T0 + 1, {
+      recipient: 'web.run',
+      end_turn: false,
+      metadata: { is_complete: true, finish_details: { type: 'stop' } },
+    });
+    const final = message('a1', 'assistant', '안건은 1)', T0 + 2, { status: 'in_progress', end_turn: null });
+    const result = normalizeConversation(chain([message('u1', 'user', '질문', T0), toolCall, final]));
+    expect(result.turns[0]!.messages.map((m) => m.id)).toEqual(['u1', 'a1']); // 도구 호출 노드는 보이지 않는다
+    expect(result.turns[0]!.complete).toBe(false);
+    expect(result.inProgress).toBe(true);
+  });
+
+  it('도구 호출 노드만 있고 보이는 답이 아직 없으면 미완료 (end_turn=true 라도)', () => {
+    const toolCall = message('tool', 'assistant', '{"search":"x"}', T0 + 1, { recipient: 'web.run', status: 'finished_successfully', end_turn: true });
+    const result = normalizeConversation(chain([message('u1', 'user', '질문', T0), toolCall]));
+    expect(result.turns.map((t) => t.complete)).toEqual([false]);
+    expect(result.inProgress).toBe(true);
+  });
+
+  it('도구 사슬 뒤 최종 답이 끝났으면 완료 (최종 답만 본다)', () => {
+    const toolCall = message('tool', 'assistant', '{"search":"x"}', T0 + 1, { recipient: 'web.run', end_turn: false });
+    const toolOutput = message('out', 'tool', '결과', T0 + 2);
+    const final = message('a1', 'assistant', '정리했어요', T0 + 3, { status: 'finished_successfully', end_turn: true });
+    expect(normalizeConversation(chain([message('u1', 'user', '질문', T0), toolCall, toolOutput, final])).turns[0]!.complete).toBe(true);
+  });
+
+  it('턴의 마지막 보이는 assistant 노드로 판단한다 (앞 답변이 끝났어도 마지막이 안 끝났으면 미완료)', () => {
     const conv = chain([
       message('u1', 'user', '질문', T0),
       message('a1', 'assistant', '중간', T0 + 1, { end_turn: true }),
       message('a2', 'assistant', '이어서', T0 + 2, { end_turn: false }),
     ]);
     expect(normalizeConversation(conv).turns[0]!.complete).toBe(false);
+  });
+
+  it('앞 답변이 미완료여도 마지막 보이는 노드가 끝났으면 완료', () => {
+    const conv = chain([
+      message('u1', 'user', '질문', T0),
+      message('a1', 'assistant', '중간', T0 + 1, { end_turn: false }),
+      message('a2', 'assistant', '끝', T0 + 2, { end_turn: true }),
+    ]);
+    expect(normalizeConversation(conv).turns[0]!.complete).toBe(true);
   });
 
   it('답변이 없는 턴은 미완료', () => {
@@ -329,6 +376,55 @@ describe('완료', () => {
     const result = normalizeConversation(conv);
     expect(result.turns.map((t) => t.complete)).toEqual([false, true]);
     expect(result.inProgress).toBe(false);
+  });
+});
+
+describe('inProgressAt', () => {
+  const pending = (extra: Partial<RawMessage> = {}) => message('a1', 'assistant', '쓰는 중', T0 + 5, { status: 'in_progress', end_turn: null, ...extra });
+
+  it('미완료인 마지막 턴의 메시지 시각 가운데 가장 늦은 것이다', () => {
+    const conv = chain([message('u0', 'user', '앞 질문', T0), message('a0', 'assistant', '앞 답', T0 + 1), message('u1', 'user', '질문', T0 + 4), pending()]);
+    expect(normalizeConversation(conv)).toMatchObject({ inProgress: true, inProgressAt: iso(T0 + 5) });
+  });
+
+  it('사용자 메시지 시각이 더 늦으면 그 시각이다', () => {
+    const conv = chain([message('u1', 'user', '질문', T0 + 9), pending()]);
+    expect(normalizeConversation(conv).inProgressAt).toBe(iso(T0 + 9));
+  });
+
+  it('보이는 답이 아직 없는 턴은 사용자 메시지 시각이다', () => {
+    expect(normalizeConversation(chain([message('u1', 'user', '질문', T0 + 3)])).inProgressAt).toBe(iso(T0 + 3));
+  });
+
+  it('시각 없는 메시지가 섞여 있으면 있는 것 중 가장 늦은 시각이다', () => {
+    const conv = chain([message('u1', 'user', '질문', T0 + 2), pending({ create_time: null })]);
+    expect(normalizeConversation(conv).inProgressAt).toBe(iso(T0 + 2));
+  });
+
+  it('시각이 하나도 없으면 null', () => {
+    const conv = chain([message('u1', 'user', '질문', null), pending({ create_time: null })]);
+    expect(normalizeConversation(conv)).toMatchObject({ inProgress: true, inProgressAt: null });
+  });
+
+  it('마지막 턴이 끝났으면 null (앞 턴이 미완료여도)', () => {
+    const conv = chain([
+      message('u1', 'user', '질문 1', T0),
+      message('a1', 'assistant', '미완료', T0 + 1, { end_turn: null }),
+      message('u2', 'user', '질문 2', T0 + 10),
+      message('a2', 'assistant', '완료', T0 + 11),
+    ]);
+    expect(normalizeConversation(conv)).toMatchObject({ inProgress: false, inProgressAt: null });
+  });
+
+  it('turnsInWindows 는 마지막이 아닌 미완료 턴도 뺀다', () => {
+    const conv = chain([
+      message('u1', 'user', '질문 1', T0),
+      message('a1', 'assistant', '미완료', T0 + 1, { end_turn: null }),
+      message('u2', 'user', '질문 2', T0 + 10),
+      message('a2', 'assistant', '완료', T0 + 11),
+    ]);
+    const windows: SyncWindow[] = [{ start: iso(T0 - 60), end: iso(T0 + 600) }];
+    expect(turnsInWindows(normalizeConversation(conv).turns, windows).map((t) => t.turnId)).toEqual(['u2']);
   });
 });
 

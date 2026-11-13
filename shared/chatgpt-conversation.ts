@@ -53,12 +53,13 @@ export interface NormalizedTurn {
   messages: NormalizedMessage[];
   start: string | null; // 턴 안 메시지 시각의 최소 (ISO). 시각 없는 메시지가 있으면 null
   end: string | null; // 최대
-  complete: boolean; // 마지막 답변이 끝났는지 (interrupted 도 완료). 답변이 없으면 false
+  complete: boolean; // 마지막 보이는 assistant 노드가 finished_successfully + end_turn=true 인지 (사용자가 멈춘 답도 완료). 보이는 답이 없으면 false
 }
 
 export interface NormalizedConversation {
   turns: NormalizedTurn[]; // 대화 순서
-  inProgress: boolean; // 마지막 턴의 답변이 생성 중
+  inProgress: boolean; // 마지막 턴이 미완료 (답변이 생성 중이거나 보이는 답이 아직 없음)
+  inProgressAt: string | null; // 미완료인 마지막 턴의 메시지 시각 가운데 가장 늦은 것 (ISO). 완료됐거나 시각이 없으면 null
 }
 
 // ── 줄기 ──
@@ -147,18 +148,23 @@ function visibleMessage(m: RawMessage, nodeId: string): NormalizedMessage | null
 }
 
 // ── 턴과 완료 ──
-const DONE_FINISH_TYPES = new Set(["stop", "interrupted", "max_tokens"]);
-
-/** 마지막 assistant 메시지가 끝났는지. 생성 중이면 아니고, 그 밖에는 완료 표시 셋 가운데 하나라도 참이면 완료 */
-function isDone(m: RawMessage): boolean {
-  if (m.status === "in_progress") return false;
-  return m.metadata?.is_complete === true || m.end_turn === true || DONE_FINISH_TYPES.has(m.metadata?.finish_details?.type ?? "");
-}
+/**
+ * 턴의 마지막 보이는 assistant 노드가 끝났는지 (P7 실측으로 확정).
+ * status 가 finished_successfully 이고 end_turn 이 true 일 때만 완료다. is_complete·finish_details 는 쓰지 않는다:
+ * 도구 호출 노드(recipient=web.run 등)는 최종 답이 생성 중일 때도 완료 표시를 달고 있고, 사용자가 멈춘 답도 같은 값이다.
+ */
+const isDone = (m: RawMessage): boolean => m.status === "finished_successfully" && m.end_turn === true;
 
 interface TurnDraft {
   turnId: string;
   messages: NormalizedMessage[];
   lastAnswer: RawMessage | null;
+}
+
+/** 시각이 있는 메시지 가운데 가장 늦은 것 (ISO). 하나도 없으면 null */
+function latestTime(messages: NormalizedMessage[]): string | null {
+  const times = messages.flatMap((m) => (m.createdAt === null ? [] : [Date.parse(m.createdAt)]));
+  return times.length ? new Date(Math.max(...times)).toISOString() : null;
 }
 
 /** 화면에 보이던 줄기를 정규화한다. 빼는 메시지·본문·완료 규칙은 6장. 연결 구조가 돌면 Error */
@@ -189,7 +195,9 @@ export function normalizeConversation(conv: RawConversation): NormalizedConversa
       complete: lastAnswer !== null && isDone(lastAnswer),
     };
   });
-  return { turns, inProgress: turns.at(-1)?.complete === false };
+  const last = turns.at(-1);
+  const inProgress = last?.complete === false;
+  return { turns, inProgress, inProgressAt: last && inProgress ? latestTime(last.messages) : null };
 }
 
 /** 턴 전체가 어느 한 창 안에 있는 완료 턴만 (start ≥ 창 시작, end < 창 끝). 시각 없는 턴은 뺀다 */

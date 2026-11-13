@@ -18,15 +18,16 @@ import type {
 
 /** 수집기 한도(collector/turn_intake.py MAX_MESSAGE_TEXT)와 같다 */
 export const MAX_MESSAGE_TEXT = 20000;
-/** 프로젝트 목록을 쪽으로 읽을 때의 상한 (한 번에 다 오는 게 보통이라 넉넉히) */
-const MAX_PROJECT_PAGES = 10;
-/** 프로젝트 대화 목록 첫 쪽의 cursor. P10(실제 응답 확인) 전 추정값이라 여기 한 곳에서만 쓴다 */
-export const FIRST_PAGE_CURSOR = '0';
+/** 사이드바(프로젝트 목록)를 cursor 로 이어 읽을 때의 상한. 사이드바의 쪽 넘기기는 실측 전이라 짧게 둔다 */
+const MAX_PROJECT_PAGES = 5;
+/** 프로젝트 대화 목록 한 쪽의 크기와 소유자 조건 (실측 11/13: 화면이 부르는 값) */
+const PAGE_QUERY = 'limit=50&owned_only=false';
 
 const SESSION_PATH = '/api/auth/session';
 const PROJECTS_PATH = '/backend-api/gizmos/snorlax/sidebar';
+// 첫 쪽에는 cursor 를 붙이지 않고, 다음 쪽부터 받은 cursor(불투명 문자열)를 그대로 이스케이프해서 붙인다
 const projectPagePath = (gizmoId: string, cursor: string | null) =>
-  `/backend-api/gizmos/${encodeURIComponent(gizmoId)}/conversations?cursor=${encodeURIComponent(cursor ?? FIRST_PAGE_CURSOR)}`;
+  `/backend-api/gizmos/${encodeURIComponent(gizmoId)}/conversations?${PAGE_QUERY}${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`;
 const conversationPath = (id: string) => `/backend-api/conversation/${encodeURIComponent(id)}`;
 
 export interface ChatgptApiOptions {
@@ -206,13 +207,13 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     return started.ok ? { ok: true, account: started.session.account, data: null } : failed(started, session?.account);
   }
 
-  // 사이드바: items[].gizmo.gizmo.id · items[].gizmo.gizmo.display.name 이 필수
+  // 사이드바: items[].gizmo.id · items[].gizmo.display.name 이 필수 (실측 11/13: .gizmo.gizmo 가 아니다)
   function parseSidebar(json: unknown): { projects: SyncProject[]; cursor: string | null } | null {
     const body = asRecord(json);
     if (!body || !Array.isArray(body.items)) return null;
     const projects: SyncProject[] = [];
     for (const item of body.items) {
-      const gizmo = asRecord(asRecord(asRecord(item)?.gizmo)?.gizmo);
+      const gizmo = asRecord(asRecord(item)?.gizmo);
       const id = gizmo?.id;
       const name = asRecord(gizmo?.display)?.name;
       if (typeof id !== 'string' || !id || typeof name !== 'string') return null;
@@ -229,7 +230,10 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     for (let page = 0; page < MAX_PROJECT_PAGES; page += 1) {
       const path: string = cursor === null ? PROJECTS_PATH : `${PROJECTS_PATH}?cursor=${encodeURIComponent(cursor)}`;
       const res = await read(path, parseSidebar);
-      if (!res.ok) return res;
+      if (!res.ok) {
+        if (page === 0) return res;
+        break; // 둘째 쪽부터의 실패는 이미 받은 목록으로 마친다 (사이드바의 쪽 넘기기는 실측 전)
+      }
       account = res.account;
       const fresh = res.data.projects.filter((p) => !seen.has(p.gizmoId));
       fresh.forEach((p) => seen.add(p.gizmoId));
@@ -240,10 +244,11 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
     return done(account, all);
   }
 
-  // 프로젝트 대화 목록: items[].id · items[].update_time 이 필수
+  // 프로젝트 대화 목록: items[].id · items[].update_time · cursor(문자열 또는 null) 가 필수
   function parseProjectPage(json: unknown): SyncProjectPage | null {
     const body = asRecord(json);
     if (!body || !Array.isArray(body.items)) return null;
+    if (body.cursor !== null && typeof body.cursor !== 'string') return null; // 없거나(undefined) 다른 타입이면 모양이 바뀐 것
     const items: SyncConversationRef[] = [];
     for (const raw of body.items) {
       const item = asRecord(raw);
@@ -253,11 +258,12 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
         id: item.id,
         updateTime,
         isArchived: item.is_archived === true,
+        isTemporary: item.is_temporary_chat === true,
         gizmoId: typeof item.gizmo_id === 'string' ? item.gizmo_id : null,
       });
     }
     items.sort((a, b) => Date.parse(b.updateTime) - Date.parse(a.updateTime)); // update_time 최신 순 (같으면 받은 순서)
-    return { items, nextCursor: items.length ? cursorOf(body.cursor) : null };
+    return { items, nextCursor: items.length ? cursorOf(body.cursor) : null }; // cursor 가 null(또는 빈 문자열)이면 끝
   }
 
   const projectPage = (gizmoId: string, cursor: string | null) => read(projectPagePath(gizmoId, cursor), parseProjectPage);
@@ -293,7 +299,7 @@ export function createChatgptApi(options: ChatgptApiOptions = {}): ChatgptApi {
       }
     }
     const skippedNoTime = normalized.turns.filter((t) => t.complete && (t.start === null || t.end === null)).length;
-    const data: SyncConversationData = { messages, inProgress: normalized.inProgress, skippedNoTime };
+    const data: SyncConversationData = { messages, inProgress: normalized.inProgress, inProgressAt: normalized.inProgressAt, skippedNoTime };
     return done(account, data);
   }
 
