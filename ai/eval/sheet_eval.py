@@ -82,14 +82,15 @@ def sessions(msgs):
 
 
 # ── 1) 분류 ──
-def run_classify(msgs, llm, decider):
+def run_classify(msgs, llm, decider, context=CONTEXT):
     """세션을 시간순으로 분류. 앞 세션의 결정은 '기존 팀 결정'으로 다음 요청에 들어간다 (모두 승인했다고 가정).
 
+    context: 팀 정보 (기본은 민규 님 샘플 팀, eval/synth_eval.py 는 팀마다 넘긴다)
     (예측 [(message_id, 카드)], 분류에 실패한 세션 [{session, failure}])"""
     preds, failed = [], []  # preds: (message_id, card)
     for sess in sessions(msgs):
         decisions = [c for _, c in preds if c["relevance"] == "related" and c["tag"] == "decision"]
-        ctx = {**CONTEXT, "userName": sess[0]["member"],
+        ctx = {**context, "userName": sess[0]["member"],
                "existingTopicKeys": list(dict.fromkeys(c["topic_key"] for _, c in preds if c.get("topic_key"))),
                "existingDecisions": [{"topic_key": c["topic_key"], "content": c["content"]} for c in decisions]}
         req = {"type": "classify", "version": 1, "context": ctx,

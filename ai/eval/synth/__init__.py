@@ -52,7 +52,7 @@ def build() -> tuple[list[list], list[list], list[list]]:
                 turn += 1
                 when += timedelta(minutes=GAP_MINUTES)
                 speaker, text = item[0], item[1]
-                msg_id = f"{t['id']}-{turn:02d}"
+                msg_id = f"{t['id']}T{turn:02d}"  # sheet_eval 은 문장 ID 의 '-' 앞을 발화 ID 로 본다
                 speaker_name = "ChatGPT" if speaker == "AI" else speaker
                 talk.append([t["id"], _split(t["id"]), kind, t["team"], t["topic"], speaker_name, turn,
                              f"{when:%Y-%m-%d}", f"{when:%H:%M}", msg_id, text])
