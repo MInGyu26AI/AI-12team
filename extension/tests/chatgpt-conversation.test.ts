@@ -366,16 +366,74 @@ describe('완료 (P7 실측: 마지막 보이는 assistant 노드가 finished_su
     expect(result.inProgress).toBe(true);
   });
 
-  it('inProgress 는 마지막 턴만 본다', () => {
+  it('inProgress 는 마지막 턴만 본다 (마지막이 아닌 턴은 늘 완료)', () => {
     const conv = chain([
       message('u1', 'user', '질문 1', T0),
-      message('a1', 'assistant', '미완료', T0 + 1, { end_turn: null }),
+      message('a1', 'assistant', '미완료 표시', T0 + 1, { end_turn: null }),
       message('u2', 'user', '질문 2', T0 + 10),
       message('a2', 'assistant', '완료', T0 + 11),
     ]);
     const result = normalizeConversation(conv);
-    expect(result.turns.map((t) => t.complete)).toEqual([false, true]);
+    expect(result.turns.map((t) => t.complete)).toEqual([true, true]);
     expect(result.inProgress).toBe(false);
+  });
+});
+
+describe('마지막이 아닌 턴은 늘 완료 (예외)', () => {
+  const withNextQuestion = (...turn: RawMessage[]) => chain([message('u1', 'user', '질문 1', T0), ...turn, message('u2', 'user', '질문 2', T0 + 100), message('a2', 'assistant', '답 2', T0 + 101)]);
+
+  it('길이 한도로 끊긴 답(max_tokens, end_turn=false)도 뒤에 다음 질문이 오면 완료이고 답이 담긴다', () => {
+    const cut = message('a1', 'assistant', '여기까지만 쓰고 끊겼', T0 + 1, {
+      status: 'finished_successfully',
+      end_turn: false,
+      metadata: { finish_details: { type: 'max_tokens' } },
+    });
+    const result = normalizeConversation(withNextQuestion(cut));
+    expect(result.turns.map((t) => [t.turnId, t.complete])).toEqual([['u1', true], ['u2', true]]);
+    expect(result.turns[0]!.messages.map((m) => m.text)).toEqual(['질문 1', '여기까지만 쓰고 끊겼']);
+    expect(result.inProgress).toBe(false);
+  });
+
+  it('이미지만 있는 답도 완료이고 [첨부 N개] 로 담긴다', () => {
+    const image = message('a1', 'assistant', '', T0 + 1, {
+      status: 'finished_successfully',
+      end_turn: false,
+      content: { content_type: 'multimodal_text', parts: [{ content_type: 'image_asset_pointer', asset_pointer: 'file-service://x' }] },
+    });
+    const result = normalizeConversation(withNextQuestion(image));
+    expect(result.turns[0]!.complete).toBe(true);
+    expect(result.turns[0]!.messages.map((m) => m.text)).toEqual(['질문 1', '[첨부 1개]']);
+  });
+
+  it('보이는 답이 없으면(도구 호출 노드뿐) 질문만 담은 완료 턴이 된다', () => {
+    const toolCall = message('tool', 'assistant', '{"search":"x"}', T0 + 1, { recipient: 'web.run', end_turn: false });
+    const result = normalizeConversation(withNextQuestion(toolCall));
+    expect(result.turns[0]).toMatchObject({ turnId: 'u1', complete: true, start: iso(T0), end: iso(T0) });
+    expect(result.turns[0]!.messages.map((m) => m.id)).toEqual(['u1']);
+  });
+
+  it('생성 중 표시가 남은 답도 뒤에 다음 질문이 오면 완료다 (오류로 끝난 답)', () => {
+    const stuck = message('a1', 'assistant', '쓰다 만 답', T0 + 1, { status: 'in_progress', end_turn: null });
+    expect(normalizeConversation(withNextQuestion(stuck)).turns[0]!.complete).toBe(true);
+  });
+
+  it('질문만 담은 턴도 창 안이면 turnsInWindows 가 남긴다', () => {
+    const toolCall = message('tool', 'assistant', '{"search":"x"}', T0 + 1, { recipient: 'web.run' });
+    const windows: SyncWindow[] = [{ start: iso(T0 - 60), end: iso(T0 + 600) }];
+    const { turns } = normalizeConversation(withNextQuestion(toolCall));
+    expect(turnsInWindows(turns, windows).map((t) => t.turnId)).toEqual(['u1', 'u2']);
+  });
+
+  it('첫 사용자 메시지 앞의 답변 턴도 마지막이 아니면 완료다', () => {
+    const conv = chain([message('a0', 'assistant', '환영', T0, { end_turn: false }), message('u1', 'user', '질문', T0 + 5), message('a1', 'assistant', '답', T0 + 6)]);
+    expect(normalizeConversation(conv).turns.map((t) => [t.turnId, t.complete])).toEqual([['a0', true], ['u1', true]]);
+  });
+
+  it('마지막 턴에는 적용하지 않는다 (같은 모양이라도 마지막이면 미완료)', () => {
+    const cut = message('a1', 'assistant', '끊긴 답', T0 + 1, { status: 'finished_successfully', end_turn: false, metadata: { finish_details: { type: 'max_tokens' } } });
+    const result = normalizeConversation(chain([message('u1', 'user', '질문', T0), cut]));
+    expect(result.turns.map((t) => t.complete)).toEqual([false]);
+    expect(result.inProgress).toBe(true);
   });
 });
 
@@ -416,15 +474,17 @@ describe('inProgressAt', () => {
     expect(normalizeConversation(conv)).toMatchObject({ inProgress: false, inProgressAt: null });
   });
 
-  it('turnsInWindows 는 마지막이 아닌 미완료 턴도 뺀다', () => {
+  it('turnsInWindows 는 마지막이 아닌 턴을 완료로 보고 남기고, 마지막 미완료 턴만 뺀다', () => {
     const conv = chain([
       message('u1', 'user', '질문 1', T0),
       message('a1', 'assistant', '미완료', T0 + 1, { end_turn: null }),
       message('u2', 'user', '질문 2', T0 + 10),
       message('a2', 'assistant', '완료', T0 + 11),
+      message('u3', 'user', '질문 3', T0 + 20),
+      message('a3', 'assistant', '쓰는 중', T0 + 21, { status: 'in_progress', end_turn: null }),
     ]);
     const windows: SyncWindow[] = [{ start: iso(T0 - 60), end: iso(T0 + 600) }];
-    expect(turnsInWindows(normalizeConversation(conv).turns, windows).map((t) => t.turnId)).toEqual(['u2']);
+    expect(turnsInWindows(normalizeConversation(conv).turns, windows).map((t) => t.turnId)).toEqual(['u1', 'u2']);
   });
 });
 
