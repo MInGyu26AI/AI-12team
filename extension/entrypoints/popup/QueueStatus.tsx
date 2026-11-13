@@ -1,17 +1,21 @@
 import { useState } from 'react';
-import { sendToBackground } from '@/lib/messages';
-import { sendBlockedReason, turnsOf, type Settings } from '@/lib/settings';
+import { turnsOf, type Settings } from '@/lib/settings';
+import { Notice } from './Notice';
+import { runSyncNow } from './sync-actions';
+import { syncNowBlockedReason, type PopupNotice } from './sync-status';
 
-// 다음 분류까지 쌓인 대화 · "지금 분류하기" · 검토 대기 카드 수 · 마지막 수집 시각
-export function QueueStatus({ settings, pendingCount }: { settings: Settings; pendingCount: number }) {
-  const [flushing, setFlushing] = useState(false);
+// 다음 분류까지 쌓인 대화 · "싱크 맞추기" · 검토 대기 카드 수 · 마지막 수집 시각
+export function QueueStatus({ settings, pendingCount, syncEnabled }: { settings: Settings; pendingCount: number; syncEnabled: boolean }) {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState<PopupNotice | null>(null);
   const bufferedTurns = settings.bufferedTurns ?? 0;
   const nextBatchTurns = settings.nextBatchTurns ?? bufferedTurns; // 옛 수집기는 합계만 준다
-  const flush = async () => {
-    setFlushing(true);
-    const result = await sendToBackground({ type: 'flush' }).catch(() => null);
-    if (!result?.ok) alert(result?.error ?? '분류 요청 실패');
-    setFlushing(false);
+  const blocked = syncNowBlockedReason(settings, syncEnabled);
+  const syncNow = async () => {
+    setSyncing(true);
+    setResult(null);
+    setResult(await runSyncNow());
+    setSyncing(false);
   };
 
   return (
@@ -22,12 +26,14 @@ export function QueueStatus({ settings, pendingCount }: { settings: Settings; pe
         </p>
         <button
           className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40"
-          disabled={!bufferedTurns || flushing || !!sendBlockedReason(settings)}
-          onClick={flush}
+          disabled={syncing || !!blocked}
+          title={blocked ?? undefined}
+          onClick={syncNow}
         >
-          {flushing ? '분류 중…' : '지금 분류하기'}
+          {syncing ? '맞추는 중…' : '싱크 맞추기'}
         </button>
       </div>
+      {result && <Notice tone={result.tone}>{result.text}</Notice>}
       {!settings.autoCollect && bufferedTurns > 0 && (
         <p className="text-xs text-gray-500">쌓인 대화는 보관돼 있어요. 수집을 다시 켜면 다음 묶음에 합쳐요.</p>
       )}
