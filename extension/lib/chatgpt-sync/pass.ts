@@ -3,16 +3,19 @@
 import { storage } from '#imports';
 import type { ExtStatus, SyncNowResult, SyncWindow } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
-import { rpc } from '../collector-rpc';
+import { CollectorUnreachable, rpc } from '../collector-rpc';
 import type { SyncConversationData, SyncProjectPage, TabSyncError, TabSyncResult } from '../messages';
 import { findLeaderTab, type LeaderTab } from './leader-tab';
 import {
   SYNC_APPEND_CHUNK,
+  SYNC_APPEND_MAX_BYTES,
   SYNC_CURSOR_SLACK_MINUTES,
   SYNC_DETAIL_GAP_MS,
   SYNC_FORBIDDEN_REST_MINUTES,
+  SYNC_MAX_CONVERSATION_FAILURES,
   SYNC_MAX_DETAILS_PER_PASS,
   SYNC_REST_DEFAULT_MINUTES,
+  SYNC_STALE_IN_PROGRESS_MINUTES,
   syncStateItem,
   type SyncState,
   type SyncStopReason,
@@ -25,20 +28,21 @@ export const syncTiming = {
   sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 };
 
-// 이 묶음에 "남김"(생성 중·network)이 있었는지. 묶음 = 목록을 읽어 pending 을 만든 때부터 pending 이 빌 때까지(여러 패스).
+// 이 묶음에 "남김"(생성 중·대화별 실패)이 있었는지. 묶음 = 목록을 읽어 pending 을 만든 때부터 pending 이 빌 때까지(여러 패스).
 // 남김 대화는 pending 에서 빠지므로, 묶음 끝에 커서를 올리면 그 대화를 다시 보지 못한다. SyncState 는 약속이라 따로 둔다
 export const syncLeftoverItem = storage.defineItem<boolean>('local:chatgptSyncLeftover', { fallback: false });
 
 export interface PassResult {
   sync: SyncNowResult['sync'];
   newTurns: number;
+  status?: ExtStatus; // 이 패스가 읽은 collection.status (syncNow 의 flush 판단에 쓴다). 1단계 전에 끝났으면 없음
 }
 
 type PassEnd =
   | { kind: 'done' } // 끝까지 돎 (대화별 남김은 있을 수 있음)
   | { kind: 'stop'; reason: SyncStopReason }
   | { kind: 'rest'; reason: 'rate_limited' | 'forbidden'; until: number }
-  | { kind: 'error' }; // 일시 오류: 수집기 실패, 목록·세션의 network·not_found, 대표 탭 끊김
+  | { kind: 'error' }; // 일시 오류: 수집기 실패, 세션·목록의 network·not_found, 대표 탭 끊김
 
 type TabFailure = Extract<TabSyncResult<unknown>, { ok: false }>;
 
@@ -61,7 +65,9 @@ class PassRun {
   readonly key: string;
   pending: string[];
   pendingPassStartedAt: string | null;
+  failures: Record<string, number>;
   stats: SyncState['stats'];
+  status: ExtStatus | undefined;
   newTurns = 0;
   error: SyncState['lastError'] = null;
 
@@ -72,13 +78,14 @@ class PassRun {
     this.key = runKey(start);
     this.pending = [...start.pending];
     this.pendingPassStartedAt = start.pendingPassStartedAt;
+    this.failures = { ...start.failures };
     this.stats = { ...start.stats, passes: start.stats.passes + 1 };
   }
 
   /** 그사이 끄거나 다시 켰으면 Superseded. 탭 응답마다 확인해서, 끈 뒤에 받은 대화는 수집기로 보내지 않는다 */
   async ensureCurrent() {
     const latest = await syncStateItem.getValue();
-    if (!latest.enabled || runKey(latest) !== this.key) throw new Superseded();
+    if (!latest.enabled || latest.collectorOffPending || runKey(latest) !== this.key) throw new Superseded();
     return latest;
   }
 
@@ -89,18 +96,37 @@ class PassRun {
   }
 
   progress(): Partial<SyncState> {
-    return { pending: this.pending, pendingPassStartedAt: this.pendingPassStartedAt, stats: this.stats };
+    return { pending: this.pending, pendingPassStartedAt: this.pendingPassStartedAt, failures: this.failures, stats: this.stats };
   }
 
   fail(code: TabSyncError | 'collector') {
     this.error = { code, at: iso(syncTiming.now()) };
   }
 
-  /** 대화 하나를 끝냈다. left = 이번 묶음의 남김 */
+  /** 대화 하나를 끝냈다(받았거나 건너뜀). left = 이번 묶음의 남김 */
   async finishConversation(id: string, left: boolean) {
     this.pending = this.pending.filter((p) => p !== id);
     if (left) await syncLeftoverItem.setValue(true);
     await this.save(this.progress());
+  }
+
+  /** 받았거나 지워진 대화: 실패 수를 지운다 */
+  async settled(id: string, left: boolean) {
+    delete this.failures[id];
+    await this.finishConversation(id, left);
+  }
+
+  /**
+   * 대화별 실패(network·그 대화의 shape_changed·turns.append 거절). 실패 수를 늘리고 남김으로 둔다.
+   * SYNC_MAX_CONVERSATION_FAILURES 번째부터는 건너뜀: 남김이 아니라 커서를 붙잡지 않는다. 실패 수는 받을 때까지 남긴다
+   */
+  async conversationFailed(id: string, code: TabSyncError | 'collector') {
+    this.fail(code);
+    const count = (this.failures[id] ?? 0) + 1;
+    this.failures[id] = count;
+    const skip = count >= SYNC_MAX_CONVERSATION_FAILURES;
+    if (skip) this.stats.skippedConversations += 1;
+    await this.finishConversation(id, !skip);
   }
 
   async append(messages: CollectedMessage[]) {
@@ -113,9 +139,19 @@ class PassRun {
   }
 }
 
+/** JSON 으로 보낼 때의 추정 바이트 수. native host 가 ensure_ascii 로 다시 직렬화하므로 ASCII 밖 글자(UTF-16 한 단위)는 \uXXXX 6바이트 */
+export function estimateJsonBytes(value: unknown): number {
+  const json = JSON.stringify(value);
+  let bytes = 0;
+  for (let i = 0; i < json.length; i++) bytes += json.charCodeAt(i) > 0x7f ? 6 : 1;
+  return bytes;
+}
+
+const APPEND_ENVELOPE_BYTES = 128; // {"version":1,"method":"turns.append","params":{"messages":[…]}} 의 나머지
+
 /**
- * turns.append 한 번에 SYNC_APPEND_CHUNK 개 이하. 수집기는 턴(turnId) 단위로 창과 C4-b 를 판단하므로 턴을 가르지 않는다.
- * 한 턴이 상한보다 길 때만 그 턴을 상한대로 자른다
+ * turns.append 한 번에 SYNC_APPEND_CHUNK 개 이하, 추정 SYNC_APPEND_MAX_BYTES 이하. 수집기는 턴(turnId) 단위로 창과 C4-b 를
+ * 판단하므로 턴을 가르지 않는다. 한 턴이 상한보다 클 때만 그 턴을 메시지 단위로 자른다
  */
 export function appendChunks(messages: CollectedMessage[]): CollectedMessage[][] {
   const turns: CollectedMessage[][] = [];
@@ -124,17 +160,27 @@ export function appendChunks(messages: CollectedMessage[]): CollectedMessage[][]
     if (last && last[0]?.turnId === message.turnId) last.push(message);
     else turns.push([message]);
   }
+  const fits = (count: number, bytes: number) => count <= SYNC_APPEND_CHUNK && bytes <= SYNC_APPEND_MAX_BYTES;
   const chunks: CollectedMessage[][] = [];
   let chunk: CollectedMessage[] = [];
+  let chunkBytes = APPEND_ENVELOPE_BYTES;
+  const flush = () => {
+    if (chunk.length) chunks.push(chunk);
+    chunk = [];
+    chunkBytes = APPEND_ENVELOPE_BYTES;
+  };
+  const add = (message: CollectedMessage, bytes: number) => {
+    if (!fits(chunk.length + 1, chunkBytes + bytes)) flush();
+    chunk.push(message);
+    chunkBytes += bytes;
+  };
   for (const turn of turns) {
-    if (chunk.length && chunk.length + turn.length > SYNC_APPEND_CHUNK) {
-      chunks.push(chunk);
-      chunk = [];
-    }
-    chunk.push(...turn);
-    while (chunk.length > SYNC_APPEND_CHUNK) chunks.push(chunk.splice(0, SYNC_APPEND_CHUNK));
+    const sizes = turn.map((m) => estimateJsonBytes(m) + 1); // + 쉼표
+    const turnBytes = sizes.reduce((a, b) => a + b, 0);
+    if (!fits(chunk.length + turn.length, chunkBytes + turnBytes)) flush(); // 턴 전체가 다음 묶음으로
+    turn.forEach((m, i) => add(m, sizes[i]!)); // 턴 혼자 상한을 넘을 때만 여기서 잘린다
   }
-  if (chunk.length) chunks.push(chunk);
+  flush();
   return chunks;
 }
 
@@ -144,10 +190,23 @@ function isCollecting(status: ExtStatus, now: number) {
   return status.autoCollect && !(end <= now);
 }
 
+/** 수집기 쪽 동기화가 이 확장이 켠 계정으로 켜져 있는지 (상태 폴더를 새로 만들었거나 다른 곳에서 끄면 아니다) */
+const collectorSyncOn = (status: ExtStatus, account: string) => !!status.accountSync?.enabled && status.accountSync.account === account;
+
 /** 실효 커서 = max(창 시작, 커서). 날짜로 비교한다 */
 function effectiveCursor(windows: SyncWindow[], cursor: string | null) {
   const times = [Date.parse(windows[0]?.start ?? ''), cursor ? Date.parse(cursor) : NaN].filter(Number.isFinite);
   return times.length ? Math.max(...times) : -Infinity;
+}
+
+/**
+ * 미완료 턴이 아직 생성 중일 수 있는지(= 남김). inProgressAt 이 10분보다 오래됐으면 멈춘 답으로 보고 커서를 붙잡지 않는다.
+ * inProgressAt 이 없으면(시각 없는 턴) 오래됐는지 알 수 없으므로 남김으로 둔다
+ */
+function stillInProgress(data: SyncConversationData, now: number) {
+  if (!data.inProgress) return false;
+  const at = data.inProgressAt ? Date.parse(data.inProgressAt) : NaN;
+  return !(now - at > SYNC_STALE_IN_PROGRESS_MINUTES * MINUTE);
 }
 
 function tabFailureEnd(run: PassRun, failure: TabFailure): PassEnd {
@@ -162,7 +221,7 @@ function tabFailureEnd(run: PassRun, failure: TabFailure): PassEnd {
     case 'forbidden':
       return { kind: 'rest', reason: 'forbidden', until: now + SYNC_FORBIDDEN_REST_MINUTES * MINUTE };
     case 'logged_out':
-    case 'shape_changed':
+    case 'shape_changed': // 세션·목록 응답의 모양 오류만 여기로 온다 (대화 상세는 대화별 실패)
       return { kind: 'stop', reason: failure.error };
     default:
       return { kind: 'error' };
@@ -189,7 +248,7 @@ async function listTargets(run: PassRun, leader: LeaderTab, gizmoId: string, sin
     let reachedOld = false;
     for (const item of response.data.items) {
       if (Date.parse(item.updateTime) < since) reachedOld = true;
-      else if (!item.isArchived) ids.add(item.id);
+      else if (!item.isArchived && !item.isTemporary) ids.add(item.id);
     }
     const next: string | null = response.data.nextCursor;
     if (reachedOld || !next || seenCursors.has(next)) return [...ids];
@@ -205,12 +264,11 @@ async function fetchDetails(run: PassRun, leader: LeaderTab, windows: SyncWindow
     const response = await leader.request<SyncConversationData>({ type: 'sync.conversation', id, windows });
     await run.ensureCurrent();
     if (!response.ok && response.error === 'not_found') {
-      await run.finishConversation(id, false); // 지운 대화: 건너뜀
+      await run.settled(id, false); // 지운 대화: 건너뜀
       continue;
     }
-    if (!response.ok && response.error === 'network') {
-      run.fail('network');
-      await run.finishConversation(id, true);
+    if (!response.ok && (response.error === 'network' || response.error === 'shape_changed')) {
+      await run.conversationFailed(id, response.error);
       if (leader.lost) return { kind: 'error' }; // 탭이 사라졌으면 남은 대화는 다음 패스에 (요청마다 20초씩 기다리지 않게)
       continue;
     }
@@ -218,12 +276,16 @@ async function fetchDetails(run: PassRun, leader: LeaderTab, windows: SyncWindow
     if (end || !response.ok) return end ?? { kind: 'error' }; // 쉼·멈춤: 이 대화는 pending 에 남는다
     try {
       await run.append(response.data.messages);
-    } catch {
-      run.fail('collector'); // 이 대화는 pending 에 남긴다. 다시 보내도 수집기가 id 로 거른다
+    } catch (error) {
+      run.fail('collector');
+      // 수집기에 닿지 못함: 대화 탓이 아니므로 세지 않고 pending 에 둔다. 다시 보내도 수집기가 id 로 거른다
+      if (error instanceof CollectorUnreachable) return { kind: 'error' };
+      // 거절: 그 대화의 실패로 센다. 거절 까닭이 수집 상태일 수도 있어 남은 대화는 다음 패스에 (한 번에 여러 대화를 세지 않게)
+      await run.conversationFailed(id, 'collector');
       return { kind: 'error' };
     }
     run.stats.conversationsChecked += 1;
-    await run.finishConversation(id, response.data.inProgress);
+    await run.settled(id, stillInProgress(response.data, syncTiming.now()));
   }
   return { kind: 'done' };
 }
@@ -239,13 +301,15 @@ async function runSteps(run: PassRun, state: SyncState): Promise<PassEnd> {
     run.fail('collector');
     return { kind: 'error' };
   }
+  run.status = status;
   if (!isCollecting(status, syncTiming.now())) return { kind: 'stop', reason: 'collection_paused' };
+  if (!collectorSyncOn(status, account)) return { kind: 'stop', reason: 'collector_off' };
   const found = await findLeaderTab<null>({ type: 'sync.session' });
   if (!found) return { kind: 'stop', reason: 'no_tab' };
   await run.ensureCurrent();
   const sessionEnd = tabEnd(run, found.response, account);
   if (sessionEnd) return sessionEnd;
-  // 2. 창 읽기
+  // 2. 창 읽기 (1에서 읽은 상태)
   const windows = status.syncWindows ?? [];
   if (!windows.length) return { kind: 'done' };
   // 3. 대상 고르기 (pending 이 남아 있으면 이어 간다)
@@ -282,12 +346,13 @@ async function finish(run: PassRun, end: PassEnd): Promise<PassResult> {
   }
   await run.save(fields);
   const sync = end.kind === 'stop' && end.reason === 'no_tab' ? 'no-tab' : SYNC_OF[end.kind];
-  return { sync, newTurns: run.newTurns };
+  return { sync, newTurns: run.newTurns, status: run.status };
 }
 
 async function pass(): Promise<PassResult> {
   const state = await syncStateItem.getValue();
-  if (!state.enabled || !state.project || !state.account) return { sync: 'off', newTurns: 0 };
+  // 끄기를 수집기에 아직 전하지 못했으면(collectorOffPending) 돌지 않는다
+  if (!state.enabled || state.collectorOffPending || !state.project || !state.account) return { sync: 'off', newTurns: 0 };
   const now = syncTiming.now();
   if (state.restUntil && Date.parse(state.restUntil) > now) return { sync: 'resting', newTurns: 0 };
   const run = new PassRun(state, now);
@@ -297,11 +362,11 @@ async function pass(): Promise<PassResult> {
   } catch (error) {
     if (error instanceof Superseded) {
       const latest = await syncStateItem.getValue();
-      return { sync: latest.enabled ? 'busy' : 'off', newTurns: run.newTurns };
+      return { sync: latest.enabled ? 'busy' : 'off', newTurns: run.newTurns, status: run.status };
     }
     // 예상 못 한 실패(저장소 등): 다음 알람이 다시 돌도록 idle 로 둔다
     await run.save({ mode: 'idle', lastPassFinishedAt: iso(syncTiming.now()) }).catch(() => {});
-    return { sync: 'failed', newTurns: run.newTurns };
+    return { sync: 'failed', newTurns: run.newTurns, status: run.status };
   }
 }
 

@@ -2,14 +2,14 @@
 // 로컬 수집기(native host)와 chatgpt.com 탭의 콘텐츠 스크립트(sync.* 응답)는 모두 가짜로 둔다
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { EXT_SYNC_NOW, type ExtStatus, type SyncNowResult } from '@shared/bridge';
+import { EXT_SYNC_NOW, type AccountSyncState, type ExtStatus, type SyncNowResult } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
 import { resetLeaderTabMemory } from '@/lib/chatgpt-sync/leader-tab';
-import { appendChunks, runSyncPass, syncLeftoverItem, syncTiming } from '@/lib/chatgpt-sync/pass';
-import { SYNC_SET_ERRORS } from '@/lib/chatgpt-sync/scheduler';
-import { SYNC_ALARM, SYNC_DEFAULTS, syncStateItem, type SyncState } from '@/lib/chatgpt-sync/state';
-import type { SyncConversationRef, TabSyncRequest } from '@/lib/messages';
+import { appendChunks, estimateJsonBytes, runSyncPass, syncLeftoverItem, syncTiming } from '@/lib/chatgpt-sync/pass';
+import { SYNC_OFF_PENDING_ERROR, SYNC_SET_ERRORS } from '@/lib/chatgpt-sync/scheduler';
+import { SYNC_ALARM, SYNC_APPEND_MAX_BYTES, SYNC_DEFAULTS, syncStateItem, type SyncState } from '@/lib/chatgpt-sync/state';
+import type { SyncConversationData, SyncConversationRef, TabSyncRequest } from '@/lib/messages';
 import { settingsItem } from '@/lib/settings';
 import { LOCAL_WEB_URL } from '@/lib/web-url';
 
@@ -31,6 +31,8 @@ let statusPatch: Partial<ExtStatus> = {};
 let oldCollector = false;
 let outsideWindowPerAppend = 0;
 let nativeOverrides: Record<string, object> = {};
+// 수집기의 accountSync. collection.configure 가 바꾼다 (켬 = 켬 시각을 새로 찍음, 끔 = 계정만 남김)
+let collectorSync: AccountSyncState | null = null;
 
 function collectorStatus(): ExtStatus {
   const status: ExtStatus = {
@@ -46,8 +48,8 @@ function collectorStatus(): ExtStatus {
     userName: '나',
     projectTopic: '주제',
     recent: [],
-    syncWindows: [{ start: at(-120), end: at(24 * 60) }],
-    accountSync: { enabled: true, account: ACCOUNT, since: at(-120) },
+    syncWindows: collectorSync?.enabled ? [{ start: at(-120), end: at(24 * 60) }] : [],
+    accountSync: collectorSync,
     ...statusPatch,
   };
   if (oldCollector) {
@@ -64,8 +66,13 @@ async function fakeCollector(_host: string, request: NativeRequest) {
   switch (request.method) {
     case 'candidates.list':
       return { ok: true, result: { cards: [], status: collectorStatus() } };
+    case 'collection.configure': {
+      const patch = request.params.accountSync as { enabled: boolean; account?: string } | undefined;
+      if (patch?.enabled) collectorSync = { enabled: true, account: patch.account!, since: at(0) };
+      else if (patch) collectorSync = collectorSync && { ...collectorSync, enabled: false, since: null };
+      return { ok: true, result: collectorStatus() };
+    }
     case 'collection.status':
-    case 'collection.configure':
       return { ok: true, result: collectorStatus() };
     case 'turns.append': {
       const messages = request.params.messages!;
@@ -97,10 +104,11 @@ type TabReply = object | 'silent' | 'closed' | (() => Promise<object>);
 let tabOverrides: Record<string, TabReply> = {};
 let silentTabs = new Set<number>();
 
-const ref = (id: string, minutes: number, isArchived = false): SyncConversationRef => ({
+const ref = (id: string, minutes: number, isArchived = false, isTemporary = false): SyncConversationRef => ({
   id,
   updateTime: at(minutes),
   isArchived,
+  isTemporary,
   gizmoId: PROJECT.gizmoId,
 });
 
@@ -118,6 +126,12 @@ function syncMessages(conversationId: string, turns: number): CollectedMessage[]
 }
 
 const okTab = <T>(data: T) => ({ ok: true, account: tabAccount, data });
+const conversationData = (id: string, turns = 1, inProgressAt: string | null = null): SyncConversationData => ({
+  messages: syncMessages(id, turns),
+  inProgress: inProgressAt !== null,
+  inProgressAt,
+  skippedNoTime: 0,
+});
 const tabError = (error: string, extra: object = {}) => ({ ok: false, error, ...extra });
 
 function defaultReply(request: TabSyncRequest): object {
@@ -131,7 +145,7 @@ function defaultReply(request: TabSyncRequest): object {
       return okTab({ items: projectPages[index] ?? [], nextCursor: index + 1 < projectPages.length ? `p${index + 1}` : null });
     }
     case 'sync.conversation':
-      return okTab({ messages: syncMessages(request.id, conversationTurns[request.id] ?? 1), inProgress: false, skippedNoTime: 0 });
+      return okTab(conversationData(request.id, conversationTurns[request.id] ?? 1));
   }
 }
 
@@ -177,6 +191,7 @@ beforeEach(async () => {
   oldCollector = false;
   outsideWindowPerAppend = 0;
   nativeOverrides = {};
+  collectorSync = { enabled: true, account: ACCOUNT, since: at(-120) };
   tabs = [{ id: 11, active: true, url: 'https://chatgpt.com/g/g-p-team/project' }];
   tabAccount = ACCOUNT;
   projectPages = [[ref('c1', -10)]];
@@ -208,7 +223,7 @@ describe('커서', () => {
 
   it('첫 패스는 창 시작부터 보고, 끝나면 커서를 패스 시작 − 10분으로 올린다', async () => {
     projectPages = [[ref('c1', -10), ref('c2', -100)], [ref('c3', -110), ref('c-before', -130)], [ref('c-never', -200)]];
-    expect(await runSyncPass()).toEqual({ sync: 'ran', newTurns: 3 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 3 });
     expect(detailIds()).toEqual(['c1', 'c2', 'c3']); // 창 시작(-120분)보다 오래된 항목에서 멈춘다
     expect(pageCalls()).toHaveLength(2); // 그 쪽까지만 읽고 다음 쪽은 읽지 않는다
     expect(await state()).toMatchObject({ mode: 'idle', cursor: at(-10), pending: [], pendingPassStartedAt: null, lastError: null });
@@ -231,10 +246,24 @@ describe('커서', () => {
   it('생성 중인 답변이 있으면 그 대화를 남김으로 빼고 커서를 올리지 않는다', async () => {
     await enabled({ cursor: at(-60) });
     projectPages = [[ref('c1', -5), ref('c2', -6)]];
-    tabOverrides['conv:c1'] = okTab({ messages: syncMessages('c1', 1), inProgress: true, skippedNoTime: 0 });
+    tabOverrides['conv:c1'] = okTab(conversationData('c1', 1, at(-2)));
     expect(await runSyncPass()).toMatchObject({ sync: 'ran' });
     expect(appendCalls()).toHaveLength(2); // 완료된 턴은 보낸다
     expect(await state()).toMatchObject({ cursor: at(-60), pending: [], pendingPassStartedAt: null });
+  });
+
+  it('미완료 턴이 10분보다 오래됐으면(멈춘 답) 남김으로 보지 않고 커서를 올린다', async () => {
+    await enabled({ cursor: at(-60) });
+    tabOverrides['conv:c1'] = okTab(conversationData('c1', 1, at(-11)));
+    await runSyncPass();
+    expect(await state()).toMatchObject({ cursor: at(-10) });
+  });
+
+  it('미완료 턴의 시각을 모르면(inProgressAt 없음) 남김으로 둔다', async () => {
+    await enabled({ cursor: at(-60) });
+    tabOverrides['conv:c1'] = okTab({ ...conversationData('c1'), inProgress: true, inProgressAt: null });
+    await runSyncPass();
+    expect(await state()).toMatchObject({ cursor: at(-60) });
   });
 
   it('남김이 앞 패스에 있었으면 다음 패스가 pending 을 비워도 커서를 올리지 않는다', async () => {
@@ -254,11 +283,69 @@ describe('커서', () => {
     expect(detailIds()[0]).toBe('c0');
   });
 
-  it('수집기가 거절하면 그 대화를 pending 에 두고 커서를 올리지 않는다', async () => {
+  it('수집기가 그 대화의 turns.append 를 거절하면 대화별 실패로 세고 남김으로 둔다, 남은 대화는 다음 패스에', async () => {
     await enabled({ cursor: at(-60) });
-    nativeOverrides['turns.append'] = { ok: false, error: '수집이 활성화되지 않았습니다.' };
-    expect(await runSyncPass()).toEqual({ sync: 'failed', newTurns: 0 });
-    expect(await state()).toMatchObject({ pending: ['c1'], cursor: at(-60), mode: 'idle', lastError: { code: 'collector' } });
+    projectPages = [[ref('c1', -1), ref('c2', -2)]];
+    nativeOverrides['turns.append'] = { ok: false, error: '요청이 너무 큽니다.' };
+    expect(await runSyncPass()).toMatchObject({ sync: 'failed', newTurns: 0 });
+    expect(detailIds()).toEqual(['c1']);
+    expect(await state()).toMatchObject({ pending: ['c2'], failures: { c1: 1 }, cursor: at(-60), mode: 'idle', lastError: { code: 'collector' } });
+    expect(await syncLeftoverItem.getValue()).toBe(true);
+  });
+
+  it('수집기에 닿지 못하면 대화 탓으로 세지 않고 pending 에 둔다', async () => {
+    await enabled({ cursor: at(-60) });
+    vi.mocked(fakeBrowser.runtime.sendNativeMessage).mockImplementation((async (host: string, request: NativeRequest) => {
+      if (request.method === 'turns.append') throw new Error('Native host has exited.');
+      return fakeCollector(host, request);
+    }) as never);
+    expect(await runSyncPass()).toMatchObject({ sync: 'failed' });
+    expect(await state()).toMatchObject({ pending: ['c1'], failures: {}, lastError: { code: 'collector' } });
+  });
+});
+
+describe('대화별 실패', () => {
+  beforeEach(() => enabled({ cursor: at(-60) }));
+
+  it('대화 상세의 shape_changed 는 멈춤이 아니라 그 대화만 실패로 센다', async () => {
+    projectPages = [[ref('c1', -1), ref('c2', -2), ref('c3', -3)]];
+    tabOverrides['conv:c2'] = tabError('shape_changed');
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 2 });
+    expect(detailIds()).toEqual(['c1', 'c2', 'c3']);
+    expect(await state()).toMatchObject({ mode: 'idle', stopReason: null, pending: [], failures: { c2: 1 }, cursor: at(-60) });
+  });
+
+  it('3번째 실패는 건너뜀: 커서를 붙잡지 않고 lastError·skippedConversations 에 남긴다', async () => {
+    projectPages = [[ref('c-bad', -1), ref('c-ok', -2)]];
+    tabOverrides['conv:c-bad'] = tabError('shape_changed');
+    await runSyncPass();
+    await runSyncPass();
+    expect(await state()).toMatchObject({ failures: { 'c-bad': 2 }, cursor: at(-60) });
+    clock += 5 * MIN;
+    await runSyncPass();
+    const third = await state();
+    expect(third).toMatchObject({ failures: { 'c-bad': 3 }, cursor: at(-10), lastError: { code: 'shape_changed' } });
+    expect(third.stats.skippedConversations).toBe(1);
+    expect(detailIds().filter((id) => id === 'c-ok')).toHaveLength(3); // 다른 대화는 매 패스 받는다
+  });
+
+  it('건너뛴 대화가 나중에 바뀌어 목록에 다시 오르면 다시 시도하고, 받으면 실패 수를 지운다', async () => {
+    await enabled({ cursor: at(-60), failures: { c1: 3 } });
+    await runSyncPass();
+    expect(await state()).toMatchObject({ failures: {} });
+    expect(appendCalls()).toHaveLength(1);
+  });
+
+  it('network 실패도 대화별로 센다', async () => {
+    tabOverrides['conv:c1'] = tabError('network');
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran' });
+    expect(await state()).toMatchObject({ failures: { c1: 1 }, pending: [], cursor: at(-60), lastError: { code: 'network' } });
+  });
+
+  it('켜면 failures 를 비운다', async () => {
+    await enabled({ failures: { c9: 2 } });
+    await send({ type: 'syncSet', enabled: true, project: PROJECT }, fromPopup());
+    expect((await state()).failures).toEqual({});
   });
 });
 
@@ -292,6 +379,12 @@ describe('대화 상세', () => {
     expect(sleeps[1]).toBeLessThanOrEqual(2000);
   });
 
+  it('임시 채팅은 대상에서 뺀다', async () => {
+    projectPages = [[ref('c1', -1), ref('c-temp', -2, false, true)]];
+    await runSyncPass();
+    expect(detailIds()).toEqual(['c1']);
+  });
+
   it('보관한 대화는 대상에서 빼고, 같은 id 는 한 번만 넣는다', async () => {
     projectPages = [[ref('c1', -1), ref('c-archived', -2, true), ref('c2', -3)], [ref('c1', -4), ref('c3', -5)]];
     await runSyncPass();
@@ -301,7 +394,7 @@ describe('대화 상세', () => {
   it('지운 대화(not_found)는 건너뛰고 남김으로 세지 않는다', async () => {
     projectPages = [[ref('c-gone', -1), ref('c2', -2)]];
     tabOverrides['conv:c-gone'] = tabError('not_found');
-    expect(await runSyncPass()).toEqual({ sync: 'ran', newTurns: 1 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 1 });
     expect(await state()).toMatchObject({ pending: [], cursor: at(-10) });
   });
 
@@ -309,7 +402,7 @@ describe('대화 상세', () => {
     projectPages = [[ref('c1', -1)]];
     conversationTurns.c1 = 150; // 메시지 300개
     outsideWindowPerAppend = 2;
-    expect(await runSyncPass()).toEqual({ sync: 'ran', newTurns: 150 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 150 });
     expect(appendCalls().map((c) => c.params.messages!.length)).toEqual([200, 100]);
     expect(appendCalls().every((c) => !('flush' in c.params))).toBe(true);
     expect((await state()).stats).toMatchObject({ passes: 1, conversationsChecked: 1, turnsSent: 150, outsideWindow: 4 });
@@ -321,6 +414,19 @@ describe('대화 상세', () => {
     const messages = [...syncMessages('c', 99), ...longTurn]; // 198 + 3
     const chunks = appendChunks(messages);
     expect(chunks.map((c) => c.length)).toEqual([198, 3]);
+    expect(chunks.flat()).toEqual(messages);
+  });
+
+  it('추정 크기가 2.5 MiB 를 넘지 않게 나누고, ASCII 밖 글자는 6바이트로 센다', () => {
+    expect(estimateJsonBytes('가a')).toBe(1 + 6 + 1 + 1); // "가a"
+    const big = '가'.repeat(19_999) + '…'; // 탭이 자른 최대 본문 (약 120 KB)
+    const messages = syncMessages('k', 30).map((m) => ({ ...m, text: big })); // 60개, 약 7 MB
+    const chunks = appendChunks(messages);
+    expect(chunks.length).toBeGreaterThanOrEqual(3);
+    for (const chunk of chunks) {
+      expect(estimateJsonBytes({ messages: chunk })).toBeLessThanOrEqual(SYNC_APPEND_MAX_BYTES);
+      expect(chunk.length % 2).toBe(0); // 질문·답 한 턴을 가르지 않는다
+    }
     expect(chunks.flat()).toEqual(messages);
   });
 
@@ -338,7 +444,7 @@ describe('대화 상세', () => {
 
   it('동기화 창이 비었으면 목록을 읽지 않고 끝낸다', async () => {
     statusPatch = { syncWindows: [] };
-    expect(await runSyncPass()).toEqual({ sync: 'ran', newTurns: 0 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 0 });
     expect(pageCalls()).toHaveLength(0);
   });
 });
@@ -349,17 +455,17 @@ describe('쉼', () => {
   it('429 에 Retry-After 가 있으면 그만큼 쉬고, 쉬는 동안 패스를 건너뛴다', async () => {
     projectPages = [[ref('c1', -1), ref('c2', -2)]];
     tabOverrides['conv:c2'] = tabError('rate_limited', { retryAfterSec: 90 });
-    expect(await runSyncPass()).toEqual({ sync: 'resting', newTurns: 1 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'resting', newTurns: 1 });
     expect(await state()).toMatchObject({ mode: 'rest', restReason: 'rate_limited', restUntil: at(1.5), pending: ['c2'], cursor: null });
 
     tabCalls.length = 0;
     clock += MIN;
-    expect(await runSyncPass()).toEqual({ sync: 'resting', newTurns: 0 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'resting', newTurns: 0 });
     expect(tabCalls).toHaveLength(0);
 
     clock += MIN; // 쉼이 끝나면 pending 부터 이어 간다
     delete tabOverrides['conv:c2'];
-    expect(await runSyncPass()).toEqual({ sync: 'ran', newTurns: 1 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'ran', newTurns: 1 });
     expect(await state()).toMatchObject({ mode: 'idle', restUntil: null, restReason: null, pending: [] });
   });
 
@@ -415,11 +521,29 @@ describe('멈춤', () => {
     expect(appendCalls()).toHaveLength(0);
   });
 
-  it('응답 모양이 바뀌면 shape_changed, 그 대화는 pending 에 남는다', async () => {
-    projectPages = [[ref('c1', -1), ref('c2', -2)]];
-    tabOverrides['conv:c2'] = tabError('shape_changed');
+  it('세션 응답 모양이 바뀌면 shape_changed', async () => {
+    tabOverrides['sync.session'] = tabError('shape_changed');
     await runSyncPass();
-    expect(await state()).toMatchObject({ mode: 'stopped', stopReason: 'shape_changed', pending: ['c2'] });
+    expect(await state()).toMatchObject({ mode: 'stopped', stopReason: 'shape_changed' });
+  });
+
+  it('목록 응답 모양이 바뀌면 shape_changed, 모은 대상은 버린다', async () => {
+    projectPages = [[ref('c1', -1)], [ref('c2', -2)]];
+    tabOverrides['page:p1'] = tabError('shape_changed');
+    await runSyncPass();
+    expect(await state()).toMatchObject({ mode: 'stopped', stopReason: 'shape_changed', pending: [] });
+    expect(detailIds()).toEqual([]);
+  });
+
+  it.each([
+    ['꺼짐', { enabled: false, account: ACCOUNT, since: null }],
+    ['없음(상태 폴더를 새로 만듦)', null],
+    ['다른 계정', { enabled: true, account: OTHER_ACCOUNT, since: null }],
+  ])('수집기 accountSync 가 %s 이면 탭에 묻지 않고 collector_off', async (_name, accountSync) => {
+    statusPatch = { accountSync, syncWindows: [] };
+    expect(await runSyncPass()).toMatchObject({ sync: 'failed' });
+    expect(await state()).toMatchObject({ mode: 'stopped', stopReason: 'collector_off' });
+    expect(tabCalls).toHaveLength(0);
   });
 
   it('멈춘 뒤 다음 알람은 다시 확인하고, 고쳐졌으면 돈다', async () => {
@@ -466,7 +590,7 @@ describe('대표 탭', () => {
     tabOverrides['conv:c2'] = 'closed';
     expect(await runSyncPass()).toMatchObject({ sync: 'failed' });
     expect(detailIds()).toEqual(['c1', 'c2']);
-    expect(await state()).toMatchObject({ pending: ['c3'], lastError: { code: 'network' } });
+    expect(await state()).toMatchObject({ pending: ['c3'], failures: { c2: 1 }, lastError: { code: 'network' } });
     expect(await syncLeftoverItem.getValue()).toBe(true);
   });
 });
@@ -479,7 +603,7 @@ describe('한 번에 한 패스', () => {
     tabOverrides['sync.session'] = () => new Promise((resolve) => (answerSession = resolve));
     const first = runSyncPass();
     await vi.waitFor(() => expect(tabCalls).toHaveLength(1));
-    expect(await runSyncPass()).toEqual({ sync: 'busy', newTurns: 0 });
+    expect(await runSyncPass()).toMatchObject({ sync: 'busy', newTurns: 0 });
     expect((await state()).mode).toBe('running');
     answerSession(okTab(null));
     expect(await first).toMatchObject({ sync: 'ran' });
@@ -494,7 +618,7 @@ describe('한 번에 한 패스', () => {
     const pass = runSyncPass();
     await vi.waitFor(() => expect(detailIds()).toEqual(['c1']));
     expect(await send({ type: 'syncSet', enabled: false }, fromPopup())).toMatchObject({ ok: true });
-    answerC1(okTab({ messages: syncMessages('c1', 1), inProgress: false, skippedNoTime: 0 }));
+    answerC1(okTab(conversationData('c1')));
     expect(await pass).toMatchObject({ sync: 'off' });
     expect(detailIds()).toEqual(['c1']);
     expect(appendCalls()).toHaveLength(0); // 끈 뒤에 받은 대화는 보내지 않는다
@@ -547,15 +671,27 @@ describe('syncNow (싱크 맞추기)', () => {
     expect((await syncNow()).result).toMatchObject({ sync: 'failed', flushed: true });
   });
 
-  it('수집 중이 아니면 flush 하지 않고 sendBlockedReason 문구를 돌려준다', async () => {
-    await settingsItem.setValue({ ...(await settingsItem.getValue()), autoCollect: false });
+  it('패스를 돌지 않았으면 collection.status 를 새로 읽어 판단한다: 수집 중이 아니면 flush 하지 않고 sendBlockedReason 문구', async () => {
+    statusPatch = { autoCollect: false }; // 캐시된 설정은 아직 수집 중
     expect((await syncNow()).result).toEqual({
       sync: 'off',
       newTurns: 0,
       flushed: false,
       blockedReason: '수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요',
     });
-    expect(calledMethods()).not.toContain('collection.flush');
+    expect(calledMethods()).toEqual(['collection.status']);
+  });
+
+  it('이번 패스가 읽은 상태를 그대로 쓰고, 수집 중이 아니어도 패스 결과를 돌려준다', async () => {
+    await enabled();
+    statusPatch = { autoCollect: false };
+    expect((await syncNow()).result).toMatchObject({ sync: 'failed', newTurns: 0, flushed: false });
+    expect(calledMethods()).toEqual(['collection.status']); // 패스가 한 번 읽고 끝
+  });
+
+  it('캐시된 설정이 수집 중이 아니어도 지금 상태가 수집 중이면 flush 한다', async () => {
+    await settingsItem.setValue({ ...(await settingsItem.getValue()), autoCollect: false });
+    expect((await syncNow()).result).toMatchObject({ sync: 'off', flushed: true });
   });
 
   it('채팅 화면에서도 받는다', async () => {
@@ -570,11 +706,12 @@ describe('syncNow (싱크 맞추기)', () => {
     expect(calledMethods()).not.toContain(EXT_SYNC_NOW);
   });
 
-  it('웹의 flush 실패는 웹에만 돌려준다', async () => {
+  it('flush 가 실패해도 패스 결과는 잃지 않고 실패 문구를 blockedReason 으로 돌려준다', async () => {
     await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl: LOCAL_WEB_URL });
+    await enabled();
     nativeOverrides['collection.flush'] = { ok: false, error: '수집이 활성화되지 않았습니다.' };
     const response = await send({ type: 'rpc', method: EXT_SYNC_NOW, params: { reason: 'button' } }, fromPage('http://localhost:3000/review'));
-    expect(response).toEqual({ ok: false, error: '수집이 활성화되지 않았습니다.' });
+    expect(response).toEqual({ ok: true, result: { sync: 'ran', newTurns: 1, flushed: false, blockedReason: '수집이 활성화되지 않았습니다.' } });
   });
 
   it('믿지 않는 웹 출처는 거절한다', async () => {
@@ -587,13 +724,64 @@ describe('syncSet (프로젝트만 수집 켬·끔)', () => {
   const syncSet = (enabledFlag: boolean, project?: object, sender: object = fromPopup()) =>
     send({ type: 'syncSet', enabled: enabledFlag, project }, sender) as Promise<{ ok: boolean; result?: SyncState; error?: string }>;
 
+  const configureCalls = () => nativeCalls.filter((c) => c.method === 'collection.configure').map((c) => c.params);
+
   it('켜면 계정을 수집기에 묶고, 상태를 저장하고, 알람을 만들고, 패스를 한 번 돈다', async () => {
+    collectorSync = null; // 한 번도 켠 적 없음
     const response = await syncSet(true, PROJECT);
     expect(response.ok).toBe(true);
-    expect(nativeCalls.find((c) => c.method === 'collection.configure')!.params).toEqual({ accountSync: { enabled: true, account: ACCOUNT } });
+    expect(configureCalls()).toEqual([{ accountSync: { enabled: true, account: ACCOUNT } }]);
     expect(response.result).toMatchObject({ enabled: true, project: PROJECT, account: ACCOUNT, enabledAt: at(0), mode: 'idle', cursor: at(-10) });
     expect(detailIds()).toEqual(['c1']);
     expect(await fakeBrowser.alarms.get(SYNC_ALARM)).toMatchObject({ periodInMinutes: 5 });
+  });
+
+  it('수집기가 이미 켜져 있으면 먼저 끄고 켠다 (켬 시각을 새로 찍게)', async () => {
+    await syncSet(true, PROJECT); // 가짜 수집기는 처음부터 켜져 있다
+    expect(configureCalls()).toEqual([{ accountSync: { enabled: false } }, { accountSync: { enabled: true, account: ACCOUNT } }]);
+  });
+
+  it('끄기를 수집기에 못 전하면 collectorOffPending 으로 두고, 그동안 패스를 돌지 않는다', async () => {
+    await enabled();
+    let offFails = true;
+    let offAttempts = 0;
+    vi.mocked(fakeBrowser.runtime.sendNativeMessage).mockImplementation((async (host: string, request: NativeRequest) => {
+      if (request.method === 'collection.configure') {
+        offAttempts += 1;
+        if (offFails) throw new Error('Native host has exited.');
+      }
+      return fakeCollector(host, request);
+    }) as never);
+    expect(await syncSet(false)).toEqual({ ok: false, error: SYNC_OFF_PENDING_ERROR });
+    expect(await state()).toMatchObject({ enabled: false, mode: 'off', collectorOffPending: true });
+    expect(await fakeBrowser.alarms.get(SYNC_ALARM)).toBeUndefined();
+    expect(await runSyncPass()).toMatchObject({ sync: 'off' });
+
+    // 30초 refresh 알람마다 다시 보낸다: 아직 실패하면 그대로 두고, 성공하면 지운다
+    const refreshAlarm = () => fakeBrowser.alarms.onAlarm.trigger({ name: 'refresh', scheduledTime: clock, persistAcrossSessions: false });
+    await refreshAlarm();
+    await vi.waitFor(() => expect(offAttempts).toBe(2));
+    await settle();
+    expect((await state()).collectorOffPending).toBe(true);
+    offFails = false;
+    await refreshAlarm();
+    await vi.waitFor(async () => expect((await state()).collectorOffPending).toBe(false));
+    expect(offAttempts).toBe(3);
+    expect(collectorSync).toMatchObject({ enabled: false });
+  });
+
+  it('서비스 워커가 시작할 때 못 전한 끄기를 다시 보낸다', async () => {
+    await syncStateItem.setValue({ ...SYNC_DEFAULTS, collectorOffPending: true });
+    background.main();
+    await vi.waitFor(async () => expect((await state()).collectorOffPending).toBe(false));
+    expect(configureCalls()).toEqual([{ accountSync: { enabled: false } }]);
+  });
+
+  it('못 전한 끄기가 있으면 다음 켬 직전에 끄기부터 보낸다 (수집기가 꺼졌다고 답해도)', async () => {
+    await syncStateItem.setValue({ ...SYNC_DEFAULTS, collectorOffPending: true });
+    collectorSync = { enabled: false, account: ACCOUNT, since: null };
+    expect(await syncSet(true, PROJECT)).toMatchObject({ ok: true, result: { enabled: true, collectorOffPending: false } });
+    expect(configureCalls()).toEqual([{ accountSync: { enabled: false } }, { accountSync: { enabled: true, account: ACCOUNT } }]);
   });
 
   it('응답하는 탭이 없으면 탭을 열라고 한다', async () => {
