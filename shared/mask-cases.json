@@ -261,6 +261,11 @@
     {"name": "인터넷전화 070", "input": "상담 070 1234 5678", "absent": ["1234 5678"], "present": ["[연락처]"], "masked": true},
     {"name": "띄어 쓴 이메일", "input": "결과물은 park.ux @ daum-example.net로 보내 줘", "absent": ["park.ux", "daum-example"], "present": ["[이메일]로 보내 줘"], "masked": true},
     {"name": "띄어 쓴 계좌", "input": "회비는 352 0123 4567 83로 보내 줘", "absent": ["0123 4567"], "present": ["회비는 [계좌]로 보내 줘"], "masked": true},
-    {"name": "과잉 가림 없음: 띄어 쓴 날짜는 계좌가 아니다", "input": "발표는 2026 11 16 오후 2시", "absent": [], "present": ["발표는 2026 11 16 오후 2시"], "masked": false}
+    {"name": "과잉 가림 없음: 띄어 쓴 날짜는 계좌가 아니다", "input": "발표는 2026 11 16 오후 2시", "absent": [], "present": ["발표는 2026 11 16 오후 2시"], "masked": false},
+    {"name": "라벨 값의 쉼표 뒤까지", "input": "건강정보: 당뇨, 고혈압. 회의는 내일", "absent": ["당뇨", "고혈압"], "present": ["건강정보: [건강정보]", "회의는 내일"], "masked": true},
+    {"name": "주소 라벨 값의 쉼표 뒤 층수", "input": "주소: 가상구 가상로 12, 3층. 여기서 모이자", "absent": ["가상로", "3층"], "present": ["[주소]", "여기서 모이자"], "masked": true},
+    {"name": "한국어 비밀번호 이름", "input": "DB 비밀번호: qwer1234 로 접속해", "absent": ["qwer1234"], "present": ["비밀번호: [비밀번호]"], "masked": true},
+    {"name": "한국어 비번 조사", "input": "서버 비번은 Abc!2026 이야", "absent": ["Abc!2026"], "present": ["비번은 [비밀번호]"], "masked": true},
+    {"name": "과잉 가림 없음: 비밀번호 규칙 설명", "input": "비밀번호는 8자리 이상으로 하자", "absent": [], "present": ["비밀번호는 8자리 이상으로 하자"], "masked": false}
   ]
 }

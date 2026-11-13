@@ -62,7 +62,8 @@ SENSITIVE: list[tuple[re.Pattern, object]] = [
     (re.compile(r'''(\b(?:\w*_)?(?:token|secret|api[_-]?key|passw(?:or)?d)["']?\s*[:=]\s*)(["'])(?!\[)([^"'\r\n]+)\2''', re.I | re.A),
      _quoted_secret),
     (re.compile(r'''((?:주소|건강정보|개인사정)\s*[:=]\s*)(["'])(?!\[)([^"'\r\n]+)\2'''), _quoted_label_value),
-    (re.compile(r'((?:주소|건강정보|개인사정)\s*[:=]\s*)(?![\s\["\x27])[^\n\r.;,"\x27]+'), _label_value),
+    # 쉼표에서 멈추지 않는다 ('건강정보: 당뇨, 고혈압', '주소: ○○로 12, 3층'). 마침표·세미콜론·줄바꿈에서 끝
+    (re.compile(r'((?:주소|건강정보|개인사정)\s*[:=]\s*)(?![\s\["\x27])[^\n\r.;"\x27]+'), _label_value),
     # ── 인증정보 ──
     (re.compile(r"(?<![A-Za-z0-9_-])sk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}|(?=\.{3}|…))" + _TAIL), "[API키]"),
     (re.compile(r"(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})" + _TAIL), "[액세스토큰]"),
@@ -75,6 +76,9 @@ SENSITIVE: list[tuple[re.Pattern, object]] = [
         r"[^" + _VALUE_END + r"]{4,}",
         re.I | re.A),
      _keyed_secret),
+    # 한국어 이름: '비밀번호: qwer1234', '서버 비번은 qwer1234'. 영문·숫자 값만 ('비밀번호는 8자리로'는 그대로)
+    (re.compile(r"((?:비밀\s*번호|비번|패스워드)(?:\s*[:=]\s*|[은는]\s+))(?!\[)[A-Za-z0-9!@#$%^&*._+-]{4,}"),
+     lambda m: m.group(1) + "[비밀번호]"),
     # ── 개인정보 ──
     # 국제 표기(+82)와 지역번호 유선전화(02·031·070 …)도 연락처다. 계좌 규칙보다 먼저 둔다.
     (re.compile(r"(?<!\d)\+82[-.\s]?0?(?:1[016789]|2|[3-6][1-5]|70)[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)"), "[연락처]"),
