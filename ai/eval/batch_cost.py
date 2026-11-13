@@ -46,60 +46,65 @@ def _clean(m: dict) -> dict:
     return {k: v for k, v in m.items() if not k.startswith("_") and k != "member"}
 
 
+def _batches(msgs: list[dict], size: int) -> list[tuple[list[dict], list[dict], list[int], bool]]:
+    """수집기처럼 발화를 하나씩 쌓으며 나가는 묶음들. (묶음, 앞 묶음, 기다린 턴들, 종료 때 나갔는지)"""
+    out, pending, previous = [], [], []
+    arrived, seen = {}, 0  # 사용자 발화 id → 들어왔을 때까지의 턴 수
+    for m in msgs:
+        pending.append(_clean(m))
+        if m["role"] == "user":
+            seen += 1
+            arrived[m["id"]] = seen
+        ready, pending = take_ready_batches(pending, size)
+        for batch in ready:
+            waited = [seen - arrived[x["id"]] for x in batch if x["id"] in arrived]
+            out.append((batch, previous, waited, False))
+            previous = batch
+    if pending:  # 수집 종료: 남은 발화를 한 번에 보낸다
+        out.append((pending, previous, [], True))
+    return out
+
+
 def simulate(size: int, llm=None, decider=None) -> dict:
     system_chars = len(_system_prompt())
-    preds, seconds, failed, all_msgs, all_gold = [], [], 0, [], []
-    calls, chars, waits, flushed, user_msgs, turns = 0, 0, [], 0, 0, 0
+    calls = chars = turns = user_msgs = sent_at_end = failed = 0
+    waits, seconds, preds = [], [], []
+    all_msgs, all_gold = [], []
     for context, msgs, gold in _streams():
         all_msgs += msgs
         all_gold += gold
-        pending, previous, arrived = [], [], {}  # arrived: 사용자 발화 id → 들어왔을 때까지의 턴 수
-        seen_turns = 0
-        for m in msgs:
-            pending.append(_clean(m))
-            if m["role"] == "user":
-                seen_turns += 1
-                arrived[m["id"]] = seen_turns
-            ready, pending = take_ready_batches(pending, size)
-            for batch in ready:
-                prompt, _ = build_user_prompt(context, batch, context_tail(previous))
-                calls, chars = calls + 1, chars + system_chars + len(prompt)
-                waits += [seen_turns - arrived[x["id"]] for x in batch if x["id"] in arrived]
-                failed += _classify(context, batch, previous, llm, decider, preds, seconds)
-                previous = batch
-        if pending:  # 수집 종료: 남은 발화를 한 번에 보낸다
-            prompt, _ = build_user_prompt(context, pending, context_tail(previous))
-            calls, chars = calls + 1, chars + system_chars + len(prompt)
-            flushed += sum(1 for x in pending if x["id"] in arrived)
-            failed += _classify(context, pending, previous, llm, decider, preds, seconds)
-        user_msgs += len(arrived)
         turns += len(group_turns([_clean(m) for m in msgs]))
+        user_msgs += sum(1 for m in msgs if m["role"] == "user")
+        for batch, previous, waited, at_end in _batches(msgs, size):
+            prompt, _ = build_user_prompt(context, batch, context_tail(previous))
+            calls += 1
+            chars += system_chars + len(prompt)
+            waits += waited
+            if at_end:
+                sent_at_end += sum(1 for m in batch if m["role"] == "user")
+            if llm is not None:
+                cards, took, ok = _classify(context, batch, previous, llm, decider)
+                preds += cards
+                seconds.append(took)
+                failed += 0 if ok else 1
     per100 = 100 / max(turns, 1)
-    return {"turns_per_batch": size, "turns": turns, "calls": calls, "calls_per_100_turns": round(calls * per100, 1),
-            "chars_per_call": round(chars / max(calls, 1)), "chars_per_100_turns": round(chars * per100),
-            "avg_wait_turns": round(sum(waits) / max(len(waits), 1), 2),
-            "sent_only_at_end": round(flushed / max(user_msgs, 1), 3),
-            **_accuracy(llm, all_msgs, all_gold, preds, seconds, failed)}
+    result = {"turns_per_batch": size, "turns": turns, "calls": calls,
+              "calls_per_100_turns": round(calls * per100, 1), "chars_per_call": round(chars / max(calls, 1)),
+              "chars_per_100_turns": round(chars * per100), "avg_wait_turns": round(sum(waits) / max(len(waits), 1), 2),
+              "sent_only_at_end": round(sent_at_end / max(user_msgs, 1), 3)}
+    if llm is not None:
+        acc, _ = score_classify(all_msgs, all_gold, preds)
+        result.update(classify=acc, failed_batches=failed, median_seconds=round(statistics.median(seconds), 2))
+    return result
 
 
-def _classify(context, batch, previous, llm, decider, preds, seconds) -> int:
-    """--ai 일 때 묶음 하나를 실제로 분류해 preds·seconds 에 더한다. 실패하면 1."""
-    if llm is None:
-        return 0
+def _classify(context, batch, previous, llm, decider) -> tuple[list, float, bool]:
+    """묶음 하나를 실제로 분류한다. ([(발화 id, 카드)], 걸린 초, 성공 여부)"""
     req = {"type": "classify", "version": 1, "context": context, "messages": batch,
            "contextMessages": context_tail(previous)}
     start = time.monotonic()
     cards, failure = classify_positions(req, llm, decider)
-    seconds.append(time.monotonic() - start)
-    preds += [(batch[pos]["id"], card) for pos, card in cards]
-    return int(bool(failure))
-
-
-def _accuracy(llm, msgs, gold, preds, seconds, failed) -> dict:
-    if llm is None:
-        return {}
-    acc, _ = score_classify(msgs, gold, preds)
-    return {"classify": acc, "failed_batches": failed, "median_seconds": round(statistics.median(seconds), 2)}
+    return [(batch[pos]["id"], card) for pos, card in cards], time.monotonic() - start, failure is None
 
 
 def main() -> None:

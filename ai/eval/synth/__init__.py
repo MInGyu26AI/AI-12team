@@ -74,9 +74,14 @@ def _answer(u: tuple, speaker: str) -> list:
         return [text, "관련", "", "해당 없음 (AI 의견·제안)", "", "ChatGPT", "", "", masked]
     if tag == "P":
         return [text, "개인", "", "", "", "", "", "", masked]
-    sub, topic, owner, due, change = (list(u[2:7]) + [None] * 5)[:5]
-    return [text, "관련", SUBTOPIC[sub], TAG[tag], topic or "", owner or "", (due or "") if tag == "T" else "",  # 기한은 할 일에만 (classification.md)
-            "" if tag != "D" else int(bool(change)), masked]
+    sub = u[2]
+    topic = u[3] if len(u) > 3 else ""
+    owner = u[4] if len(u) > 4 else ""
+    due = u[5] if len(u) > 5 and tag == "T" else ""  # 기한은 할 일에만 (classification.md)
+    change = ""  # 변경 여부는 결정에만
+    if tag == "D":
+        change = 1 if len(u) > 6 and u[6] else 0
+    return [text, "관련", SUBTOPIC[sub], TAG[tag], topic or "", owner or "", due or "", change, masked]
 
 
 def write() -> None:

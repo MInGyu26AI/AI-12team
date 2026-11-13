@@ -28,8 +28,15 @@ from .scoring import save_result
 PACKAGE = Path(__file__).resolve().parent / "syntitan" / "package"
 LABELS = Path(__file__).resolve().parent / "syntitan" / "labels.csv"
 JUDGEMENTS = ("같음", "변경", "충돌", "무관")
-EXPECTED_ALERT = {"충돌": "충돌", "변경": "변경" if config.CONFLICT_ON_CHANGE else "없음", "확인 필요": "확인 필요",
-                  "같음": "없음", "무관": "없음", "비교 없음": "없음"}
+# 정답 판정 → 화면 알림. 변경은 CONFLICT_ON_CHANGE 가 켜져 있을 때만 알림
+EXPECTED_ALERT = {
+    "충돌": "충돌",
+    "변경": "변경" if config.CONFLICT_ON_CHANGE else "없음",
+    "확인 필요": "확인 필요",
+    "같음": "없음",
+    "무관": "없음",
+    "비교 없음": "없음",
+}
 ASK = ('\n\n위 상황의 새 결정을 기존 결정과 비교해 판정하세요. 결정이 아니거나 비교할 기존 결정이 없으면 무관입니다.\n'
        '{"results": [{"id": "case", "judgement": "같음|변경|충돌|무관", "reason": "...", "confidence": 0.0~1.0}]} '
        'JSON 하나로만 답하세요.')
