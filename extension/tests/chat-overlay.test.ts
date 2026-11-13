@@ -120,6 +120,7 @@ describe('"팀 기록 불러오기" 버튼', () => {
     await settle();
     expect(fetchTeamRecord).toHaveBeenCalledTimes(1);
     expect(editor.textContent).toContain('- [결정] MVP 범위: 브라우저 확장 = MVP 포함 (결정 이서준)');
+    expect(editor.lastElementChild?.textContent).toBe('<!-- 싱크업 팀 기록 끝 -->'); // 수집기가 머리부터 이 줄까지 지운다
     expect(toastText()).toBe('팀 기록 1개를 입력창에 채웠어요. 질문을 덧붙여 직접 보내세요');
     expect(send).not.toHaveBeenCalled(); // 백그라운드로 아무것도 보내지 않는다 (전송 버튼도 누르지 않는다)
     expect(overlay.recordButton.disabled).toBe(false);
@@ -157,6 +158,7 @@ describe('"팀 기록 불러오기" 버튼', () => {
     await settle();
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText.mock.calls[0]).toEqual([expect.stringContaining('브라우저 확장 = MVP 포함')]);
+    expect((writeText.mock.calls[0] as unknown as [string])[0].endsWith('\n\n<!-- 싱크업 팀 기록 끝 -->')).toBe(true); // 클립보드 대체에도 끝 표시
     expect(toastText()).toBe('입력창에 바로 넣지 못해 클립보드에 복사했어요. 입력창에 붙여넣어 주세요');
   });
 
