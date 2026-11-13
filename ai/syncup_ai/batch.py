@@ -37,7 +37,9 @@ def take_ready_batches(
     turns_per_batch: int = TURNS_PER_BATCH,
     flush: bool = False,
 ) -> tuple[list[list[Message]], list[Message]]:
-    """(보낼 묶음들, 아직 남겨 둘 발화). 마지막 턴은 AI 답변이 더 올 수 있어 flush 가 아니면 남긴다."""
+    """(보낼 묶음들, 아직 남겨 둘 발화). 답을 하나도 못 받은 마지막 질문만 flush 가 아니면 남긴다.
+
+    답이 하나라도 있는 턴은 묶음에 들어간다. 그 뒤에 같은 질문의 답(다시 생성 등)이 오면 다음 묶음에서 질문 없는 턴이 된다."""
     turns = group_turns(pending)
     if not flush and turns and turns[-1][-1].get("role") == "user" and not turns[-1][-1].get('complete'):
         open_turn = turns.pop()  # 답변을 아직 못 받은 턴
