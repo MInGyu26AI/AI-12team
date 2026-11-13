@@ -148,6 +148,51 @@ def build_state(cards, conflicts=(), done=(), team=None, members=None, changed_a
     }
 
 
+def _squash(text):
+    return re.sub(r"\s+", "", text or "").lower()
+
+
+def _mentions(text, topic_key):
+    """세부 주제 이름이 글에 나오는가. 띄어쓰기는 무시하고, 영어 이름(DB 등)은 단어 경계로만 ('feedback' 의 db 는 아님)."""
+    key = _squash(topic_key)
+    if not key:
+        return False
+    if key.isascii():
+        return re.search(rf"(?<![a-z0-9]){re.escape(key)}(?![a-z0-9])", _squash(text)) is not None
+    return key in _squash(text)
+
+
+def branch_links(state, branches):
+    """브랜치마다 참여자·관련 할 일·관련 결정 (2차 최종 회의 10장 '브랜치별 싱크'). AI 를 쓰지 않는다.
+
+    branches: [{"name", "commits": [{"author", "message"}], "pulls": [{"title"}]}] (서버가 GitHub 에서 읽어 넘긴다)
+    1) 참여자: 커밋 작성자 (처음 나온 순서)
+    2) 할 일: 커밋 메시지·PR 제목의 할 일 ID(SU-n) 중 팀 상태 파일에 있는 것
+    3) 결정: 그 할 일과 같은 세부 주제의 현재 결정 + 브랜치 이름·커밋 메시지·PR 제목에 세부 주제 이름이 나오는 결정
+    """
+    todos = {t["id"]: t for t in state.get("todos") or []}
+    current = [t["topic_key"] for t in state.get("decisions") or [] if t.get("current")]
+    links = {}
+    for branch in branches:
+        commits = branch.get("commits") or []
+        texts = [branch.get("name") or ""]
+        texts += [c.get("message") or "" for c in commits]
+        texts += [p.get("title") or "" for p in branch.get("pulls") or []]
+        text = "\n".join(texts)
+        members = list(dict.fromkeys(c["author"] for c in commits if c.get("author")))
+        found = [i for i in find_todo_ids(text) if i in todos]
+        topics = [todos[i]["topic_key"] for i in found if todos[i].get("topic_key")]
+        topics += [k for k in current if _mentions(text, k)]
+        links[branch["name"]] = {"members": members, "todos": found,
+                                 "decisions": [k for k in dict.fromkeys(topics) if k in current]}
+    return links
+
+
+def add_branches(state, branches):
+    """syncup.json 에 by_branch 를 붙인다. 코딩 AI 가 작업 중인 브랜치에 필요한 결정만 골라 읽게 한다."""
+    return {**state, "by_branch": branch_links(state, branches)}
+
+
 def dumps(state):
     return json.dumps(state, ensure_ascii=False, indent=2) + "\n"
 
@@ -239,6 +284,19 @@ def render_markdown(state):
         for r in state["research"]:
             topic = f" ({r['topic_key']})" if r.get("topic_key") else ""
             lines.append(f"- {r['content']}{topic}")
+        lines.append("")
+
+    if state.get("by_branch"):
+        lines += ["## 브랜치별 관련 결정", ""]
+        for name, link in state["by_branch"].items():
+            parts = []
+            if link["members"]:
+                parts.append("참여: " + ", ".join(link["members"]))
+            if link["todos"]:
+                parts.append("할 일: " + ", ".join(link["todos"]))
+            if link["decisions"]:
+                parts.append("결정: " + ", ".join(link["decisions"]))
+            lines.append(f"- `{name}` — " + (" · ".join(parts) if parts else "관련 결정 없음"))
         lines.append("")
 
     if state["resolved_conflicts"]:

@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from syncup_ai.team_state import build_state, dumps, find_todo_ids, render_markdown, todo_ids
+from syncup_ai.team_state import add_branches, branch_links, build_state, dumps, find_todo_ids, render_markdown, todo_ids
 
 T0 = 1793966400  # 2026-11-06 21:00 KST
 U1, U2 = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
@@ -129,6 +129,36 @@ class StateTest(unittest.TestCase):
         md = render_markdown(st)
         self.assertIn("아직 승인된 결정이 없습니다", md)
         self.assertIsNone(st["updated_at"])
+
+
+class BranchTest(unittest.TestCase):
+    # board(): MVP 범위·서비스명 결정, 할 일 SU-1(발표 자료), SU-2(배포)
+    def test_links_by_todo_id_topic_name_and_authors(self):
+        state = build_state(board() + [card("d9", "decision", "배포 = Vercel", topic="배포", at=950)], conflicts())
+        branches = [
+            {"name": "feat/deploy", "commits": [{"author": "dong", "message": "[SU-2] zip 배포 페이지"},
+                                                {"author": "dan", "message": "버튼 정리"},
+                                                {"author": "dong", "message": "문구"}]},
+            {"name": "fix/mvp범위", "commits": [{"author": "haeun", "message": "확장 폴더 정리"}],
+             "pulls": [{"title": "MVP 범위 맞추기"}]},
+            {"name": "docs/readme", "commits": [{"author": "min", "message": "오타"}]},
+        ]
+        links = branch_links(state, branches)
+        self.assertEqual(links["feat/deploy"], {"members": ["dong", "dan"], "todos": ["SU-2"], "decisions": ["배포"]})
+        self.assertEqual(links["fix/mvp범위"]["decisions"], ["MVP 범위"])  # 띄어쓰기 무시
+        self.assertEqual(links["docs/readme"], {"members": ["min"], "todos": [], "decisions": []})
+
+    def test_short_english_topic_needs_a_word_boundary(self):
+        state = build_state([card("d1", "decision", "DB = SQLite", topic="DB")])
+        hit = branch_links(state, [{"name": "feat/db-migration", "commits": []}])
+        miss = branch_links(state, [{"name": "feat/feedback", "commits": []}])
+        self.assertEqual((hit["feat/db-migration"]["decisions"], miss["feat/feedback"]["decisions"]), (["DB"], []))
+
+    def test_unknown_todo_ids_are_ignored_and_markdown_lists_branches(self):
+        state = add_branches(build_state(board(), conflicts()), [{"name": "x", "commits": [{"author": "a", "message": "SU-99"}]}])
+        self.assertEqual(state["by_branch"]["x"]["todos"], [])
+        self.assertIn("## 브랜치별 관련 결정", render_markdown(state))
+        self.assertNotIn("by_branch", build_state(board()))  # 브랜치 정보가 없으면 그대로
 
 
 if __name__ == "__main__":

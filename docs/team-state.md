@@ -51,6 +51,7 @@ files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 | `todos[]` | `id`(SU-n), `card_id`, `content`, `owner`, `due`, `topic_key`, `done` |
 | `research[]` | `card_id`, `content`, `topic_key`, `subtopic`, `added_at` |
 | `resolved_conflicts[]` | 최근 10건. 열린 충돌 필드 + `resolution`, `note` |
+| `by_branch` (선택) | `add_branches`를 불렀을 때만. 브랜치 이름마다 `members`(커밋 작성자), `todos`(SU-n), `decisions`(세부 주제 이름) |
 
 - 순서: `decisions` 는 소주제 순서(주제·목표 → … → 기타) 다음 topic_key 가나다순.
 - **충돌 판정 연동 (하은)**: 새 결정은 같은 topic_key 의 `current[]` 와 비교한다.
@@ -66,4 +67,32 @@ files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 
 - 원문 발췌를 SYNCUP.md 에 넣을지 (지금은 안 넣음 — Public 레포 기준)
 - '확인 필요' 판정(조건부 결정)이 생기면 `open_conflicts[].judgement` 에 그대로 들어감 — 서버 판정 값과 맞추기
-- 브랜치별 관련 결정(`by_branch`)은 필수 기능 이후 추가 (version 1 에 없음)
+- 브랜치 정보를 어디서 읽을지 (GitHub API 의 브랜치별 커밋·열린 PR, 몇 분마다 / 싱크 맞추기 때)
+
+## 선택 기능 (2차 최종 회의 10장)
+
+### 브랜치별 관련 결정
+
+```python
+from ai.syncup_ai.team_state import add_branches
+
+state = add_branches(state, [
+    {"name": "feat/github-sync", "commits": [{"author": "donggyun", "message": "[SU-3] 레포 저장"}],
+     "pulls": [{"title": "GitHub 저장 (SU-3)"}]},
+])
+```
+
+- 참여자는 커밋 작성자, 할 일은 커밋 메시지·PR 제목의 SU-n, 결정은 그 할 일과 같은 세부 주제 + 브랜치 이름·메시지·PR 제목에 세부 주제 이름이 나오는 결정. AI 를 쓰지 않는다.
+- 띄어쓰기는 무시하고(`MVP범위` = `MVP 범위`), 영어 주제 이름은 단어 경계로만 찾는다(`feedback` 은 `DB` 가 아님).
+- SYNCUP.md 에 '브랜치별 관련 결정' 절이 생긴다.
+
+### 결정·커밋 어긋남 알림
+
+```sh
+echo '{"commit": {"sha": "a1b2c3d", "message": "extension 폴더 추가", "author": "…", "files": ["extension/popup.tsx"]},
+       "state": <syncup.json>}' | python -m syncup_ai commit-check
+# → {"ok": true, "alerts": [{"commit", "topic_key", "decision", "owner", "judgement": "충돌|확인 필요", "reason", "confidence"}]}
+```
+
+- 현재 결정(최대 30개)과 비교해 어긋나는 것만 돌려준다. 외부 AI 가 필요하고, 실패해도 승인·저장 흐름에는 영향이 없다.
+- 화면은 회의록 10장 '결정과 코드 충돌 알림'(결정 유지 / 결정 변경). 같은 커밋을 다시 묻지 않도록 판정한 sha 는 서버가 기억한다.
