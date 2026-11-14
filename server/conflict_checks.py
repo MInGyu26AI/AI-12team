@@ -2,6 +2,8 @@
 
 The lease protocol stays in this one module: a pair is leased in one transaction, judged outside any
 transaction, and recorded in a second transaction only while the same lease still holds.
+A pair the AI cannot judge with enough confidence goes to the team as a '확인 필요' alert, and the check
+continues with the next pair.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,7 +12,7 @@ import time
 
 from psycopg.types.json import Jsonb
 
-from ai.syncup_ai.conflict import handle_request as check_conflicts, ordered_candidates
+from ai.syncup_ai.conflict import handle_request as check_conflicts, conflict_id, ordered_candidates
 from ai.syncup_ai.llm import from_env, decider_from_env, LLMNotConfigured, RetryableLLMError
 from card_contract import board_card
 from diagnostics import (failure, check_started, check_finished, checked_count, model_fingerprint,
@@ -27,9 +29,11 @@ SKIPPED_DETAIL = '비활성 결정 비교 제외'
 FAILURES = {
     'retry-pending': ('pending', 'AI 연결 오류 · 자동 재시도 대기'),
     'retry-exhausted': ('failed', 'AI 연결 오류 · 자동 재시도 한도 도달'),
-    'needs-review': ('failed', '확인 필요 · AI 판정 확신도 부족'),
     'check-failed': ('failed', 'AI 검사 미완료 · 확인 필요'),
 }
+# The alert an uncertain pair becomes. The engine returns no relation or confidence for such a pair, so none is kept.
+UNCERTAIN_JUDGEMENT = '확인 필요'
+UNCERTAIN_REASON = 'AI가 두 결정의 관계를 확신하지 못했어요. 함께 성립하는지 팀이 확인해 주세요.'
 
 
 @dataclass
@@ -215,6 +219,8 @@ def _record(c, team_id, lease, result, elapsed_ms):
         return
     if result.get('ok') and result.get('checkStatus') == 'complete':
         _record_success(c, team_id, lease, result, elapsed_ms)
+    elif result.get('failureReason') == 'low-confidence' and lease.existing:
+        _record_uncertain(c, team_id, lease, result, elapsed_ms)
     else:
         _record_failure(c, team_id, lease, result, elapsed_ms)
 
@@ -222,7 +228,21 @@ def _record(c, team_id, lease, result, elapsed_ms):
 def _record_success(c, team_id, lease, result, elapsed_ms):
     for conflict in result['conflicts']:
         _save_alert(c, team_id, conflict)
-    diagnostic = check_finished(lease.diagnostic, result, lease.card_id, lease.candidate_ids, elapsed_ms, 'complete')
+    _advance(c, team_id, lease, check_finished(lease.diagnostic, result, lease.card_id, lease.candidate_ids,
+                                               elapsed_ms, 'complete'))
+
+
+def _record_uncertain(c, team_id, lease, result, elapsed_ms):
+    """The team decides a pair the AI could not judge confidently; the AI is not asked again and the check goes on."""
+    old, new = lease.existing[0], lease.new
+    _save_alert(c, team_id, dict(id=conflict_id(old, new), topic_key=old.get('topic_key') or new.get('topic_key'),
+                                 cardA=old, cardB=new, judgement=UNCERTAIN_JUDGEMENT, reason=UNCERTAIN_REASON))
+    _advance(c, team_id, lease, check_finished(lease.diagnostic, result, lease.card_id, lease.candidate_ids,
+                                               elapsed_ms, 'needs-review'))
+
+
+def _advance(c, team_id, lease, diagnostic):
+    """Commit the leased pair: the cursor moves past it and the check is complete after the last pair."""
     progress = dict(lease.progress, cursor=lease.progress['cursor'] + len(lease.existing))
     complete = progress['cursor'] == len(progress['ids'])
     # A finished check keeps its last attempt number; the next pair starts with a fresh budget.
@@ -256,7 +276,6 @@ def _record_failure(c, team_id, lease, result, elapsed_ms):
 
 def _failure_outcome(result, attempt):
     """Only a retryable communication failure retries on its own; anything else waits for a member."""
-    reason = result.get('failureReason')
-    if result.get('retryable') is True and reason == 'communication':
+    if result.get('retryable') is True and result.get('failureReason') == 'communication':
         return 'retry-pending' if attempt < MAX_CHECK_ATTEMPTS else 'retry-exhausted'
-    return 'needs-review' if reason == 'low-confidence' else 'check-failed'
+    return 'check-failed'
