@@ -13,6 +13,8 @@
 !server/repo_sync.py
 !server/github_repo.py
 !server/team_settings.py
+!server/notion_sync.py
+!server/notion_page.py
 !contract/secure_http.py
 !contract/diagnostics.py
 !contract/card_contract.py

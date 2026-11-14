@@ -8,6 +8,7 @@ import time
 
 import psycopg
 
+import notion_sync
 from conflict_checks import process_checks
 from diagnostics import failure
 from repo_sync import schedule_save
@@ -40,8 +41,10 @@ def _work(server, token, team_id, key, wake):
             wake.clear()
             try:
                 if process_checks(server, token, team_id):
-                    # New alerts and review states go to the repository too; one batch even across many slices.
+                    # New alerts and review states go to the repository and Notion page too; one batch even
+                    # across many slices.
                     schedule_save(server, token, team_id)
+                    notion_sync.schedule_save(server, token, team_id)
                 due = _next_due(server.dsn, token, team_id)
             except (psycopg.OperationalError, psycopg.InterfaceError) as error:
                 failure('conflict_database', error, team_id)

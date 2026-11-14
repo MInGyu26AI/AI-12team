@@ -118,6 +118,7 @@ docker build -f Dockerfile.cloud .
 | `POST …/items/{카드}/done` | 할 일 완료 표시 (`done`) |
 | `POST …/items/{카드}/retry-check` | 실패한 충돌 검사 다시 시작. 시도 횟수와 진단을 비운다. 409 실패 상태가 아님 |
 | `GET …/repo` | 팀 상태 파일의 GitHub 저장 상태 ([아래](#github-레포-저장)). 연결 안 된 팀은 `{"linked": false}` |
+| `GET …/notion` | 팀 기록의 노션 페이지 저장 상태 ([아래](#노션-페이지-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | `GET …/settings` · `POST …/settings` | 팀이 함께 쓰는 설정 ([아래](#팀-설정)). POST는 보낸 칸만 바꾸고 나머지는 둔다 |
 | 공통 | 401 키 없음·틀림·만료·폐기, 사용자 비활성 · 403 그 팀 소속 아님 · 503 DB에 닿지 못함 |
 
@@ -141,6 +142,46 @@ docker build -f Dockerfile.cloud .
 - GitHub 오류는 팀 API 응답에 영향을 주지 않는다. 진단 로그에는 단계·오류 종류·HTTP 상태만 남고, 다음 변경 때 다시 저장한다. GitHub가 다른 곳으로 리다이렉트하면 토큰은 따라가지 않는다.
 - `GET …/repo` 응답의 `repo`: `linked`, `repo`, `branch`, `files`, `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `commit`(`sha`, `url`, `at`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC `team.repo`가 같은 응답을 준다.
 - 상태는 메모리에만 있다. 서버를 다시 켜면 `unknown`이고, 그 팀의 첫 요청(보드 조회 등 무엇이든)이 바로 한 번 저장해 연결을 확인한다. 재시작 때문에 기다리던 저장이 끊겼어도 그때 다시 맞춰진다.
+
+## 노션 페이지 저장
+
+팀 하나의 기록을 노션 페이지 하나에 SYNCUP.md와 같은 구성으로 쓴다. 코드는 `server/notion_sync.py`(언제·무엇을), `server/notion_page.py`(노션 API 호출).
+어느 팀을 어느 페이지에 쓸지는 서버 환경 변수로만 정한다. GitHub 저장과 따로 켜고 끈다.
+페이지에 들어가는 내용은 SYNCUP.md와 같다(원문 발췌·출처·승인자 ID·AI가 쓴 충돌 이유 없음). 페이지를 누가 볼 수 있는지는 노션 워크스페이스의 공유 설정을 따른다.
+
+| 환경 변수 | 내용 |
+|---|---|
+| `SYNCUP_NOTION_TEAM` | 저장할 팀 ID (`team_admin.py team`이 출력한 uuid). GitHub와 같은 팀이면 `SYNCUP_GITHUB_TEAM`과 같은 값 |
+| `SYNCUP_NOTION_PAGE` | 대상 페이지 ID (16진수 32자리, 하이픈은 있어도 됨) |
+| `SYNCUP_NOTION_TOKEN` | 그 페이지만 공유한 노션 내부 통합의 시크릿 |
+
+- 셋을 모두 비우면 쓰지 않는다. 일부만 있거나 형식이 틀리면 서버가 시작하지 않는다 (토큰은 출력하지 않음).
+- 데이터베이스 행 대신 페이지 블록을 쓴다. SYNCUP.md와 같은 구성이 그대로 보이고, 페이지 하나만 공유하면 설정이 끝나며, 속성(열) 이름을 맞출 일이 없다. 노션에서 고친 내용은 SyncUp으로 돌아오지 않는다.
+- 페이지 구성: 머리 상자(팀 이름, 안내, 기준 시각·개수·레포·지문) → 팀 기준 → ⚠️ 확인이 필요한 결정 → 현재 결정(소주제별 제목) → 할 일(체크 상자, `SU-n`) → 조사한 내용 → 최근 해결한 충돌(접힌 제목). 결정 이유는 그 결정 아래, 바뀐 결정은 SYNCUP.md처럼 세부 주제의 마지막 현재 결정 아래 목록에 둔다. SYNCUP.md의 '코딩 AI에게' 안내는 넣지 않는다.
+- 언제: [GitHub 저장](#github-레포-저장)과 같은 때다. 변경 뒤 10초 동안 다른 변경이 없으면 쓰고, 변경이 계속 와도 첫 변경 뒤 60초 안에는 쓴다. 대기열과 상태는 GitHub와 따로라서 한쪽이 실패하거나 느려도 다른 쪽은 그대로 저장한다.
+- 어떻게: 쓸 때마다 페이지의 맨 위 단계 블록을 읽어 지난번에 쓴 것과 비교하고, 달라진 블록만 지우고 새로 넣는다. 다 같으면 쓰지 않는다(읽기 요청만 간다). 서버를 다시 켠 뒤에도 블록 글자와 머리 상자의 지문이 같으면 쓰지 않는다. 새 블록을 먼저 넣고 옛 블록을 지우므로 몇 초 동안 두 벌이 보일 수 있다. 지운 블록은 노션 휴지통으로 간다.
+- 페이지는 SyncUp 전용으로 둔다. SyncUp이 쓰는 종류(머리 상자·제목·문단·목록·체크 상자)의 블록을 손으로 고치거나 더하면 다음 저장 때 지워지고 원래대로 돌아간다. 비교는 맨 위 단계 블록의 글자로만 해서, 결정 이유·바뀐 결정·해결한 충돌 같은 하위 목록만 손으로 고친 것은 그 블록이 다시 쓰일 때까지 남는다. 하위 페이지·데이터베이스·파일 같은 다른 블록은 건드리지 않는다.
+- 요청 제한: 요청 사이를 1/3초 띄운다(Business·Enterprise가 아닌 요금제의 분당 180회). 429·529면 `Retry-After` 초만큼 기다렸다가 4번까지 다시 보낸다. 60초보다 오래 기다리라고 하면 그 저장은 실패로 두고 다음 변경 때 다시 쓴다. 500·502·503·504는 읽기·지우기만 2번까지 다시 보낸다. 쓰기는 이미 반영됐을 수 있어 다시 보내지 않는다.
+- 한 요청에 블록 100개·블록 요소 1000개·500KB, 글 한 조각 2000자까지라서 나눠 보낸다. 글자 수는 더 엄격한 UTF-16 단위(이모지 2자)로 센다. 노션 API 버전은 `2026-03-11`이다 ([버전](https://developers.notion.com/reference/versioning), [요청 제한](https://developers.notion.com/reference/request-limits), [블록 추가](https://developers.notion.com/reference/patch-block-children)).
+- 노션 오류는 팀 API 응답에 영향을 주지 않는다. 진단 로그에는 단계(`notion_read`·`notion_append`·`notion_delete`, DB 등 그 밖은 `notion_save`)·오류 종류·HTTP 상태만 남는다. 중간에 실패해도 서버가 그때까지 넣고 지운 블록을 기억하므로, 다음 저장이 남은 블록은 지우고 빠진 블록만 다시 넣는다. 토큰은 노션 API 호스트에만 보낸다. 노션 API는 리다이렉트하지 않으므로 리다이렉트 응답은 따라가지 않고 실패로 둔다.
+- `GET …/notion` 응답의 `notion`: `linked`, `page`(페이지 ID), `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `savedAt`(이 서버가 마지막으로 페이지를 쓴 epoch 초, 모르면 `null`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC와 웹 화면에는 아직 없다.
+- 상태는 메모리에만 있다. 서버를 다시 켜면 `unknown`이고, 그 팀의 첫 요청이 바로 한 번 페이지를 확인한다.
+
+### 켜는 법 (동균)
+
+새 서버 코드가 배포되기 전에 변수만 넣어도 예전 서버는 무시한다. 순서는 상관없지만 둘 다 끝나야 저장이 시작된다.
+
+1. **노션 통합 만들기.** 워크스페이스 소유자 계정으로 <https://app.notion.com/developers/connections>에서 Internal connection(내부 통합)을 새로 만든다. 예전 화면은 <https://www.notion.so/my-integrations>다.
+   - 권한(Capabilities): 콘텐츠 읽기·콘텐츠 업데이트·콘텐츠 삽입(Read·Update·Insert content). 사용자 정보는 필요 없다.
+   - Configuration 탭의 시크릿을 복사한다. Railway 변수 말고는 어디에도 붙여 넣지 않는다.
+2. **대상 페이지를 통합에 공유하기.** 노션에 SyncUp 전용 빈 페이지(예: 'SyncUp 팀 기록')를 만든다. 페이지 오른쪽 위 `•••` → 연결(Connections) → `+ 연결 추가`에서 1번 통합을 고른다. 통합 설정의 Content access 탭 → Edit access에서 골라도 된다. 공유한 페이지의 하위 페이지까지 통합이 읽고 쓸 수 있으니 큰 상위 페이지가 아니라 이 페이지만 공유한다.
+3. **페이지 ID 찾기.** 페이지 `•••` → 링크 복사. 링크 경로 끝의 16진수 32자리가 페이지 ID다. 예: `https://www.notion.so/SyncUp-0123456789abcdef0123456789abcdef` → `0123456789abcdef0123456789abcdef`. `?v=` 뒤의 값은 데이터베이스 보기 ID라서 아니다.
+4. **Railway 변수 넣기.** 팀 서버 서비스의 Variables에 `SYNCUP_NOTION_TEAM`(10게 2기조 팀 ID), `SYNCUP_NOTION_PAGE`, `SYNCUP_NOTION_TOKEN`을 셋 다 넣고 다시 배포한다. 하나라도 빠지면 서버가 시작하지 않는다.
+5. **확인.** 팀 보드를 한 번 열면(팀 요청 무엇이든) 페이지가 채워진다. 또는 연결 키로 상태를 본다.
+   ```sh
+   curl -s -H "Authorization: Bearer $(cat /안전한/개인연결.key)" https://<팀 서버 호스트>/teams/<팀 ID>/notion
+   ```
+   `state`가 `failed`이면 `httpStatus`: 401 시크릿이 틀림 · 403 통합 권한 부족 · 404 페이지 ID가 틀렸거나 페이지를 통합에 공유하지 않음 · 429 요청 제한 · 400 블록 형식(진단 로그의 단계 확인).
 
 ## 팀 설정
 

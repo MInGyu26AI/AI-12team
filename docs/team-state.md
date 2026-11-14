@@ -10,6 +10,7 @@
 ## 서버에서 부르는 법 (동균)
 
 팀 서버의 [server/repo_sync.py](../server/repo_sync.py)가 이렇게 부르고 GitHub에 커밋한다. 설정은 [팀 서버 문서](team-server.md#github-레포-저장).
+노션 페이지에도 같은 구성으로 쓴다 ([server/notion_sync.py](../server/notion_sync.py), [팀 서버 문서](team-server.md#노션-페이지-저장)). `render_markdown`의 절을 바꾸면 `notion_sync.py`의 `_body`도 같이 바꾼다.
 
 ```python
 from ai.syncup_ai.team_state import build_state, render_markdown, dumps
