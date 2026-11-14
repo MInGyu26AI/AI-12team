@@ -9,7 +9,7 @@ export interface ClassifyContext {
   userName: string; // "내가" = 이 사람
   knownNames?: string[]; // 담당자 인식용 이름 목록
   existingTopicKeys?: string[]; // 기존 세부 주제 (있으면 그 이름 먼저)
-  enabledSubtopics?: Subtopic[]; // 켜 둔 소주제. 꺼진 소주제는 "기타"로
+  enabledSubtopics?: Subtopic[]; // 켜 둔 소주제. 꺼진 소주제는 "기타"로. 비었으면 모두 켬 (로컬 수집기 기본값이 [] = 모두 켬, ai/syncup_ai/classify.py 와 같음)
 }
 
 // ── 민감정보·인증정보 가림 (어느 단계든 먼저) ──
@@ -252,7 +252,7 @@ export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Car
   const scope: Scope = {
     ctx,
     known: new Set(ctx.existingTopicKeys ?? []),
-    enabled: ctx.enabledSubtopics ? new Set<Subtopic>(ctx.enabledSubtopics) : null,
+    enabled: ctx.enabledSubtopics?.length ? new Set<Subtopic>(ctx.enabledSubtopics) : null, // 빈 목록 = 모두 켬 (null)
   };
   const cards: Card[] = [];
   for (const u of utterances) {
