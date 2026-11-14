@@ -6,6 +6,18 @@ import { timingSafeEqual } from "node:crypto";
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const COLLECTOR_TIMEOUT_MS = 20000;
+// 오래 걸리는 것이 정상인 요청 (collector/native_host.py SLOW_METHOD_TIMEOUT 과 같은 값): files.ocr 은 이 PC의 비전 모델이
+// 쪽 그림을 읽고(첫 쪽은 모델을 올리느라 더 걸림), connectors.sync 는 노션·구글 읽기를 기다린다.
+const SLOW_METHOD_TIMEOUT_MS: Record<string, number> = { "files.ocr": 180000, "connectors.sync": 180000 };
+
+function timeoutFor(body: string) {
+  try {
+    const method: unknown = JSON.parse(body)?.method;
+    return (typeof method === "string" && SLOW_METHOD_TIMEOUT_MS[method]) || COLLECTOR_TIMEOUT_MS;
+  } catch {
+    return COLLECTOR_TIMEOUT_MS;
+  }
+}
 const UNREACHABLE = "로컬 수집기 실행 상태와 연결 파일을 확인하세요.";
 // 화면에 그대로 보여도 되는 실패 이유. 그 밖의 오류(수집기 꺼짐·시간 초과·잘못된 JSON)는 UNREACHABLE 로 묶는다
 const KNOWN_ERRORS = new Set(["연결 파일 권한 오류", "연결 주소 오류", "연결 인증 오류", "요청 크기 오류"]);
@@ -60,7 +72,7 @@ async function relay(request: Request, connectionFile: string) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body,
     redirect: "error",
-    signal: AbortSignal.timeout(COLLECTOR_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutFor(body)),
   });
   return Response.json(await response.json(), { status: response.status, headers: { "Cache-Control": "no-store" } });
 }

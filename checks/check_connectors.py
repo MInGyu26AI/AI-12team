@@ -1027,5 +1027,23 @@ class SchemaAndLabels(unittest.TestCase):
         self.assertTrue(re.fullmatch(r'[a-z][a-z0-9-]{0,39}', 'google-docs'))
 
 
+class NativeHostTimeouts(unittest.TestCase):
+    def test_only_ocr_and_connector_sync_wait_longer(self):
+        import io
+        import native_host
+        seen = []
+
+        class Opener:
+            def open(self, request, timeout):
+                seen.append(timeout)
+                return io.BytesIO(b'{"ok": true, "result": {}}')
+
+        with patch.object(native_host, 'read_connection', return_value=('http://127.0.0.1:1/rpc', 't')), \
+                patch.object(native_host.urllib.request, 'build_opener', return_value=Opener()):
+            for method in ('files.ocr', 'connectors.sync', 'collection.status', 'turns.append'):
+                native_host.request(None, dict(version=1, method=method, params={}))
+        self.assertEqual(seen, [180, 180, 20, 20])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
