@@ -25,6 +25,7 @@ from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
 from team_board import board, conflict_events, conflicts, done_todos, mark_todo, shared_item, shared_items
 from team_publish import publish
+from team_settings import settings_request
 
 # GET /teams/{id}/<path>: the response fields after team_id.
 BOARD_READS = {
@@ -139,6 +140,8 @@ def dispatch(c, user_id, team_id, method, parts, data, server=None):
     tail = parts[2:]
     if tail[0] == 'items' and len(tail) != 3:
         return shared_cards(c, team_id, user_id, method, tail, data)
+    if tail == ['settings']:
+        return settings_request(c, team_id, user_id, method, data)
     if method == 'GET' and tail == ['repo']:
         return dict(team_id=str(team_id), repo=repo_status(server, team_id))
     if method == 'GET' and tuple(tail) in BOARD_READS:

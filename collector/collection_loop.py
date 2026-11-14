@@ -4,6 +4,7 @@ import time
 
 import batch_classification
 from collection_session import active, config
+from collection_settings import sync_team_topic
 from scanner_runner import scan
 from standalone_classifier import process
 from delivery import deliver
@@ -15,6 +16,17 @@ import turn_intake
 RETENTION_SECONDS = 3600
 LOOP_SECONDS = 2
 DELIVERY_SECONDS = 1
+TEAM_SETTINGS_SECONDS = 30  # how soon a topic another member changed reaches this collector
+
+
+def follow_team_topic(pipeline):
+    """One sync_team_topic; an unreachable team server is skipped quietly (local recovery mode keeps working)."""
+    try:
+        sync_team_topic(pipeline)
+    except OSError:
+        pass
+    except Exception as error:
+        failure('team_settings', error)
 
 
 def send_approved(srv):
@@ -69,8 +81,12 @@ def watch(db, codex, claude=None, codex_sqlite=None, claude_project=None, pipeli
     """Collection loop. With a pipeline (--integrated) it runs run_integrated: the standard path, then
     the legacy-compat drain. Without one, process(db) classifies and drafts every job itself."""
     sources = (codex, claude, codex_sqlite, claude_project)
-    last_retention = 0
+    last_retention = last_team_settings = 0
     while True:
+        # The shared topic is followed even while collection is paused, so it is right when collection resumes.
+        if pipeline and time.time() - last_team_settings >= TEAM_SETTINGS_SECONDS:
+            last_team_settings = time.time()
+            follow_team_topic(pipeline)
         # Retention runs even while collection is paused or ended: settled raw text still expires.
         if time.time() - last_retention >= RETENTION_SECONDS:
             last_retention = time.time()

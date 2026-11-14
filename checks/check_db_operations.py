@@ -98,10 +98,11 @@ class ServerUpgrade(TeamIntegration):
         self.change_after_discussion()
         self.publish_card('todo','합성 복구 점검','todo')
         self.assertEqual(self.team_request('POST','items/todo/done',dict(done=True))[0],200)
+        self.assertEqual(self.team_request('POST','settings',dict(topic='합성 복구 점검 주제'))[0],200)
         with psycopg.connect(self.admin_dsn) as c:
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
         before,_ = self.snapshot(self.admin_dsn)
-        self.assertTrue(all(before.values()),'All ten tables must contain synthetic records')
+        self.assertTrue(all(before.values()),'Every table (team_settings included) must contain synthetic records')
         self.admin('migrate-integration')
         self.admin('migrate-integration')
         verify_database(self.api_dsn)
