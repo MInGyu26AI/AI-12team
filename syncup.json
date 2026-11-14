@@ -4,16 +4,33 @@
     "name": "10게 2기조",
     "repo": "MInGyu26AI/AI-12team"
   },
-  "updated_at": null,
+  "updated_at": "2026-11-14T19:15+09:00",
   "summary": {
-    "decisions": 0,
+    "decisions": 1,
     "open_conflicts": 0,
     "todos": 0,
     "todos_done": 0,
     "research": 0
   },
   "open_conflicts": [],
-  "decisions": [],
+  "decisions": [
+    {
+      "topic_key": "MVP 범위",
+      "subtopic": "주제·목표",
+      "current": [
+        {
+          "card_id": "c6089b3a0c7482ceaa0175b3157e5ffa3044b8e2e04f224ef8df351f024e0605",
+          "content": "MVP 범위 = 웹 승인함과 팀 보드만 포함, 브라우저 확장은 행사 후 진행",
+          "reason": null,
+          "owner": "김하은",
+          "decided_at": "2026-11-14T19:15+09:00",
+          "state": "active"
+        }
+      ],
+      "history": [],
+      "status": "settled"
+    }
+  ],
   "todos": [],
   "research": [],
   "resolved_conflicts": []
