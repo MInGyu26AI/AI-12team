@@ -7,7 +7,7 @@
   "updated_at": "2026-11-14T22:39+09:00",
   "summary": {
     "decisions": 5,
-    "open_conflicts": 1,
+    "open_conflicts": 2,
     "todos": 1,
     "todos_done": 0,
     "research": 2
@@ -29,6 +29,23 @@
         "owner": "김하은"
       },
       "status": "open"
+    },
+    {
+      "id": "xfcb912d0d6",
+      "topic_key": "MVP 범위",
+      "judgement": "충돌",
+      "reason": "다른 사람이 합의 없이 양립할 수 없는 값을 정함",
+      "existing": {
+        "card_id": "c6089b3a0c7482ceaa0175b3157e5ffa3044b8e2e04f224ef8df351f024e0605",
+        "content": "MVP 범위 = 웹 승인함과 팀 보드만 포함, 브라우저 확장은 행사 후 진행",
+        "owner": "김하은"
+      },
+      "new": {
+        "card_id": "3d7a16963bac65e439a17115438bd2e7cb5836780c742936ca8db79eb0e52d96",
+        "content": "MVP 범위 = 브라우저 확장 포함",
+        "owner": "김단비"
+      },
+      "status": "open"
     }
   ],
   "decisions": [
@@ -42,7 +59,7 @@
           "reason": null,
           "owner": "김단비",
           "decided_at": "2026-11-14T22:39+09:00",
-          "state": "active"
+          "state": "review"
         },
         {
           "card_id": "fd430b61b82b5fc35b8b9b85d53d60e9aaf3bc229631f67e94bfa1d62e8ed8e4",
