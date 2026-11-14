@@ -63,3 +63,24 @@ test("SYNCUP.md 형식을 그리고, HTML 은 글자로만 보여 준다", () =>
   assert.ok(!html.includes("<script>"), "HTML 을 그대로 넣지 않는다");
   assert.match(html, /&lt;script&gt;/);
 });
+
+test("브랜치 필터: by_branch 의 세부 주제·SU-n 으로 결정·할 일을 고르고, 없으면 거르지 않는다", () => {
+  const { branchMatcher, branchNames } = load("@shared/repo");
+  const state = {
+    syncup_version: 1,
+    by_branch: { "feat/github-sync": { members: ["author-a"], todos: ["SU-3"], decisions: ["레포 저장"] } },
+  };
+  const todoIds = new Map([["card-9", "SU-3"], ["card-1", "SU-1"]]);
+  assert.deepEqual(branchNames(state), ["feat/github-sync"]);
+  assert.deepEqual(branchNames(null), []);
+  const m = branchMatcher(state, "feat/github-sync", todoIds);
+  assert.equal(m.decision({ topic_key: "레포 저장" }), true);
+  assert.equal(m.decision({ topic_key: "MVP 범위" }), false);
+  assert.equal(m.decision({ topic_key: null }), false);
+  assert.equal(m.todo({ id: "card-9" }), true);
+  assert.equal(m.todo({ id: "card-1" }), false);
+  assert.equal(m.todo({ id: "no-id" }), false); // ID 가 없는 할 일은 브랜치와 연결할 수 없다
+  assert.deepEqual(m.members, ["author-a"]);
+  assert.equal(branchMatcher(state, null, todoIds), null);
+  assert.equal(branchMatcher(state, "없는 브랜치", todoIds), null);
+});

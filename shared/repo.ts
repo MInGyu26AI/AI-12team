@@ -95,3 +95,22 @@ export function repoIndex(state: SyncupState | null) {
   );
   return { todoIds, savedDecisions };
 }
+
+/** syncup.json by_branch 의 브랜치 이름 목록 (없으면 빈 목록 → 브랜치 필터를 숨김) */
+export const branchNames = (state: SyncupState | null) => Object.keys(state?.by_branch ?? {});
+
+/**
+ * 고른 브랜치와 관련된 결정·할 일만 남기는 판정. branch 가 없거나 by_branch 에 없으면 null (거르지 않음).
+ * 결정은 세부 주제(topic_key) 이름으로, 할 일은 SU-n(서버가 붙인 ID → todoIds 로 카드 id 를 찾음)으로 맞춘다
+ */
+export function branchMatcher(state: SyncupState | null, branch: string | null, todoIds: Map<string, string>) {
+  const link = branch ? state?.by_branch?.[branch] : undefined;
+  if (!link) return null;
+  const topics = new Set(link.decisions);
+  const todos = new Set(link.todos);
+  return {
+    members: link.members,
+    decision: (c: { topic_key: string | null }) => !!c.topic_key && topics.has(c.topic_key),
+    todo: (c: { id: string }) => todos.has(todoIds.get(c.id) ?? ""),
+  };
+}

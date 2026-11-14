@@ -120,7 +120,7 @@ F. 상태·에러 처리
 - 웹의 TeamApi(web/src/lib/api/types.ts)는 로컬 RPC를 부른다: 승인 candidates.approve, 조회 team.board·team.history·team.conflicts·team.conflictHistory·team.done, 처리 team.resolve·team.setDone·team.retryCheck
 - 로컬 수집기는 team.* 요청을 연결된 팀의 /teams/{id}/... 경로로 넘긴다 (collector/team_relay.py, 경로 목록은 server/team_server.py)
 - 충돌 처리 resolution: keep-existing | adopt-new | both-valid | discuss (+ resolutionNote)
-- 팀 상태 파일(SYNCUP.md·syncup.json) GitHub 저장: 팀 서버가 변경 뒤 자동 커밋(server/repo_sync.py). 웹은 로컬 RPC team.repo(= GET /teams/{id}/repo)로 저장 상태·마지막 커밋을 읽는다 (shared/repo.ts). 화면: 팀 보드 레포 상태 바·'팀 기록' 탭(레포의 SYNCUP.md, syncup.json 내려받기)·할 일 SU-n 배지와 'ID 복사'·결정 "레포 반영 ✓", 대화 수집 화면의 연결 상태, 확장 팝업 하단. 레포 연결은 서버 환경 변수로만 정하므로 입력 화면은 없다. 형식은 docs/team-server.md 'GitHub 레포 저장'
+- 팀 상태 파일(SYNCUP.md·syncup.json) GitHub 저장: 팀 서버가 변경 뒤 자동 커밋(server/repo_sync.py). 웹은 로컬 RPC team.repo(= GET /teams/{id}/repo)로 저장 상태·마지막 커밋을 읽는다 (shared/repo.ts). 화면: 팀 보드 레포 상태 바·'팀 기록' 탭(레포의 SYNCUP.md, syncup.json 내려받기)·할 일 SU-n 배지와 'ID 복사'·결정 "레포 반영 ✓", 대화 수집 화면의 연결 상태, 확장 팝업 하단. 레포 연결은 서버 환경 변수로만 정하므로 입력 화면은 없다. 형식은 docs/team-server.md 'GitHub 레포 저장'. syncup.json 에 by_branch 가 있으면 팀 보드에 '브랜치' 필터(그 브랜치의 세부 주제 결정·SU-n 할 일만)
 - 웹은 별도 API 주소를 쓰지 않는다. 실제 모드는 로컬 수집기 RPC로 팀 서버에 접근한다: 기본은 확장 경유, `NEXT_PUBLIC_LOCAL_BRIDGE=true`면 웹 서버의 `/api/local` 경유(서버 쪽 `SYNCUP_CONNECTION_FILE`·`SYNCUP_LOCAL_*` 필요). 목업 여부는 `NEXT_PUBLIC_USE_MOCK`
 
 - 프로젝트 방향성 기준(팀 목표·범위·규칙, shared/criteria.ts): 확장 설정 화면과 목업 팀 만들기에서 선택 입력, 팀 보드 맨 위 고정(목업은 팀 값, 실제 모드는 syncup.json team). 수집기 collection.configure 가 아직 teamGoal·teamScope·teamRules 를 받지 않아 확장은 저장만 한다

@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { fmtMDHM, timeOf } from "@shared/format";
 import { alertLevel, type AlertLevel } from "@shared/labels";
 import { criteriaFromState } from "@shared/criteria";
-import { repoIndex } from "@shared/repo";
+import { branchMatcher, branchNames, repoIndex } from "@shared/repo";
 import type { RelatedCard } from "@shared/types";
+import { BranchFilter } from "@/components/board/branch-filter";
 import { ConflictBanner } from "@/components/board/conflict-banner";
 import { ConflictChecks } from "@/components/board/conflict-checks";
 import { DecisionHistoryList } from "@/components/board/decision-history";
@@ -34,6 +35,7 @@ export default function BoardPage() {
   const repo = useRepo();
   const team = useTeam();
   const [topic, setTopic] = useState<string | null>(null); // 왼쪽 세부 주제 필터
+  const [branch, setBranch] = useState<string | null>(null); // 브랜치 필터 (syncup.json by_branch 가 있을 때)
   const [dialog, setDialog] = useState(false);
 
   if (load.state !== "ready") {
@@ -41,10 +43,15 @@ export default function BoardPage() {
   }
 
   const { cards, conflicts, done } = load;
-  const { decisions, todos, research, topics, lastUpdate } = boardSections(cards);
+  const { todoIds, savedDecisions } = repoIndex(repo.state);
+  // 브랜치를 고르면 그 브랜치 관련 결정·할 일만 남긴다 (조사·참고는 그대로)
+  const match = branchMatcher(repo.state, branch, todoIds);
+  const visible = match
+    ? cards.filter((c) => (c.tag === "decision" ? match.decision(c) : c.tag === "todo" ? match.todo(c) : true))
+    : cards;
+  const { decisions, todos, research, topics, lastUpdate } = boardSections(visible);
   const shown = topic ? decisions.filter((c) => topicOf(c) === topic) : decisions;
   const flagged = new Map<string, AlertLevel>(conflicts.map((x) => [x.cardB.id, alertLevel(x)]));
-  const { todoIds, savedDecisions } = repoIndex(repo.state);
   // 팀 기준: 목업은 팀 만들기에서 적은 값, 실제 모드는 팀 서버가 레포의 syncup.json team 에 넣은 값
   const criteria = USE_MOCK ? team.criteria : criteriaFromState(repo.state?.team);
 
@@ -110,7 +117,8 @@ export default function BoardPage() {
         <TabsContent value="record">
           <TeamRecord status={repo.status} onCopy={copyRecord} />
         </TabsContent>
-        <TabsContent value="board">
+        <TabsContent value="board" className="space-y-4">
+          <BranchFilter branches={branchNames(repo.state)} value={match ? branch : null} members={match?.members} onChange={setBranch} />
           {!cards.length ? (
             <EmptyState title="아직 팀에 올라온 결정이 없어요">
               <p>승인함에서 내용을 골라 올리면 여기에 쌓여요.</p>
