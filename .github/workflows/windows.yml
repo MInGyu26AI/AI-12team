@@ -1,0 +1,90 @@
+# The local collector on a real Windows machine, which the Mac checks cannot be: the Rust scanner's .exe build,
+# file ACLs, the native host launcher through cmd.exe, msvcrt locking and the app itself. Nothing is deployed.
+# What each step covers and what still needs a real PC: docs/windows.md.
+name: windows-collector
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['collector/**', 'contract/**', 'ai/**', 'scanner/**', 'checks/**', '.cargo/**', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['collector/**', 'contract/**', 'ai/**', 'scanner/**', 'checks/**', '.cargo/**', '.github/workflows/windows.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  collector:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    # No PYTHONUTF8: users start app.py in the console's own encoding, so the checks do too.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build the Rust scanner
+        run: |
+          cargo build --release --locked --manifest-path scanner/Cargo.toml
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item scanner\target\release\syncup-scanner.exe bin\
+          # .cargo/config.toml links the C runtime in; a VCRUNTIME import would need the Visual C++ Redistributable.
+          if (Select-String -Path bin\syncup-scanner.exe -Pattern 'VCRUNTIME' -SimpleMatch -Quiet) { throw 'syncup-scanner.exe still imports VCRUNTIME' }
+      # The built scanner, for Windows users who cannot build it themselves (Actions run page → Artifacts).
+      - name: Keep the scanner
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncup-scanner-windows-x64
+          path: bin/syncup-scanner.exe
+          if-no-files-found: error
+      # The whole app as dist/syncup/syncup.exe, for Windows users without Python (windows_bundle.py).
+      - name: Package the app
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python collector/windows_bundle.py
+      - name: Keep the packaged app
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncup-windows-x64
+          path: dist/syncup/
+          if-no-files-found: error
+      # Each check is its own step and runs even after a failure, so that one failure does not hide the others.
+      - name: Packaged app (run, bundled scanner, native host through cmd.exe)
+        if: always()
+        env:
+          SYNCUP_REQUIRE_BUNDLE: '1'
+        run: python checks/check_windows_bundle.py
+      # Stable Chrome no longer loads an unpacked extension from the command line; Chrome for Testing does.
+      - name: Install Chrome for Testing
+        if: always()
+        run: |
+          $out = npx --yes @puppeteer/browsers@2.6.1 install chrome@stable --path "$env:RUNNER_TEMP\cft"
+          $out
+          $exe = ($out | Select-Object -Last 1).Split(' ', 2)[1]
+          "CHROME_PATH=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Real Chrome to the native host (registry, Chrome's command line, answer back)
+        if: always()
+        env:
+          SYNCUP_REQUIRE_CHROME: '1'
+        run: python checks/check_windows_chrome.py
+      - name: Windows support (real ACLs, launcher through cmd.exe)
+        if: always()
+        run: python checks/check_windows_support.py
+      - name: Local pipeline and native host connection file
+        if: always()
+        run: python checks/check_pipeline.py
+      - name: Scanner paths, msvcrt lock and OS gates
+        if: always()
+        run: python checks/check_portability.py
+      - name: Codex scanner
+        if: always()
+        run: python checks/check_scanner_codex.py
+      - name: Claude Code scanner
+        if: always()
+        run: python checks/check_scanner_claude.py
+      - name: Account sync intake (ChatGPT sync window, intake, duplicates)
+        if: always()
+        run: python checks/check_sync_intake.py
+      - name: Local app regression (app.py run, fake team API, HTTP)
+        if: always()
+        run: python checks/check_integrity.py

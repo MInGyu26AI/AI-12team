@@ -2,6 +2,7 @@
 import http.client
 import json
 from pathlib import Path
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +25,33 @@ def _uuid(value):
     return str(uuid.UUID(value))
 
 
+class KeyFileError(ValueError):
+    """The connection key file cannot be used; the message says why and how to fix it, without the key."""
+
+
+def _key_not_private(path):
+    if sys.platform == 'win32':
+        # Codex on Windows grants its sandbox account (CodexSandboxUsers) read access to folders it touches.
+        return (f'연결 키 파일에 다른 계정의 읽기 권한이 있습니다(예: Codex의 CodexSandboxUsers). '
+                f'사용자 폴더 안에 두고 icacls "{path}" /reset 으로 기본 권한으로 되돌리세요.')
+    return f'연결 키 파일은 현재 사용자만 읽을 수 있어야 합니다: chmod 600 "{path}"'
+
+
+def read_key_file(token_file):
+    """The connection key in token_file; KeyFileError when it is missing, readable by others or not a key."""
+    path = Path(token_file)
+    try:
+        key = read_private_file(path, 256, _key_not_private(path))
+    except OSError:
+        raise KeyFileError(f'연결 키 파일을 열 수 없습니다. 경로를 확인하세요: {path}') from None
+    except ValueError as error:
+        raise KeyFileError(str(error)) from None
+    token = key.decode('utf-8-sig', 'replace').strip()  # Windows editors may save a byte order mark
+    if not SECRET_TOKEN.fullmatch(token):
+        raise KeyFileError('연결 키 파일의 내용이 연결 키가 아닙니다. 받은 파일을 그대로 쓰세요.')
+    return token
+
+
 class TeamClient:
     def __init__(self, api_url, token_file, user_id=None):
         parsed = urllib.parse.urlsplit(api_url)
@@ -32,10 +60,7 @@ class TeamClient:
                 or (parsed.scheme == 'http' and parsed.hostname != '127.0.0.1')):
             raise ValueError('팀 API는 HTTPS 주소 또는 로컬 127.0.0.1 주소여야 합니다.')
         self.api_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '/', '', ''))
-        key = read_private_file(Path(token_file), 256, '연결 키 파일은 현재 사용자만 읽을 수 있어야 합니다 (권한 600).')
-        self.token = key.decode('utf-8').strip()
-        if not SECRET_TOKEN.fullmatch(self.token):
-            raise ValueError('연결 키 파일을 확인하세요.')
+        self.token = read_key_file(token_file)
         # A previously bound identity enables local recovery, never remote authorization.
         self.user_id = None
         self.user_id = _uuid(user_id) if user_id is not None else self.me()['user_id']

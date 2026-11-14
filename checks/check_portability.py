@@ -1,6 +1,7 @@
 """Real local scanner/configuration checks; Windows API checks below use a test double."""
 import repo_paths  # noqa: F401  collector/·server/·contract/·ai 경로
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import errno
 import json
@@ -70,8 +71,9 @@ class PortabilityChecks(unittest.TestCase):
     def test_child_environment_and_binary_names(self):
         with patch.dict(os.environ, {"SystemRoot": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools",
                                     "OPENAI_API_KEY": "synthetic-only", "HOME": "private-home"}, clear=True):
-            self.assertEqual(runtime.child_environment(),
-                {"SystemRoot": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools", "PYTHONUTF8": "1"})
+            # Windows upper-cases environment names, so compare them that way.
+            self.assertEqual({k.upper(): v for k, v in runtime.child_environment().items()},
+                {"SYSTEMROOT": "C:\\Windows", "TEMP": "C:\\Temp", "PATH": "tools", "PYTHONUTF8": "1"})
         for host, binary in (("darwin", "syncup-scanner"), ("linux", "syncup-scanner"), ("win32", "syncup-scanner.exe")):
             with patch.object(sys, "platform", host):
                 self.assertEqual(runtime.scanner_binary().name, binary)
@@ -132,11 +134,12 @@ class PortabilityChecks(unittest.TestCase):
                    event("response_item", dict(type="message", role="assistant", phase="final_answer", content=[dict(type="output_text", text="조사 결과입니다.")])),
                    event("event_msg", dict(type="task_complete", turn_id="turn"))]
         log.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8")
-        with sqlite3.connect(index / "state_12.sqlite") as c:
+        # closing(): a connection's own `with` only commits, and Windows cannot delete a file left open.
+        with closing(sqlite3.connect(index / "state_12.sqlite")) as c, c:
             c.execute("CREATE TABLE threads(id TEXT,rollout_path TEXT,created_at_ms INTEGER,cwd TEXT,archived INTEGER,source TEXT)")
             c.execute("INSERT INTO threads VALUES(?,?,?,?,0,'cli')", ("main", str(log), int((start+1)*1000), str(project)))
         # An older incompatible DB must not be used instead of the current index.
-        with sqlite3.connect(index / "state_5.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_5.sqlite")) as c, c:
             c.execute("CREATE TABLE obsolete(value TEXT)")
         session = str(uuid.uuid4())
         messages = [dict(type="user", uuid="u", parentUuid=None, message=dict(role="user", content="새 Claude 경로 확인.")),
@@ -154,7 +157,7 @@ class PortabilityChecks(unittest.TestCase):
             rows = c.execute("SELECT evidence FROM jobs").fetchall()
             self.assertEqual(len(rows), 2)
             self.assertTrue(any("claude-code" in row[0] for row in rows))
-        with sqlite3.connect(index / "state_13.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_13.sqlite")) as c, c:
             c.execute("CREATE TABLE unknown(value TEXT)")
         with self.assertRaises(ValueError):
             scanner_runner.scan(db, codex, None, index)
@@ -193,33 +196,45 @@ class PortabilityChecks(unittest.TestCase):
         alias.symlink_to(project, target_is_directory=True)
         log = codex / "sessions" / "main.jsonl"
         log.write_text(log.read_text(encoding="utf-8").replace(str(project), str(alias)), encoding="utf-8")
-        with sqlite3.connect(index / "state_12.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_12.sqlite")) as c, c:
             c.execute("UPDATE threads SET cwd=?", (str(alias),))
         scanner_runner.scan(db, codex, None, index)
         with connect(db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 1)
         outside = self.root / "outside.jsonl"
         outside.write_bytes(log.read_bytes().replace(b'"main"', b'"outside"'))
-        with sqlite3.connect(index / "state_12.sqlite") as c:
+        with closing(sqlite3.connect(index / "state_12.sqlite")) as c, c:
             c.execute("INSERT INTO threads SELECT 'outside',?,created_at_ms,cwd,0,source FROM threads", (str(outside),))
         scanner_runner.scan(db, codex, None, index)
         with connect(db) as c:
             self.assertEqual(c.execute("SELECT count(*) FROM jobs").fetchone()[0], 1)
 
     def test_disabled_connections_before_state_creation(self):
-        self.assertEqual(runtime.ENABLED_PLATFORMS, {"darwin"})
-        for host in ("win32", "linux"):
-            folders = [str(repo_paths.REPO / d) for d in ("collector", "contract", "")]
-            code = f"import sys; sys.path[:0] = {folders!r}; import app; sys.platform = sys.argv.pop(1); app.main()"
-            state = self.root / host
-            result = subprocess.run([sys.executable, "-c", code, host, "run", "--state", str(state)],
-                                    capture_output=True, text=True, encoding="utf-8", env=runtime.child_environment(), timeout=5)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("macOS", result.stderr)
-            self.assertFalse(state.exists())
+        self.assertEqual(runtime.ENABLED_PLATFORMS, {"darwin", "win32"})
+        folders = [str(repo_paths.REPO / d) for d in ("collector", "contract", "")]
+        code = f"import sys; sys.path[:0] = {folders!r}; import app; sys.platform = sys.argv.pop(1); app.main()"
+        state = self.root / "linux"
+        result = subprocess.run([sys.executable, "-c", code, "linux", "run", "--state", str(state)],
+                                capture_output=True, text=True, encoding="utf-8", env=runtime.child_environment(), timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("macOS와 Windows", result.stderr)
+        self.assertFalse(state.exists())
+        # The Rust scanner enables the same systems as Python.
         source = (repo_paths.REPO / "scanner" / "src" / "main.rs").read_text(encoding="utf-8")
         entries = re.search(r"ENABLED_OS: &\[&str\] = &\[(.*?)\];", source, re.S).group(1)
-        self.assertEqual(re.findall(r'^\s*"(\w+)"', entries, re.M), ["macos"])
+        self.assertEqual(re.findall(r'^\s*"(\w+)"', entries, re.M), ["macos", "windows"])
+
+    def test_a_scanner_failure_names_the_part_and_its_kind_without_paths(self):
+        folder = self.root / "비공개 기록"
+        folder.mkdir()
+        db = folder / "private.sqlite"
+        db.write_bytes(b"not a database")
+        result = subprocess.run([str(runtime.scanner_binary()), str(db), str(folder / "codex"), str(folder / "claude")],
+                                capture_output=True, env=runtime.child_environment(), timeout=30)
+        self.assertEqual(result.returncode, 1)
+        stderr = result.stderr.decode("utf-8", "replace")
+        self.assertEqual(stderr.splitlines()[:2], ["codex: database", "claude: database"])
+        self.assertNotIn("비공개", stderr)
 
 
 if __name__ == "__main__":
