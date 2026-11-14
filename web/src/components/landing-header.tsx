@@ -39,7 +39,11 @@ export function LandingHeader() {
             );
           })}
         </nav>
-        <div className="ml-auto flex gap-2 lg:ml-0 lg:justify-self-end">
+        <div className="ml-auto flex items-center gap-2 lg:ml-0 lg:justify-self-end">
+          {/* 피그마 147:14: 버튼 앞 '로그인' 글자 링크 (Page 9 로그인 화면으로) */}
+          <Link href="/login" className="px-2 text-sm font-medium whitespace-nowrap hover:underline">
+            로그인
+          </Link>
           {/* 피그마 버튼: 주요 = 남색 바탕 흰 글자, 보조 = 흰 바탕 + #e2d6c3 테두리 + 남색 글자, 모서리 8, 글자 14px 보통 굵기 */}
           {START.href !== "/collect" && (
             <Link href="/collect" className={cn(buttonVariants({ variant: "outline" }), "h-10 rounded-md border-input px-3 sm:px-[18px]")}>
