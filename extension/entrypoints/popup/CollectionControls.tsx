@@ -16,7 +16,7 @@ export function AutoCollectSwitch({ autoCollect }: { autoCollect: boolean }) {
     <label className="flex cursor-pointer items-center justify-between rounded-lg border p-3">
       <span>
         <span className="block font-medium">자동 수집</span>
-        <span className="text-xs text-gray-500">ChatGPT에서 새로 끝난 대화를 자동으로 가져와요</span>
+        <span className="text-xs text-gray-500">켜 둔 동안 ChatGPT의 새 대화를 가져와요. 프로젝트 대화를 할 때만 켜 주세요</span>
       </span>
       <input type="checkbox" role="switch" checked={autoCollect} onChange={() => void save({ autoCollect: !autoCollect })} className="peer sr-only" />
       <span className="relative h-6 w-11 shrink-0 rounded-full bg-gray-300 transition-colors peer-checked:bg-tag-decision after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5" />

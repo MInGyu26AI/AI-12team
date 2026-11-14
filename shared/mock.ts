@@ -1,5 +1,6 @@
 // 목업 팀·팀 결정 기록. 내용은 김민규 님 피그마 시안(2·6번 화면)에 나온 그대로.
 // (평가용 샘플 대화·정답표 엑셀은 깃에 올리지 않으므로 여기에도 옮기지 않는다)
+import type { TeamCriteria } from "./criteria";
 import type { RelatedCard } from "./types";
 
 export interface TeamMember {
@@ -19,6 +20,7 @@ export interface Team {
   kind: string; // 팀 종류
   members: TeamMember[];
   me: string; // 지금 이 브라우저의 사용자 (로그인 붙기 전 임시)
+  criteria?: TeamCriteria; // 팀 목표·범위·규칙 (선택)
 }
 
 export const TEAM_KINDS = ["해커톤 (단기 팀)", "수업 팀플 (학기)", "동아리·사이드 프로젝트"];

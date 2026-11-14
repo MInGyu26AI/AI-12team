@@ -123,7 +123,10 @@ F. 상태·에러 처리
 - 팀 상태 파일(SYNCUP.md·syncup.json) GitHub 저장: 팀 서버가 변경 뒤 자동 커밋(server/repo_sync.py). 웹은 로컬 RPC team.repo(= GET /teams/{id}/repo)로 저장 상태·마지막 커밋을 읽는다 (shared/repo.ts). 화면: 팀 보드 레포 상태 바·'팀 기록' 탭(레포의 SYNCUP.md, syncup.json 내려받기)·할 일 SU-n 배지와 'ID 복사'·결정 "레포 반영 ✓", 대화 수집 화면의 연결 상태, 확장 팝업 하단. 레포 연결은 서버 환경 변수로만 정하므로 입력 화면은 없다. 형식은 docs/team-server.md 'GitHub 레포 저장'
 - 웹은 별도 API 주소를 쓰지 않는다. 실제 모드는 로컬 수집기 RPC로 팀 서버에 접근한다: 기본은 확장 경유, `NEXT_PUBLIC_LOCAL_BRIDGE=true`면 웹 서버의 `/api/local` 경유(서버 쪽 `SYNCUP_CONNECTION_FILE`·`SYNCUP_LOCAL_*` 필요). 목업 여부는 `NEXT_PUBLIC_USE_MOCK`
 
+- 프로젝트 방향성 기준(팀 목표·범위·규칙, shared/criteria.ts): 확장 설정 화면과 목업 팀 만들기에서 선택 입력, 팀 보드 맨 위 고정(목업은 팀 값, 실제 모드는 syncup.json team). 수집기 collection.configure 가 아직 teamGoal·teamScope·teamRules 를 받지 않아 확장은 저장만 한다
+
 ## 9. 개인정보·보안 원칙 (반드시 지킬 것)
+- 안내 문구는 "프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유합니다" 중심. "개인 대화를 AI가 걸러 준다"처럼 들리는 표현은 쓰지 않는다 (기기 안 개인정보 검사는 보조 장치)
 - 최초 설정에서 자동 수집 범위와 외부 AI 전송을 사용자에게 안내
 - 설정한 종료 시각에는 새 발화 수집과 외부 전송을 중단
 - 팀 서버에는 본인이 승인한 카드와 확인한 근거 발췌만 전송, 원본 대화 전체는 보내지 않음

@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
+import { cleanCriteria, rulesFromText } from "@shared/criteria";
 import { TEAM_KINDS } from "@shared/mock";
 import { Avatar } from "@/components/avatar";
 import { RegisteredTeamNotice } from "@/components/registered-team-notice";
@@ -25,8 +26,16 @@ export default function NewTeamPage() {
 function NewTeamForm() {
   const router = useRouter();
   const [team, setTeam] = useDemoTeam();
-  const [form, setForm] = useState({ name: team.name, topic: team.topic, deadline: team.deadline, kind: team.kind });
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const [form, setForm] = useState({
+    name: team.name,
+    topic: team.topic,
+    deadline: team.deadline,
+    kind: team.kind,
+    goal: team.criteria?.teamGoal ?? "",
+    scope: team.criteria?.teamScope ?? "",
+    rules: (team.criteria?.teamRules ?? []).join("\n"),
+  });
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   // 서버 렌더링 땐 주소를 모르므로 빈 값 → 브라우저에서 채움 (hydration 불일치 방지)
@@ -45,7 +54,8 @@ function NewTeamForm() {
 
   const create = () => {
     if (!valid) return;
-    setTeam({ ...team, name: form.name.trim(), topic: form.topic.trim(), deadline: form.deadline, kind: form.kind });
+    const criteria = cleanCriteria({ teamGoal: form.goal, teamScope: form.scope, teamRules: rulesFromText(form.rules) });
+    setTeam({ ...team, name: form.name.trim(), topic: form.topic.trim(), deadline: form.deadline, kind: form.kind, criteria });
     toast.success("팀을 만들었어요");
     router.push("/collect");
   };
@@ -64,7 +74,7 @@ function NewTeamForm() {
         <Field label="팀 이름">
           <input value={form.name} onChange={set("name")} className={inputCls} placeholder="예: AI 해커톤 12팀" />
         </Field>
-        <Field label="프로젝트 주제" hint="AI가 이 주제와 관련된 대화만 팀 결정 후보로 골라요.">
+        <Field label="프로젝트 주제" hint="이 주제와 관련된 내용만 내 승인함에 후보로 보여 줘요.">
           <input value={form.topic} onChange={set("topic")} className={inputCls} placeholder="예: 대학생 팀용 AI 결정 기록 서비스" />
         </Field>
         <div className="grid gap-5 sm:grid-cols-2">
@@ -79,6 +89,28 @@ function NewTeamForm() {
             </select>
           </Field>
         </div>
+      </section>
+
+      <section className="space-y-5 rounded-xl border bg-card p-6">
+        <div className="space-y-1">
+          <h2 className="font-semibold">팀 목표·범위·규칙 <span className="text-sm font-normal text-muted-foreground">(선택)</span></h2>
+          <p className="text-sm text-muted-foreground break-keep">팀 결정 기록 맨 위에 고정되고, AI가 프로젝트 대화를 고르는 기준이 돼요.</p>
+        </div>
+        <Field label="팀 목표">
+          <input value={form.goal} onChange={set("goal")} className={inputCls} placeholder="예: 11/16까지 시연 가능한 MVP 제출" />
+        </Field>
+        <Field label="범위">
+          <input value={form.scope} onChange={set("scope")} className={inputCls} placeholder="예: ChatGPT 웹 수집 + 팀 보드까지, 결제는 제외" />
+        </Field>
+        <Field label="규칙" hint="한 줄에 하나씩 적어 주세요.">
+          <textarea
+            value={form.rules}
+            onChange={set("rules")}
+            rows={3}
+            className={cn(inputCls, "h-auto py-2.5")}
+            placeholder={"예: 결정은 팀장 승인 후 확정\n개인 일정·연락처는 올리지 않기"}
+          />
+        </Field>
       </section>
 
       <section className="space-y-4 rounded-xl border bg-card p-6">

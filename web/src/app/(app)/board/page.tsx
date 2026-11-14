@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, timeOf } from "@shared/format";
 import { alertLevel, type AlertLevel } from "@shared/labels";
+import { criteriaFromState } from "@shared/criteria";
 import { repoIndex } from "@shared/repo";
 import type { RelatedCard } from "@shared/types";
 import { ConflictBanner } from "@/components/board/conflict-banner";
@@ -13,6 +14,7 @@ import { DecisionHistoryList } from "@/components/board/decision-history";
 import { DecisionTimeline, TopicFilter } from "@/components/board/decision-timeline";
 import { RepoStatusBar } from "@/components/board/repo-status";
 import { ResearchPanel } from "@/components/board/research-panel";
+import { TeamCriteriaCard } from "@/components/board/team-criteria";
 import { TeamRecord } from "@/components/board/team-record";
 import { TodoPanel } from "@/components/board/todo-panel";
 import { ConflictDialog } from "@/components/conflict-dialog";
@@ -23,12 +25,14 @@ import { USE_MOCK, api } from "@/lib/api";
 import { resetMockData } from "@/lib/api/mock";
 import { boardToMarkdown } from "@/lib/board-markdown";
 import { useBoard } from "@/lib/use-board";
+import { useTeam } from "@/lib/team";
 import { useRepo } from "@/lib/use-repo";
 
 // 피그마 6번: 팀 결정 기록 보드
 export default function BoardPage() {
   const { load, refresh, reload } = useBoard();
   const repo = useRepo();
+  const team = useTeam();
   const [topic, setTopic] = useState<string | null>(null); // 왼쪽 세부 주제 필터
   const [dialog, setDialog] = useState(false);
 
@@ -41,6 +45,8 @@ export default function BoardPage() {
   const shown = topic ? decisions.filter((c) => topicOf(c) === topic) : decisions;
   const flagged = new Map<string, AlertLevel>(conflicts.map((x) => [x.cardB.id, alertLevel(x)]));
   const { todoIds, savedDecisions } = repoIndex(repo.state);
+  // 팀 기준: 목업은 팀 만들기에서 적은 값, 실제 모드는 팀 서버가 레포의 syncup.json team 에 넣은 값
+  const criteria = USE_MOCK ? team.criteria : criteriaFromState(repo.state?.team);
 
   const copyRecord = async () => {
     try {
@@ -90,6 +96,7 @@ export default function BoardPage() {
           팀 기록 복사
         </Button>
       </div>
+      <TeamCriteriaCard criteria={criteria} />
       <DecisionHistoryList />
       <ConflictChecks cards={cards} onRetry={retryCheck} />
       {conflicts.length > 0 && <ConflictBanner conflicts={conflicts} onOpen={() => setDialog(true)} />}

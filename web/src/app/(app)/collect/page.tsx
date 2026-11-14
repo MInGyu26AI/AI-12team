@@ -101,9 +101,9 @@ export default function CollectPage() {
           </div>
         )}
         <div>
-          <p className="font-medium">이 팀 프로젝트와 관련된 대화만 수집</p>
+          <p className="font-medium">프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유</p>
           <p className="text-sm text-muted-foreground break-keep">
-            수집한 발화를 AI로 분류하고 팀 관련 후보만 검토함에 보여줍니다. 팀 공유는 승인 후에만 진행됩니다.
+            자동 수집은 켜 둔 동안의 새 대화를 읽어요. 프로젝트 대화를 할 때만 켜 두세요. 프로젝트와 관련된 내용만 내 검토함에 후보로 보여 주고, 팀에는 승인한 카드만 공유돼요.
           </p>
         </div>
         <ToggleRow

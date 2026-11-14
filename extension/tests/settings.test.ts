@@ -35,6 +35,11 @@ describe('settingsFromStatus', () => {
     expect(next).not.toHaveProperty('teams');
     expect(next).not.toHaveProperty('counts');
   });
+
+  it('설정 화면에서 적은 팀 목표·범위·규칙은 수집기 상태로 새로 고쳐도 남는다', () => {
+    const teamCriteria = { teamGoal: 'MVP 제출', teamRules: ['승인 후 공유'] };
+    expect(settingsFromStatus(stored({ teamCriteria }), status).teamCriteria).toEqual(teamCriteria);
+  });
 });
 
 describe('saveSetup (팝업 설정 저장)', () => {

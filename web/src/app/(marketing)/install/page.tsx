@@ -73,7 +73,7 @@ export default function InstallPage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">확장 프로그램 설치</h1>
         <p className="text-sm text-muted-foreground break-keep">
-          ChatGPT 대화에서 팀 결정·할 일·조사를 자동으로 골라 내 승인함으로 보내 주는 크롬 확장 프로그램이에요.
+          프로젝트 대화만 가져와 결정·할 일·조사 후보를 내 승인함에 모아 주고, 내가 승인한 것만 팀에 공유하는 크롬 확장 프로그램이에요.
         </p>
       </div>
 
@@ -133,7 +133,7 @@ export default function InstallPage() {
           </p>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground break-keep">
             <li>자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화만 읽어요.</li>
-            <li>이 기기의 개인정보 검사가 개인 내용으로 본 발화는 외부 AI와 팀에 보내지 않고, 전화번호 같은 민감정보는 가려요.</li>
+            <li>팀에는 내가 승인한 카드만 올라가요. 외부 AI로 보내기 전에 전화번호 같은 민감정보는 가려요.</li>
             <li>
               팀에는 <Link href="/review" className="underline">승인함</Link>에서 내가 체크해서 공유한 카드만 올라가요.
             </li>
