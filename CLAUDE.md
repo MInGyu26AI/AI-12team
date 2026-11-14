@@ -40,7 +40,7 @@
 - /docs : 분류 기준, 구조·실행·팀 서버·개인정보 문서 (검증 기록은 팀 노션)
 
 ## 6. 데이터 형식 (코드는 /shared/types.ts)
-**분류 기준은 [docs/classification.md](docs/classification.md)를 따른다.** (관련성 → 소주제 → 표시, 민감정보 별도 검사, 분류 예시 22개)
+**분류 기준은 [docs/classification.md](docs/classification.md)를 따른다.** (관련성 → 소주제 → 표시, 민감정보 별도 검사, 분류 예시 24개)
 
 ### 출력 형식(JSON) — 분류 기준표 4장
 | 필드 | 설명 | 값 예시 | 필수 여부 |
