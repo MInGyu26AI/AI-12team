@@ -5,7 +5,7 @@
 1) 케이스 상황 글에 있는 원문·결정자·날짜·topic_key 를 그대로 쓴다. 영어 원문은 번역하지 않는다.
 2) 결정자가 '다른 팀원'·'같은 팀원'으로만 나오면 Member A·B·C 로, 모른다고 적혀 있으면 빈칸으로 둔다.
 3) 쌍이 아닌 케이스(민감정보 가림만, 기록 오류, 맥락 없음, 기존 값 없음)는 넣지 않는다. 목록은 SKIPPED.
-4) 정답은 conflict_rules_v2.md 기준으로 정했다. 판단이 갈리는 것은 review=검수 (사람이 다시 봄).
+4) 정답은 conflict_rules_v2.md 기준으로 정했다. 판단이 갈리던 9개는 하은이 검수했다 (메모의 '하은 검수').
    SynTitan 결과에는 정답이 없다 (package_v2/README.md).
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ PAIRS = [
     ("C-002", "확인 필요", "", "조건부 결정",
      ("Ravi Singh", "2026-11-12 16:00", "Feature scope", "If the prototype is stable by Friday, we will include the voice-control feature.", "Voice control = included if stable by Friday"),
      ("Elena García", "2026-11-14 09:30", "Release scope", "The prototype will ship without voice control.", "Voice control = not included", False)),
-    ("C-003", "같음", "검수", "기존 값을 남긴 확장. 같은 사람이라 변경으로도 볼 수 있음",
+    ("C-003", "같음", "", "하은 검수: 확장 (기존 값을 남김)",
      ("Isabel Martin", "2026-11-12 09:00", "Language support", "The prototype will support English and French.", "Supported languages = English, French"),
      ("Isabel Martin", "2026-11-14 09:00", "Localization", "Add Arabic as a supported language alongside English and French.", "Supported languages = English, French, Arabic", False)),
     ("C-004", "무관", "", "차트 하나만의 범위",
@@ -46,7 +46,7 @@ PAIRS = [
     ("C-010", "확인 필요", "", "대체인지 추가인지 모름",
      ("Lena Ortiz", "2026-11-06 14:00", "Provider comparison", "The report will compare two payment providers.", "Payment providers compared = 2"),
      ("Member B", None, "Provider comparison", "The report will compare four payment providers.", "Payment providers compared = 4", False)),
-    ("C-010-1", "확인 필요", "검수", "'only two' 와 세 지역. 대체인지 모름",
+    ("C-010-1", "충돌", "", "하은 검수: 충돌 ('only two' 를 다른 사람이 깸)",
      ("Member A", None, "Study regions", "Only two regions will be included in the study.", "Study regions = only two regions"),
      ("Member B", None, "Study regions", "The study will include the same two regions plus a third.", "Study regions = two regions plus a third", False)),
     ("C-011", "확인 필요", "", "결정자·팀 합의 미상",
@@ -79,13 +79,13 @@ PAIRS = [
     ("C-021", "무관", "", "조사 결과는 결정 아님",
      ("Member A", None, "Alert channel", "We will use email alerts.", "Alert channel = email"),
      ("Member B", None, "Alert channel", "The survey shows 62% of respondents prefer text alerts.", "62% of respondents prefer text alerts", False)),
-    ("C-023", "확인 필요", "검수", "좁힌 대상. 나머지 1학년을 빼는지 모름",
+    ("C-023", "충돌", "", "하은 검수: 충돌 (대상을 좁힘)",
      ("Member A", None, "Survey target", "The survey will target first-year students.", "Survey target = first-year students"),
      ("Member B", None, "Survey target", "The survey will target international first-year students.", "Survey target = international first-year students", False)),
     ("C-024", "확인 필요", "", "대상이 겹치는 정도 모름",
      ("Member A", None, "Survey target", "The survey will target first-year students.", "Survey target = first-year students"),
      ("Member B", None, "Survey target", "The survey will target international students across all years.", "Survey target = international students (all years)", False)),
-    ("C-027", "확인 필요", "검수", "'세 개' 와 '세 개 이하'",
+    ("C-027", "충돌", "", "하은 검수: 충돌 ('3개' 와 '3개 이하')",
      ("Member A", None, "Data sources", "We will use three data sources.", "Data sources = 3"),
      ("Member B", None, "Data sources", "The project will use no more than three data sources.", "Data sources = at most 3", False)),
     ("C-029", "변경", "", "같은 사람의 부정",
@@ -160,7 +160,7 @@ PAIRS = [
     ("C-043", "확인 필요", "", "조건부 결정",
      ("Mina Park", "2026-11-13 09:00", "Deployment", "We will use a local server if the venue's Wi-Fi is unreliable.", "Demo server = local if venue Wi-Fi is unreliable"),
      ("Joon Lee", "2026-11-14 14:00", "Demo setup", "The demo will run only on the venue Wi-Fi.", "Demo network = venue Wi-Fi only", False)),
-    ("C-044", "무관", "검수", "의견을 묻는 질문은 결정 아님 (같음으로 봐도 알림 없음)",
+    ("C-044", "무관", "", "하은 검수: 무관 (질문은 결정 아님)",
      ("Chen Wei", "2026-11-11 10:00", "Workshop opening", "The workshop will start with a short quiz.", "Workshop opening = short quiz"),
      ("Chen Wei", "2026-11-14 10:00", "Workshop opening", "Should we start the workshop with a short quiz?", "Workshop opening = short quiz?", False)),
     ("C-045", "변경", "", "같은 사람이 숫자를 바꿈 (복합 문장의 결정 부분)",
@@ -187,7 +187,7 @@ PAIRS = [
     ("C-053", "같음", "", "기존 값을 남긴 추가",
      ("Member A", None, "Dashboard cadence", "The dashboard will show monthly results.", "Dashboard = monthly results"),
      ("Member B", None, "Dashboard cadence", "The dashboard will show weekly results as well as monthly results.", "Dashboard = weekly and monthly results", False)),
-    ("C-054", "확인 필요", "검수", "결정자가 'the group' 인데 원문은 'I'. 기존 값은 케이스에 없어 'instructor review' 로 둠",
+    ("C-054", "확인 필요", "", "하은 검수: 확인 필요 (결정자 'the group' 과 원문 'I'. 기존 값은 'instructor review' 로 둠)",
      ("Member A", None, "Evaluation method", "The evaluation method will be instructor review.", "Evaluation method = instructor review"),
      ("the group", None, "Evaluation method", "I changed the evaluation method to peer review.", "Evaluation method = peer review", True)),
     ("C-056", "같음", "", "도움말 페이지만의 추가",
@@ -217,7 +217,7 @@ PAIRS = [
     ("C-065", "무관", "", "내부 마감과 외부 제출 기한",
      ("Organizer notice", None, "Submission deadline", "The final submission deadline is October 12.", "Final submission deadline = October 12"),
      ("Member B", None, "Editing deadline", "Our internal editing deadline is October 10.", "Internal editing deadline = October 10", False)),
-    ("C-065-1", "무관", "검수", "다른 마감. 새 문장은 조사(외부 조건)에 가까움",
+    ("C-065-1", "무관", "", "하은 검수: 무관 (다른 마감)",
      ("Member A", None, "Draft review", "Our internal deadline for draft review is April 5.", "Draft review deadline = April 5"),
      ("Member B", None, "Final deadline", "The instructor's final submission deadline is April 12.", "Final submission deadline = April 12", False)),
     ("C-066", "무관", "", "확정하지 않은 말은 결정 아님",
@@ -268,7 +268,7 @@ PAIRS = [
     ("C-079-1", "충돌", "", "자리 바꾸기, 다른 사람",
      ("Member A", None, "Presenter", "Lina will be the presentation speaker.", "Presenter = Lina"),
      ("Member B", None, "Presenter", "I'll take over the presentation.", "Presenter = Member B", True)),
-    ("C-080", "변경", "검수", "같은 사람이 넘김. 원래 결정자를 Omar 로 둠",
+    ("C-080", "변경", "", "하은 검수: 변경 (같은 사람이 넘김, 원래 결정자를 Omar 로 둠)",
      ("Omar", None, "Panel moderator", "I will moderate the panel.", "Panel moderator = Omar"),
      ("Omar", None, "Panel moderator", "I'm handing the moderator role to Priya.", "Panel moderator = Priya", True)),
     ("C-081", "무관", "", "같은 topic_key, 다른 결과물",
@@ -280,7 +280,7 @@ PAIRS = [
     ("C-082-1", "변경", "", "같은 사람, 날짜만 다름",
      ("Member A", None, "Draft deadline", "The internal draft deadline is October 7.", "Internal draft deadline = October 7"),
      ("Member A", None, "Draft deadline", "The dataset arrives late, so let's make the draft deadline October 9.", "Internal draft deadline = October 9", True)),
-    ("C-083", "확인 필요", "검수", "'바꾼다' 고 했지만 두 자리는 따로 둘 수 있음",
+    ("C-083", "변경", "", "하은 검수: 변경",
      ("Member A", None, "Team roles", "Member C will be the research lead.", "Research lead = Member C"),
      ("Member B", None, "Team roles", "Member C will be the analysis lead instead of the research lead.", "Analysis lead = Member C", True)),
     ("C-084", "충돌", "", "자리 바꾸기, 다른 사람",
