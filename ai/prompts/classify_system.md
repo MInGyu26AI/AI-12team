@@ -27,7 +27,8 @@
 - 주제·목표: 무엇을, 왜 하는지. 주제, 목표, 범위, 방향, 타깃, 서비스명. (범위를 정하면 주제·목표, 실제 만드는 방법은 작업·결과물)
 - 자료 조사: 논문, 기사, 통계, 사례, 비교 결과. 조사 내용 자체가 중심일 때만. 조사를 바탕으로 '정했으면' 해당 소주제의 결정.
 - 작업·결과물: 실제로 만드는 것. 보고서 본문, 코드, 디자인, 실험 방법, 기획안, 기능, 화면. (발표용 자료는 발표·제출)
-- 역할·일정: 누가 무엇을 맡는지, 팀 내부 마감, 회의 시간. (교수님·주최 측 제출 기한은 발표·제출)
+- 역할·일정: 역할 분담 방식, 팀 내부 마감, 회의 시간, 정산 같은 팀 운영. (교수님·주최 측 제출 기한은 발표·제출)
+  할 일의 소주제는 맡은 일의 내용으로 정한다 (보고서 쓰기 → 작업·결과물, 자료 찾기 → 자료 조사, 발표 자료 → 발표·제출).
 - 과제 조건·피드백: 교수님·주최 측 공지, 평가 기준, 분량·형식, 받은 피드백. 팀이 정한 게 아니라 외부에서 주어진 조건.
 - 발표·제출: 발표자, 발표 자료, 제출 방법과 기한. 발표 담당을 정하는 것도 여기.
 - 기타: 위 6개에 맞지 않는 팀 관련 내용 (팀 이름, 팀 규칙 등).
@@ -40,7 +41,8 @@
     예) "팀에서 오프라인 발표는 안 하기로 했는데, 그럼 영상은 어떻게 찍어?" → 발표 방식 = 오프라인 안 함 (결정, 팀 합의)
   - 같은 결정을 다시 말해도 결정 카드로 만든다 (충돌 판정에서 '같음'으로 처리됨).
 - todo(할 일): 누군가 해야 할 팀 작업. 신호: ~할게, ~해야 해, ~까지, ~가 맡아, ~해 줘.
-  - "○○가 하자"처럼 사람을 정하는 말은 할 일(담당 지정).
+  - 발표자·사회자·팀장처럼 자리를 정하는 말("발표자는 소희로 하자")은 결정 (내용 "발표자 = 한소희").
+    결과물이 있는 일을 맡기는 말("편집은 도윤이가 맡아 줘")은 할 일.
 - research(조사): 알게 된 사실, 조사 결과, 외부 조건, 팀 상황·진행 정보. 신호: ~래, ~에 따르면, 찾아보니, 교수님이 ~랬어, 이미 ~하기 시작했어.
   - AI가 무언가를 추천했다는 '전달'("Claude가 ○○를 추천했어")은, 팀이 받아들였다는 표현이 없으면 조사.
 - none(제안): "~하면 어때?", "~할까?" 같은 제안·질문. 확정 표현이 없으면 결정이 아니다. subtopic·topic_key는 null 가능.
@@ -107,7 +109,7 @@ JSON 객체 하나만 출력한다. 설명 문장, 코드 블록 금지.
 출력:
 {"cards":[
 {"msg":1,"relevance":"related","sentence":"데모 영상은 2분 안으로 하자.","subtopic":"발표·제출","tag":"decision","topic_key":"데모 영상","content":"데모 영상 길이 = 2분 이내","reason":null,"owner":"박지민","due":null,"is_change":false,"masked":false,"confidence":0.88},
-{"msg":1,"relevance":"related","sentence":"편집은 도윤이가 맡아 줘.","subtopic":"역할·일정","tag":"todo","topic_key":"데모 영상","content":"데모 영상 편집","reason":null,"owner":"정도윤","due":null,"is_change":false,"masked":false,"confidence":0.86},
+{"msg":1,"relevance":"related","sentence":"편집은 도윤이가 맡아 줘.","subtopic":"발표·제출","tag":"todo","topic_key":"데모 영상","content":"데모 영상 편집","reason":null,"owner":"정도윤","due":null,"is_change":false,"masked":false,"confidence":0.86},
 {"msg":2,"relevance":"personal","masked":false,"confidence":0.95},
 {"msg":3,"relevance":"related","sentence":"해커톤 심사에서는 보통 문제 정의와 시연 완성도를 가장 크게 봅니다.","subtopic":"과제 조건·피드백","tag":"research","topic_key":"심사 기준","content":"심사 = 문제 정의·시연 완성도 비중 큼 (AI 답변)","reason":null,"owner":null,"due":null,"is_change":false,"masked":false,"confidence":0.7},
 {"msg":4,"relevance":"related","sentence":"로그인은 구글 로그인 대신 팀 코드로 바꾸자.","subtopic":"작업·결과물","tag":"decision","topic_key":"로그인 방식","content":"로그인 방식 = 팀 코드 (구글 로그인 대신)","reason":"비개발자도 쓰기 쉬워야 함","owner":"박지민","due":null,"is_change":true,"masked":false,"confidence":0.9},
