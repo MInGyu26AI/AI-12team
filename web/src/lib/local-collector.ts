@@ -4,10 +4,10 @@
 // 헤더·아바타처럼 상태만 필요하면 collection.status 만 읽는다. 목업 모드는 수집기에 요청하지 않는다.
 import { useCallback, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import type { ExtSettingsPatch, ExtStatus, PrivacyList } from "@shared/bridge";
+import type { ExtSettingsPatch, ExtStatus, PrivacyList, SyncNowParams, SyncNowResult } from "@shared/bridge";
 import type { RelatedCard } from "@shared/types";
 import { POLL_MS, USE_MOCK } from "./api";
-import { ExtensionMissing, rpc } from "./rpc";
+import { ExtensionMissing, rpc, syncNow } from "./rpc";
 
 interface Snapshot {
   status: ExtStatus | null; // 마지막으로 받은 상태 (뒤 요청이 실패해도 남긴다)
@@ -146,27 +146,27 @@ async function act(method: string, params: Record<string, unknown> = {}) {
   }
 }
 
-// 싱크 맞추기: 쌓인 대화를 지금 분류 대기열에 넣고(collection.flush, 팝업과 같은 요청) 상태를 다시 읽는다.
-// 쌓인 대화가 없거나 수집 중이 아니면 다시 읽기만 한다. 자동(승인함에 들어올 때)은 조용히, SYNC_GAP_MS 안에 한 번만
-const SYNC_GAP_MS = 60_000;
-let lastAutoSync = 0;
-async function sync(auto = false) {
-  if (USE_MOCK) {
-    if (!auto) toast.info("예시 모드에서는 실제 수집기에 요청하지 않습니다.");
-    return;
-  }
-  if (auto) {
-    if (Date.now() - lastAutoSync < SYNC_GAP_MS) return;
-    lastAutoSync = Date.now();
-  }
-  try {
-    const st = snapshot.status;
-    if (st?.autoCollect && st.bufferedTurns) await rpc("collection.flush");
-    await refreshCollector();
-    if (!auto) toast.success("싱크를 맞췄어요. 새 후보는 분류가 끝나면 올라와요.");
-  } catch (error) {
-    if (!auto) toast.error((error as Error).message);
-  }
+/** '싱크 맞추기' 버튼을 누를 수 있는지: 수집 중이어야 하고, 쌓인 대화가 있거나 프로젝트 동기화가 켜져 있어야 한다 */
+export const canSyncNow = (status: ExtStatus) => status.autoCollect && (status.bufferedTurns > 0 || !!status.accountSync?.enabled);
+
+let syncing: Promise<SyncNowResult> | null = null; // 돌고 있는 싱크 맞추기 (승인함 자동 실행과 버튼이 겹치거나 화면이 두 번 실행해도 한 번만 보낸다)
+
+/**
+ * 싱크 맞추기를 하고, 끝나면 보여 줄 화면이 있을 때 후보·상태를 다시 읽는다. 실패는 던진다 (조용히 둘지는 부른 쪽이 정한다).
+ * 이미 돌고 있으면 그 결과를 함께 받는다.
+ */
+export function syncAndRefresh(reason: SyncNowParams["reason"]): Promise<SyncNowResult> {
+  if (USE_MOCK) return Promise.reject(new Error("예시 모드에서는 실제 수집기에 요청하지 않습니다."));
+  syncing ??= syncThenRefresh(reason).finally(() => {
+    syncing = null;
+  });
+  return syncing;
+}
+
+async function syncThenRefresh(reason: SyncNowParams["reason"]): Promise<SyncNowResult> {
+  const result = await syncNow(reason);
+  if (listeners.size) await refreshCollector();
+  return result;
 }
 
 // 개인정보 처리 요청은 서버 답을 돌려주거나 던진다 (실패를 성공으로 보이지 않게).
@@ -198,8 +198,7 @@ const ACTIONS = {
   privacyAction,
   remove,
   updateSettings: (patch: ExtSettingsPatch) => act("collection.configure", { ...patch }),
-  sync: () => sync(),
-  autoSync: () => sync(true),
+  syncNow: syncAndRefresh,
 };
 
 /** 후보까지 필요한 곳 (승인함·대화 수집) */

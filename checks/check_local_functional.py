@@ -48,6 +48,8 @@ class LocalFunctional(PipelineFixture):
         turn_intake.append(self.pipeline, [a,b,c,d])
         status = collection_status(self.pipeline)
         self.assertEqual(status['bufferedTurns'],3)
+        # 다음 자동 분류는 대화별로 답을 받은 턴만 센다: 'one'(manual) 1턴, 'one'(chatgpt) 1턴, 'two' 는 답 대기
+        self.assertEqual(status['nextBatchTurns'],1)
         self.assertIsNotNone(status['lastCollectedAt'])
         self.assertEqual(status['recent'],[])
         with connect(self.db) as conn:

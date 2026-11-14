@@ -31,7 +31,8 @@ export interface ExtStatus {
   configured: boolean;
   autoCollect: boolean; // false = 수집 일시정지
   turnsPerBatch: number;
-  bufferedTurns: number; // 아직 분류에 안 보낸 대화 수
+  bufferedTurns: number; // 아직 분류에 안 보낸 대화 수 (모든 대화 합계, '지금 분류하기'로 보낼 것이 있는지)
+  nextBatchTurns?: number; // 다음 자동 분류에 가장 가까운 대화의 답을 받은 턴 수 (turnsPerBatch 가 되면 분류). 옛 수집기는 없음
   endsAt: string; // 수집 종료 시각 (ISO)
   lastCollectedAt: string | null;
   lastClassifier: "native" | null;
@@ -40,6 +41,36 @@ export interface ExtStatus {
   recent: BatchRecord[]; // 최근 수집 (새 것부터)
   counts?: Partial<Record<"reviewPending" | "deliveryPending" | "deliveryBlocked" | "classificationPending" | "classificationFailed" | "intakeIssues" | "privacyHeld" | "privacyExcluded", number>>;
   privacy?: { policy: string; model: string | null; available: boolean | null; reason: string | null }; // 로컬 개인정보 검사 상태
+  // 계정 동기화 (docs/sync-contract.md 3장). 옛 수집기는 없음 → 확장은 동기화를 켜지 못하게 한다
+  syncWindows?: SyncWindow[]; // 동기화 창: [max(세션 시작, 켠 시각), 수집 종료) − 일시정지 구간 (시작 순, 꺼져 있으면 [])
+  accountSync?: AccountSyncState | null; // null = 한 번도 켠 적 없음
+}
+
+// 동기화 창 한 조각 [start, end). end 는 늘 있음 (수집 중이면 마지막 조각의 끝 = 수집 종료 시각)
+export interface SyncWindow {
+  start: string; // ISO
+  end: string; // ISO
+}
+
+export interface AccountSyncState {
+  enabled: boolean;
+  account: string; // 마지막으로 켤 때 저장한 ChatGPT 계정 해시 (소문자 hex 64자). 일치 확인은 확장이 한다
+  since: string | null; // 마지막으로 켠 시각(동의 시각, ISO). 꺼져 있으면 null
+}
+
+// 웹 → 확장 '싱크 맞추기' (rpc 메시지의 method 이름). 수집기로 넘기지 않고 background 가 처리한다:
+// 프로젝트 동기화 패스를 바로 한 번 돌리고(켜져 있을 때) collection.flush 를 부른다
+export const EXT_SYNC_NOW = "ext.syncNow";
+
+export interface SyncNowParams {
+  reason: "button" | "review-open"; // 버튼 = 사용자가 누름, review-open = 개인 검토함 진입 시 자동
+}
+
+export interface SyncNowResult {
+  sync: "ran" | "off" | "resting" | "no-tab" | "busy" | "failed"; // 패스 결과. off = 동기화 꺼짐(화면 수집만)
+  newTurns: number; // 이번 패스가 수집기에 새로 넣은 턴 수 (패스를 안 돌렸으면 0)
+  flushed: boolean; // collection.flush 를 불렀는지 (수집 중이 아니면 false)
+  blockedReason?: string; // flush 를 못 부른 이유 (sendBlockedReason 과 같은 문구)
 }
 
 // 로컬 개인정보 검사 (privacy.list). 원문 미리보기는 형식 가림만 적용된 로컬 전용 값이다.
@@ -86,4 +117,6 @@ export interface ExtSettingsPatch {
   autoCollect?: boolean;
   turnsPerBatch?: number;
   endsAt?: string;
+  // 계정 동기화 켬·끔 (C6). 켤 때 account 필수. 다른 계정으로 켜려면 먼저 꺼야 한다(수집기가 거절)
+  accountSync?: { enabled: boolean; account?: string };
 }

@@ -1,6 +1,6 @@
 "use client";
 import { MOCK_TEAM, type Team } from "@shared/mock";
-import { useLocal } from "./local-store";
+import { useLocal } from "./browser-store";
 import { USE_MOCK } from "./api";
 import { useCollectorStatus } from "./local-collector";
 

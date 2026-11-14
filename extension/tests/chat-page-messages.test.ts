@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ContentScriptContext } from '#imports';
 import aiChat from '@/entrypoints/ai-chat.content';
+import { settingsItem } from '@/lib/settings';
 
 const invalidated: (() => void)[] = [];
 const ctx = {
@@ -34,7 +35,39 @@ describe('채팅 화면이 받는 메시지', () => {
   it('ping 에는 sendResponse 로 바로 답하고 Promise 를 돌려주지 않는다', async () => {
     const { returned, sendResponse } = deliver({ type: 'ping' });
     expect(returned).toBeUndefined();
-    expect(sendResponse).toHaveBeenCalledWith({ site: 'ChatGPT', onConversation: true, messageCount: 0, selector: null, guessedRoles: 0 });
+    expect(sendResponse).toHaveBeenCalledWith({
+      site: 'ChatGPT',
+      onConversation: true,
+      messageCount: 0,
+      selector: null,
+      guessedRoles: 0,
+      tried: expect.arrayContaining([{ name: 'author-role', count: 0 }]),
+    });
+  });
+
+  it('ping 에 화면 구조 점검용 개수(전략별 개수 · 빈 본문 수)를 싣고, 대화 내용은 싣지 않는다', () => {
+    document.body.insertAdjacentHTML(
+      'afterbegin',
+      `<main>
+        <div data-message-author-role="user" data-message-id="u1"><div class="whitespace-pre-wrap">비밀 계획: 금요일 발표</div></div>
+        <div data-message-author-role="assistant" data-message-id="a1"><div class="markdown"></div></div>
+      </main>`,
+    );
+    const { sendResponse } = deliver({ type: 'ping' });
+    const answer = sendResponse.mock.calls[0]![0] as { messageCount: number; selector: string; tried: unknown[]; emptyBodies: number };
+    expect(answer).toMatchObject({ messageCount: 1, selector: 'author-role', emptyBodies: 1, tried: [{ name: 'author-role', count: 1 }] });
+    expect(JSON.stringify(answer)).not.toContain('비밀');
+  });
+
+  it('"팀 기록 불러오기"는 백그라운드에 teamRecord 를 요청한다 (fetchTeamRecord 연결)', async () => {
+    const toBackground = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: false, error: '팀 서버에 연결할 수 없습니다.' } as never);
+    try {
+      document.querySelector('#syncup-root')!.shadowRoot!.querySelector<HTMLButtonElement>('button.record')!.click();
+      await vi.waitFor(() => expect(toastText()).toBe('팀 서버에 연결할 수 없습니다.'));
+      expect(toBackground).toHaveBeenCalledWith({ type: 'teamRecord' });
+    } finally {
+      toBackground.mockRestore(); // 다음 시험이 sendMessage 호출 기록을 이어받지 않게
+    }
   });
 
   it('toast 는 화면에 띄우고 답하지 않는다 (채널을 열어 두지 않음)', async () => {
@@ -42,5 +75,21 @@ describe('채팅 화면이 받는 메시지', () => {
     expect(returned).toBeUndefined();
     expect(sendResponse).not.toHaveBeenCalled();
     expect(toastText()).toBe('분류 대기함에 저장했어요');
+  });
+});
+
+describe('"싱크업에 보내기" 버튼', () => {
+  it('수집이 꺼져 있으면 보내지 않고 켜라고 안내한다', async () => {
+    await settingsItem.setValue({ ...settingsItem.fallback, teamName: '팀', projectTopic: '주제', userName: '나', autoCollect: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const toBackground = vi.spyOn(fakeBrowser.runtime, 'sendMessage');
+    document.body.insertAdjacentHTML(
+      'afterbegin',
+      '<main><div data-message-author-role="user" data-message-id="u1"><div class="whitespace-pre-wrap">발표는 금요일</div></div></main>',
+    );
+    document.querySelector('#syncup-root')!.shadowRoot!.querySelector<HTMLButtonElement>('button.all')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toBackground).not.toHaveBeenCalled();
+    expect(toastText()).toBe('수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요');
   });
 });

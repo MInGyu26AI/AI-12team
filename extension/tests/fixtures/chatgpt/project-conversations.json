@@ -1,0 +1,33 @@
+{
+  "_note": "합성 픽스처. /backend-api/gizmos/{id}/conversations?limit=50&owned_only=false 실측 모양(11/13): update_time ISO 문자열, 최신 순, cursor 불투명 문자열 또는 null",
+  "items": [
+    {
+      "id": "c0ffee00-0000-4000-8000-000000000001",
+      "title": "합성 대화",
+      "update_time": "2025-11-13T01:10:00.500000Z",
+      "is_archived": false,
+      "is_temporary_chat": false,
+      "gizmo_id": "g-p-00000000000000000000000000000001",
+      "conversation_origin": null
+    },
+    {
+      "id": "c0ffee00-0000-4000-8000-000000000002",
+      "title": "생성 중",
+      "update_time": "2025-11-13T01:03:22.000000Z",
+      "is_archived": false,
+      "is_temporary_chat": false,
+      "gizmo_id": "g-p-00000000000000000000000000000001",
+      "conversation_origin": null
+    },
+    {
+      "id": "c0ffee00-0000-4000-8000-000000000003",
+      "title": "보관됨",
+      "update_time": "2025-11-12T09:00:00.000000Z",
+      "is_archived": true,
+      "is_temporary_chat": false,
+      "gizmo_id": "g-p-00000000000000000000000000000001",
+      "conversation_origin": null
+    }
+  ],
+  "cursor": "opaque-synthetic-cursor+/=2"
+}

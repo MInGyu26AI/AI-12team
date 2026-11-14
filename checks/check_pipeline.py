@@ -1,5 +1,6 @@
 """Real SQLite checks with deterministic AI; no external calls."""
 import repo_paths  # noqa: F401  collector/·server/·contract/·ai 경로
+from contextlib import closing
 from datetime import datetime, timezone
 import http.server
 import io
@@ -7,6 +8,8 @@ import json
 from pathlib import Path
 import sqlite3
 import struct
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -175,7 +178,8 @@ class PipelineTest(PipelineFixture):
             return result[0]
         with self.pipeline.write():
             self.assertFalse(lock_free(),'another thread must wait for pipeline.lock')
-            with sqlite3.connect(self.db,timeout=0) as other, self.assertRaises(sqlite3.OperationalError):
+            # closing(): a connection's own `with` does not close it, and Windows cannot delete a file left open.
+            with closing(sqlite3.connect(self.db,timeout=0)) as other, self.assertRaises(sqlite3.OperationalError):
                 other.execute('BEGIN IMMEDIATE')
         self.assertTrue(lock_free())
 
@@ -221,6 +225,9 @@ class NativeHostConnection(unittest.TestCase):
         config=dict(url=f'http://127.0.0.1:{self.server.server_port}/rpc',token='t'*43)
         path.write_text(json.dumps(dict(config,**changes)))
         path.chmod(mode)
+        if sys.platform=='win32' and mode&0o077:
+            # Windows ignores the mode bits; let the Users group read, as group or other permission does on POSIX.
+            subprocess.run(['icacls',str(path),'/grant','*S-1-5-32-545:(R)'],check=True,capture_output=True)
         return path
 
     def test_a_private_connection_file_reaches_the_service(self):

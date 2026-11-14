@@ -104,7 +104,7 @@ v2 결정 카드(tag=decision)만 검사 대기(`conflict_checks`)에 들어간�
 
 | 폴더 | 진입점 |
 |---|---|
-| `collector/` | `app.py` 수집기 실행(`run`) · `prepare_native.py` 확장 연결 파일 생성 · `native_host.py` Chrome이 `syncup-native`로 띄우는 Native Messaging 호스트 · `local_web.cjs` 확장 없는 로컬 웹 실행기 |
-| `server/` | `team_server.py` 팀 API(`127.0.0.1`에서만) · `cloud_server.py` 호스팅용, `/healthz` · `team_admin.py` 관리 CLI · `team_schema.sql`·`team_integration.sql`·`team_upgrades.sql` 기본 테이블·RLS, 결정·충돌 테이블, 업그레이드 |
+| `collector/` | `app.py` 수집기 실행(`run`) · `prepare_native.py` 확장 연결 파일 생성 · `native_host.py` Chrome이 `syncup-native`(Windows는 `syncup-native.cmd`)로 띄우는 Native Messaging 호스트 · `local_web.cjs` 확장 없는 로컬 웹 실행기 · `syncup_entry.py` Windows 묶음 `syncup.exe`의 진입점, 빌드는 `windows_bundle.py` ([windows.md](windows.md)) |
+| `server/` | `team_server.py` 팀 API(`127.0.0.1`에서만) · `cloud_server.py` 호스팅용, `/healthz` · `team_admin.py` 관리 CLI · `team_schema.sql`·`team_decisions.sql`·`team_upgrades.sql` 기본 테이블·RLS, 결정·충돌 테이블, 업그레이드 |
 | `contract/` | 없음. 수집기와 팀 서버가 import해서 쓴다 |
 | `scanner/` | `src/main.rs` OS 확인, 인자, Codex·Claude Code 스캐너 실행 |

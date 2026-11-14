@@ -1,0 +1,30 @@
+{
+  "_note": "합성 픽스처. /backend-api/gizmos/snorlax/sidebar 실측 모양(11/13): 프로젝트는 items[].gizmo 에 바로 있음, cursor 는 불투명 문자열",
+  "items": [
+    {
+      "gizmo": {
+        "id": "g-p-00000000000000000000000000000001",
+        "display": {
+          "name": "AI-12team 해커톤"
+        }
+      },
+      "conversations": {
+        "items": [],
+        "cursor": null
+      }
+    },
+    {
+      "gizmo": {
+        "id": "g-p-00000000000000000000000000000002",
+        "display": {
+          "name": "개인 메모"
+        }
+      },
+      "conversations": {
+        "items": [],
+        "cursor": null
+      }
+    }
+  ],
+  "cursor": null
+}

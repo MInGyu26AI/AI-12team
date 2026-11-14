@@ -15,7 +15,7 @@ from unittest.mock import patch
 import scanner_runner
 import standalone_classifier
 from local_fixtures import work_gate
-from runtime import child_environment, collector_binary
+from runtime import child_environment, scanner_binary
 from storage import connect, initialize
 
 SUBAGENT_SOURCES = ({"subagent": {"thread_spawn": {"parent_thread_id": "parent"}}}, {"subagent": {"other": "guardian"}})
@@ -32,7 +32,7 @@ def job_id(key):
 
 def run_scanner(*args):
     """Runs the built scanner directly, past the check in scanner_runner.scan() that collection is running."""
-    return subprocess.run([str(collector_binary()), *map(str, args)], env=child_environment(), capture_output=True)
+    return subprocess.run([str(scanner_binary()), *map(str, args)], env=child_environment(), capture_output=True)
 
 
 @contextmanager

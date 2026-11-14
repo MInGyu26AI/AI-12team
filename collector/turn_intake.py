@@ -1,17 +1,28 @@
 """Turn intake: validate turns from the extension and the scanner, store them privately, quarantine what cannot be used."""
 from datetime import datetime, timezone
 import json
+import re
 import time
 
 from ai.syncup_ai.mask import mask
 import batch_queue
 from collection_session import bound_team, require_active
-from collection_settings import classification_context, local_profile
+from collection_settings import classification_context, local_profile, sync_windows
 from stable_ids import digest
 from storage import connect
 
 MESSAGE_FIELDS = ('id', 'text', 'conversationId', 'site', 'role', 'collectedAt')
+# Optional fields of shared/collector.ts, checked and stored only when sent. Account sync (origin 'sync') needs all three.
+SYNC_FIELDS = ('origin', 'createdAt', 'turnId')
+ORIGINS = ('screen', 'sync')
 INTAKE_SITES = ('chatgpt', 'manual', 'chatgpt-export')
+# '팀 기록 불러오기' pastes the team board (web/src/lib/board-markdown.ts, head line '# 싱크업 팀 기록 (date)') and, from
+# the extension, the end line after it (sync-contract.md 8장). Pasted back into a chat, it is not the user's own words.
+TEAM_RECORD_HEAD = '# 싱크업 팀 기록'
+TEAM_RECORD_END = '<!-- 싱크업 팀 기록 끝 -->'
+# A ChatGPT message id: the same message in whatever conversation it is sent with, unlike a hash id
+# chatgpt:<conversation>:<hash> (sync-contract.md 8-1 R2).
+CHATGPT_MESSAGE_ID = re.compile('chatgpt:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
 MAX_MESSAGE_TEXT = 20000
 MAX_MESSAGE_FIELD = 1200
 MAX_APPEND = 200
@@ -20,6 +31,53 @@ UNRESOLVED_ISSUES = '''SELECT * FROM intake_issues WHERE team_id=? AND id NOT IN
     ORDER BY received'''
 # Jobs the Rust scanner queued that intake has not taken yet; every batch job has a job_context row.
 SCANNED_JOBS = "SELECT * FROM jobs WHERE state='new' AND id NOT IN (SELECT job FROM job_context)"
+# A screen-path answer to a stored question: after it, with no screen-path question of the conversation in between.
+SCREEN_ANSWER = '''SELECT 1 FROM intake a WHERE a.team_id=:team AND a.conversation=:conversation AND a.rowid>:question
+    AND json_extract(a.message,'$.session')=:session AND json_extract(a.message,'$.role')='assistant'
+    AND coalesce(json_extract(a.message,'$.origin'),'screen')='screen'
+    AND NOT EXISTS (SELECT 1 FROM intake u WHERE u.team_id=:team AND u.conversation=:conversation
+        AND u.rowid>:question AND u.rowid<a.rowid AND json_extract(u.message,'$.session')=:session
+        AND json_extract(u.message,'$.role')='user' AND coalesce(json_extract(u.message,'$.origin'),'screen')='screen')
+    LIMIT 1'''
+# The conversations of a team and session that stored the given message ids. Params: team, session, the ids.
+STORED_IN = '''SELECT json_extract(message,'$.id') AS id,conversation FROM intake WHERE team_id=?
+    AND json_extract(message,'$.session')=? AND json_extract(message,'$.id') IN ({})'''
+# The screen-path row of the conversation just before a given row.
+SCREEN_ROW_BEFORE = '''SELECT rowid,id,job,message FROM intake WHERE team_id=:team AND conversation=:conversation
+    AND rowid<:row AND json_extract(message,'$.session')=:session
+    AND coalesce(json_extract(message,'$.origin'),'screen')='screen' ORDER BY rowid DESC LIMIT 1'''
+# What C4-b does with a sync turn: store it (step 4 and on), skip it (skippedTurns), or let the screen rows that already
+# hold its question and answer be the turn (its sync messages are not stored and not counted).
+TAKE, SKIP, PAIRED = 'take', 'skip', 'paired'
+
+
+def created_at(message):
+    """Unix seconds of the message's createdAt, an ISO time with a time zone; ValueError otherwise."""
+    value = message['createdAt']
+    if not isinstance(value, str):
+        raise ValueError('발화 작성 시각 오류')
+    moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if moment.tzinfo is None:
+        raise ValueError('발화 시각에 시간대가 필요합니다.')
+    try:
+        return moment.timestamp()
+    except OverflowError:
+        raise ValueError('발화 작성 시각 오류') from None
+
+
+def _sync_fields(message):
+    """The SYNC_FIELDS the message has, checked (C2); ValueError when one is malformed."""
+    fields ={k: message[k] for k in SYNC_FIELDS if k in message}
+    if fields.get('origin', 'screen') not in ORIGINS:
+        raise ValueError('발화 경로 오류')
+    if 'createdAt' in fields:
+        created_at(fields)
+    turn = fields.get('turnId')
+    if 'turnId' in fields and (not isinstance(turn, str) or not 0 < len(turn) <= MAX_MESSAGE_FIELD):
+        raise ValueError('턴 식별자 오류')
+    if fields.get('origin') == 'sync' and ({'createdAt', 'turnId'} - set(fields) or message['site'] != 'chatgpt'):
+        raise ValueError('동기화 발화 필드 오류')
+    return fields
 
 
 def clean_message(message):
@@ -36,7 +94,8 @@ def clean_message(message):
         raise ValueError('발화 시각에 시간대가 필요합니다.')
     if type(message.get('roleGuessed', False)) is not bool:
         raise ValueError('화자 상태 오류')
-    return {k: message[k] for k in MESSAGE_FIELDS} | {'roleGuessed': message.get('roleGuessed', False)}
+    return ({k: message[k] for k in MESSAGE_FIELDS} | {'roleGuessed': message.get('roleGuessed', False)}
+            | _sync_fields(message))
 
 
 def intake_id(team_id, start, message):
@@ -56,6 +115,10 @@ def quarantine(c, message, team_id, start, reason):
 def _quarantine_if_changed(c, previous, message, team_id, start, issues):
     # Text cleared by retention: the message was already processed, so a re-send is not a change.
     if previous.get('purged'):
+        return
+    # C4-a: the screen path (no origin) and account sync read one message differently (rendered text, Markdown source),
+    # so another origin is a duplicate: the row stored first stays.
+    if previous.get('origin', 'screen') != message.get('origin', 'screen'):
         return
     if any(previous[k] != message[k] for k in ('text', 'role', 'roleGuessed')):
         issue = quarantine(c, message, team_id, start, 'message_changed')
@@ -80,8 +143,138 @@ def store_messages(c, messages, team_id, start, issues=None):
     return count
 
 
+def _sync_turn(message):
+    """(conversationId, turnId) of an account sync message; None for the screen path."""
+    return (message['conversationId'], message['turnId']) if message.get('origin') == 'sync' else None
+
+
+def _in_window(turn, windows):
+    """C3: the turn's earliest and latest createdAt lie in one window [start, end)."""
+    times = [created_at(m) for m in turn]
+    return any(start <= min(times) and max(times) < end for start, end in windows)
+
+
+def _row(c, identifier):
+    return c.execute('SELECT rowid,id,job,message FROM intake WHERE id=?', (identifier,)).fetchone()
+
+
+def _screen_row(c, identifier):
+    """The intake row with this id when the screen path stored it, else None."""
+    row = _row(c, identifier)
+    return row if row and json.loads(row['message']).get('origin', 'screen') == 'screen' else None
+
+
+def _fill_turn_id(c, row, turn_id):
+    """Give a stored row the sync turn's turnId, text unchanged, so batch.group_turns pairs it with the sync turn."""
+    saved = json.loads(row['message'])
+    if 'turnId' not in saved:
+        c.execute('UPDATE intake SET message=? WHERE id=?',
+                  (json.dumps(dict(saved, turnId=turn_id), ensure_ascii=False), row['id']))
+
+
+def _screen_question_before(c, team_id, start, conversation, answer):
+    """The screen question paired with a screen answer row, or None.
+
+    The conversation's screen row just before the answer must be a question (so no other screen answer lies between),
+    not batched yet and without a turnId.
+    """
+    row = c.execute(SCREEN_ROW_BEFORE, dict(team=team_id, conversation='chatgpt:' + conversation, row=answer['rowid'],
+                                            session=start)).fetchone()
+    if not row or row['job'] is not None:
+        return None
+    saved = json.loads(row['message'])
+    return row if saved['role'] == 'user' and 'turnId' not in saved else None
+
+
+def _screen_overlap(c, team_id, start, turn):
+    """C4-b: TAKE, SKIP or PAIRED for this sync turn, by what the screen path already has of it.
+
+    Without a stored question (chatgpt:<turnId>), some of the turn's answers may be screen rows: the screen question
+    was left in the baseline, had a hash id or was quarantined. Batched, the turn is skipped (its answer was classified).
+    Not batched yet, they get the turnId. When the screen question just before them is found too (a hash id), it gets
+    the turnId and the screen rows are the turn (PAIRED). Otherwise the turn is taken: the question is new, the answers
+    are duplicates.
+    With a stored question: a screen answer follows it before the conversation's next screen question (a later turn's
+    answer is not this turn's), or the question is already batched. Taking the turn would repeat it or add answers
+    without their question. A stored question still waiting for its answer gets the turnId.
+    """
+    conversation, turn_id = _sync_turn(turn[0])
+    head = dict(site='chatgpt', conversationId=conversation, id='chatgpt:' + turn_id)
+    question = _row(c, intake_id(team_id, start, head))
+    if not question:
+        answers = [_screen_row(c, intake_id(team_id, start, m)) for m in turn if m['role'] == 'assistant']
+        answers = [r for r in answers if r]
+        if not answers:
+            return TAKE
+        if any(r['job'] is not None for r in answers):
+            return SKIP
+        pair = _screen_question_before(c, team_id, start, conversation, min(answers, key=lambda r: r['rowid']))
+        for row in answers + ([pair] if pair else []):
+            _fill_turn_id(c, row, turn_id)
+        return PAIRED if pair else TAKE
+    if question['job'] is not None or c.execute(SCREEN_ANSWER, dict(
+            team=team_id, conversation='chatgpt:' + conversation, question=question['rowid'], session=start)).fetchone():
+        return SKIP
+    _fill_turn_id(c, question, turn_id)
+    return TAKE
+
+
+def without_team_record(text):
+    """text without the team records '팀 기록 불러오기' pasted into it, or None when it has none.
+
+    A record runs from its head line through its end line, or through the end of the text when the end line is missing.
+    """
+    kept, inside, found = [], False, False
+    for line in text.split('\n'):
+        if inside:
+            inside = line.strip() != TEAM_RECORD_END
+        elif line.strip().startswith(TEAM_RECORD_HEAD):
+            inside = found = True
+        else:
+            kept.append(line)
+    return '\n'.join(kept).strip() if found else None
+
+
+def _own_words(messages):
+    """(messages with pasted team records cut from user text, how many user messages were nothing else)."""
+    kept, skipped = [], 0
+    for m in messages:
+        text = without_team_record(m['text']) if m['role'] == 'user' else None
+        if text == '':
+            skipped += 1
+        else:
+            kept.append(m if text is None else dict(m, text=text))
+    return kept, skipped
+
+
+def _not_elsewhere(c, team_id, start, messages):
+    """(messages, how many were left out): a ChatGPT message id stored in another conversation of this session is that
+    message sent under the wrong conversation (8-1 R2), whatever the origin. Not stored again, not quarantined."""
+    ids = sorted({m['id'] for m in messages if CHATGPT_MESSAGE_ID.fullmatch(m['id'])})
+    stored = {}
+    if ids:
+        for row in c.execute(STORED_IN.format(','.join('?' * len(ids))), (team_id, start, *ids)):
+            stored.setdefault(row['id'], set()).add(row['conversation'])
+    kept, left_out = [], 0
+    for m in messages:
+        if CHATGPT_MESSAGE_ID.fullmatch(m['id']):
+            conversation, where = m['site'] + ':' + m['conversationId'], stored.setdefault(m['id'], set())
+            if where - {conversation}:
+                left_out += 1
+                continue
+            where.add(conversation)  # a later message of this call with the same id meets it
+        kept.append(m)
+    return kept, left_out
+
+
 def append(pipeline, messages, flush=False):
-    """turns.append: store valid turns, quarantine invalid ones, queue every batch that is ready."""
+    """turns.append: store valid turns, quarantine invalid ones, queue every batch that is ready.
+
+    Account sync turns (origin 'sync') are kept only inside the sync windows and when the screen path has not
+    already taken them; pasted team records leave every user message, and a ChatGPT message already stored in another
+    conversation is not stored again (sync-contract.md 3-3, 8-1 R2).
+    Screen-path calls answer 0 for the three turn counts.
+    """
     if not isinstance(messages, list) or not 0 < len(messages) <= MAX_APPEND:
         raise ValueError('발화는 한 번에 1~200개를 보내세요.')
     clean, rejected = [], []
@@ -90,14 +283,30 @@ def append(pipeline, messages, flush=False):
             clean.append(clean_message(m))
         except ValueError:
             rejected.append(m)
+    turns = {}
+    for m in clean:
+        if _sync_turn(m):
+            turns.setdefault(_sync_turn(m), []).append(m)
     with pipeline.write() as c:
         s, binding = require_active(pipeline.db)
         team_id = binding['team_id']
         context = classification_context(c, team_id, local_profile(c))
         issues = [quarantine(c, m, team_id, s['start'], 'invalid_message') for m in rejected]
-        count = store_messages(c, clean, team_id, s['start'], issues)
+        windows = sync_windows(c, s)
+        outside = {key for key, turn in turns.items() if not _in_window(turn, windows)}
+        overlap = {key: _screen_overlap(c, team_id, s['start'], turn) for key, turn in turns.items() if key not in outside}
+        skipped = {key for key, kind in overlap.items() if kind == SKIP}
+        dropped = outside | {key for key, kind in overlap.items() if kind != TAKE}
+        kept, team_records = _own_words([m for m in clean if _sync_turn(m) not in dropped])
+        kept, elsewhere = _not_elsewhere(c, team_id, s['start'], kept)
+        stored = []
+        for m in kept:
+            if store_messages(c, [m], team_id, s['start'], issues):
+                stored.append(m)
         batch_queue.queue_ready_batches(c, team_id, context, flush)
-    return dict(newMessages=count, queued=bool(clean), intakeIssues=issues)
+    return dict(newMessages=len(stored), queued=bool(clean), intakeIssues=issues, outsideWindow=len(outside),
+                skippedTurns=len(skipped), newTurns=len({_sync_turn(m) for m in stored} - {None}),
+                teamRecordSkipped=team_records, elsewhereDuplicates=elsewhere)
 
 
 def _scanned_messages(job):
@@ -134,7 +343,8 @@ def capture_scanned_jobs(pipeline):
 def _queue_correction(pipeline, c, team_id, issue_id, message):
     """The user's corrected text becomes new private input, never an edit of collected evidence. Returns its id."""
     s, _ = require_active(pipeline.db, team_id)
-    message = clean_message(message)
+    # A manual message: account sync fields would break the rule that origin 'sync' comes from site 'chatgpt'.
+    message = {k: v for k, v in clean_message(message).items() if k not in SYNC_FIELDS}
     message.update(id='intake-retry-' + issue_id, site='manual')
     context = classification_context(c, team_id, local_profile(c))
     if store_messages(c, [message], team_id, s['start']) != 1:

@@ -1,0 +1,10 @@
+{
+  "_note": "합성 픽스처. /api/auth/session 모양 추정(P6 전). account = sha256(UTF-8(user.id)) 소문자 hex = expectedAccount",
+  "user": {
+    "id": "user-synthetic0001",
+    "name": "합성 사용자"
+  },
+  "expires": "2099-01-01T00:00:00.000Z",
+  "accessToken": "synthetic-token-not-real",
+  "expectedAccount": "647d9f2525f19308cb06eb8fb9dd0e068fa13d122a0030efeedaffd321fbacea"
+}

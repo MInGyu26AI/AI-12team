@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
 import { RepoLinkRow } from "@/components/board/repo-status";
@@ -8,7 +10,8 @@ import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
-import { useLocalCollector } from "@/lib/local-collector";
+import { canSyncNow, useLocalCollector } from "@/lib/local-collector";
+import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
 import { useRepo } from "@/lib/use-repo";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +22,21 @@ export default function CollectPage() {
   const st = collector.status;
   const connected = collector.available && !!st;
   const pendingIds = new Set(collector.cards.map((c) => c.id));
+  const [syncing, setSyncing] = useState(false);
+
+  // 싱크 맞추기: 프로젝트 동기화(켜져 있을 때)와 쌓인 대화 분류를 한 번에 하고 결과를 짧게 알린다
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const { tone, text } = syncNowSummary(await collector.syncNow("button"));
+      toast[tone](text);
+    } catch (error) {
+      const { tone, text } = syncNowErrorNotice(error);
+      toast[tone](text);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-content space-y-6 px-gutter py-10">
@@ -84,19 +102,21 @@ export default function CollectPage() {
       {/* 수집 기준 */}
       <section className="space-y-5 rounded-xl border bg-card p-6">
         <h2 className="font-semibold">수집 기준</h2>
+        {/* 묶음 크기는 팀 고정값 (shared/batch.ts). 수집기에 다른 값이 남아 있으면 확장이 기본값으로 되돌린다 */}
         <p>
           대화 <b className="text-lg text-brand">{TURNS_PER_BATCH}</b>회마다 자동으로 수집해 승인함에 올려요
         </p>
         {connected && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
             <span>
-              다음 수집까지 대화 <b>{st.bufferedTurns}</b>/{TURNS_PER_BATCH}회
+              다음 수집까지 대화 <b>{st.nextBatchTurns ?? st.bufferedTurns}</b>/{TURNS_PER_BATCH}회
             </span>
             <button
-              className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium"
-              onClick={collector.sync}
+              className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+              disabled={syncing || !canSyncNow(st)}
+              onClick={syncNow}
             >
-              싱크 맞추기
+              {syncing ? "맞추는 중…" : "싱크 맞추기"}
             </button>
           </div>
         )}

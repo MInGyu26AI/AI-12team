@@ -1,9 +1,19 @@
-import { BRIDGE_FROM_EXT, BRIDGE_FROM_WEB } from "@shared/bridge";
+import {
+  BRIDGE_FROM_EXT,
+  BRIDGE_FROM_WEB,
+  EXT_SYNC_NOW,
+  type ExtStatus,
+  type SyncNowParams,
+  type SyncNowResult,
+} from "@shared/bridge";
 import { LOCAL_RPC_VERSION } from "@shared/collector";
 
 // 확장 경유 응답을 기다리는 시간. native host 가 수집기를 기다리는 20초(native_host.py)보다 길게 둬서
 // 수집기 쪽 시간 초과 오류가 먼저 도착하게 한다.
 const EXTENSION_TIMEOUT_MS = 25000;
+// 싱크 맞추기는 확장이 ChatGPT 대화를 최대 20건 받는 동안(건마다 1~2초, 탭 요청마다 최대 20초) 끝나지 않으므로 더 오래 기다린다
+// (docs/sync-contract.md 5장 '웹의 대기 시간')
+const SYNC_NOW_TIMEOUT_MS = 150000;
 // 확장이 요청을 받았다는 신호(rpc-ack)를 기다리는 시간. 확장은 받자마자 보내므로 이 안에 없으면 확장이 없다고 본다
 const EXTENSION_ACK_MS = 2000;
 
@@ -14,11 +24,76 @@ export class ExtensionMissing extends Error {
   }
 }
 
+/** 싱크 맞추기가 대기 시간을 넘김: 연결 오류가 아니다. 확장의 패스와 flush 는 끝까지 간다 */
+export class SyncStillRunning extends Error {
+  constructor() {
+    super("동기화가 아직 진행 중이에요. 잠시 뒤 다시 확인해 주세요");
+  }
+}
+
+// 확장은 받았지만 정해진 시간 안에 답이 없음 (확장 없음 ExtensionMissing 과 구분)
+class RpcTimeout extends Error {
+  constructor() {
+    super("확장 프로그램과 로컬 수집기의 연결을 확인하세요.");
+  }
+}
+
 /** 로컬 수집기 RPC. NEXT_PUBLIC_LOCAL_BRIDGE=true 면 웹 서버의 /api/local, 아니면 확장(web-bridge 콘텐츠 스크립트)을 거친다 */
-export async function rpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+export async function rpc<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = EXTENSION_TIMEOUT_MS): Promise<T> {
   const payload = { version: LOCAL_RPC_VERSION, method, params };
   if (process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return viaLocalRoute<T>(payload);
-  return viaExtension<T>(payload);
+  return viaExtension<T>(payload, timeoutMs);
+}
+
+/**
+ * 싱크 맞추기 (docs/sync-contract.md 5장 syncNow): 확장이 프로젝트 동기화 패스를 한 번 돌리고, 수집 중이면 collection.flush 를 부른다.
+ * NEXT_PUBLIC_LOCAL_BRIDGE=true 면 확장이 없으므로 수집 중일 때 collection.flush 만 부른다 (sync 는 늘 'off').
+ */
+export async function syncNow(reason: SyncNowParams["reason"]): Promise<SyncNowResult> {
+  if (process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return flushOnly();
+  try {
+    return await rpc<SyncNowResult>(EXT_SYNC_NOW, { reason }, SYNC_NOW_TIMEOUT_MS);
+  } catch (error) {
+    throw error instanceof RpcTimeout ? new SyncStillRunning() : error;
+  }
+}
+
+async function flushOnly(): Promise<SyncNowResult> {
+  const blockedReason = collectBlockedReason(await rpc<ExtStatus>("collection.status"));
+  if (blockedReason) return { sync: "off", newTurns: 0, flushed: false, blockedReason };
+  await rpc("collection.flush");
+  return { sync: "off", newTurns: 0, flushed: true };
+}
+
+// 수집 중이 아닌 이유, 수집 중이면 null (확장의 sendBlockedReason 과 같은 판정. 설정 여부는 수집기가 flush 에서 확인한다)
+function collectBlockedReason(status: ExtStatus): string | null {
+  if (Date.parse(status.endsAt) <= Date.now()) return "수집 종료 시각이 지났어요. 종료 시각을 갱신하고 자동 수집을 켜 주세요";
+  if (!status.autoCollect) return "수집이 꺼져 있어요. 자동 수집을 켜 주세요";
+  return null;
+}
+
+type SyncTone = "success" | "info" | "warning" | "error";
+
+const SYNC_HEAD: Record<SyncNowResult["sync"], { tone: SyncTone; text: (newTurns: number) => string }> = {
+  ran: { tone: "success", text: (n) => (n > 0 ? `새 대화 ${n}개를 가져왔어요` : "새로 가져올 대화가 없어요") },
+  off: { tone: "success", text: () => "프로젝트 동기화는 꺼져 있어요" },
+  resting: { tone: "warning", text: () => "ChatGPT 요청을 잠시 쉬는 중이에요" },
+  "no-tab": { tone: "warning", text: () => "chatgpt.com 탭을 하나 열어 두세요" },
+  busy: { tone: "info", text: () => "이미 맞추는 중이에요" },
+  failed: { tone: "error", text: () => "싱크를 맞추지 못했어요. 확장 팝업에서 상태를 확인하세요" },
+};
+
+/** 싱크 맞추기가 던진 오류를 화면에 알릴 문구와 토스트 종류로 바꾼다: 대기 시간을 넘긴 것은 오류가 아니라 안내다 */
+export function syncNowErrorNotice(error: unknown): { tone: SyncTone; text: string } {
+  return { tone: error instanceof SyncStillRunning ? "info" : "error", text: (error as Error).message };
+}
+
+/** 싱크 맞추기 결과를 화면에 알릴 짧은 문구와 토스트 종류로 바꾼다 */
+export function syncNowSummary(result: SyncNowResult): { tone: SyncTone; text: string } {
+  const head = SYNC_HEAD[result.sync] ?? SYNC_HEAD.failed; // 모르는 값은 실패로 본다
+  const tail = result.flushed ? "쌓인 대화는 분류에 보냈어요" : result.blockedReason;
+  const tone = head.tone === "success" && !result.flushed && result.blockedReason ? "warning" : head.tone;
+  return { tone, text: tail ? `${head.text(result.newTurns)}. ${tail}` : head.text(result.newTurns) };
 }
 
 async function viaLocalRoute<T>(payload: object): Promise<T> {
@@ -43,7 +118,7 @@ function isFromExtension(event: MessageEvent, id: string, type: "rpc-ack" | "rpc
   );
 }
 
-function viaExtension<T>(payload: object): Promise<T> {
+function viaExtension<T>(payload: object, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const id = crypto.randomUUID();
     const stop = () => {
@@ -57,8 +132,8 @@ function viaExtension<T>(payload: object): Promise<T> {
     }, EXTENSION_ACK_MS);
     const timer = setTimeout(() => {
       stop();
-      reject(new Error("확장 프로그램과 로컬 수집기의 연결을 확인하세요."));
-    }, EXTENSION_TIMEOUT_MS);
+      reject(new RpcTimeout());
+    }, timeoutMs);
     function receive(event: MessageEvent) {
       if (isFromExtension(event, id, "rpc-ack")) {
         clearTimeout(ackTimer);

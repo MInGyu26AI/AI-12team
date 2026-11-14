@@ -1,13 +1,13 @@
 // entrypoints/background.ts 를 가짜 browser 위에서 띄우고, 로컬 수집기(native host)는 메서드별 가짜 응답으로 바꾼다
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { ExtStatus } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
+import { NOTICE_ID, noticeBaselineItem } from '@/lib/candidate-notice';
 import { checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
-import { refreshRepo, repoItem } from '@/lib/repo-status';
-import { collectStateItem, settingsItem } from '@/lib/settings';
-import { LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
+import { collectStateItem, pendingCountItem, settingsItem } from '@/lib/settings';
+import { DEFAULT_WEB_URL, LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
 
 const STATUS: ExtStatus = {
   version: '1',
@@ -15,7 +15,7 @@ const STATUS: ExtStatus = {
   autoCollect: true,
   turnsPerBatch: 10,
   bufferedTurns: 0,
-  endsAt: '2026-11-10T00:00:00+00:00',
+  endsAt: new Date(Date.now() + 3600_000).toISOString(), // 수집 중 (날짜가 지나도 시험이 깨지지 않게 지금 기준)
   lastCollectedAt: null,
   lastClassifier: null,
   teamName: '팀',
@@ -91,6 +91,8 @@ beforeEach(async () => {
   await settle(); // 시작할 때 하는 상태 새로 고침이 끝나게 둔다
   nativeCalls.length = 0;
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('웹 화면의 수집기 RPC', () => {
   it('설정한 주소가 배포 주소면 localhost:3000 페이지의 요청은 수집기에 닿지 않는다', async () => {
@@ -178,18 +180,6 @@ describe('충돌 시스템 알림', () => {
   });
 });
 
-describe('레포 연결 상태 (팝업 하단)', () => {
-  it('team.repo 를 저장하고, 수집기에 닿지 못하면 지운다', async () => {
-    const repo = { linked: true, repo: 'MInGyu26AI/AI-12team', branch: 'main', state: 'saved', commit: { sha: 'a1b2c3d' } };
-    overrides['team.repo'] = { ok: true, result: { repo } };
-    await refreshRepo();
-    expect(await repoItem.getValue()).toEqual(repo);
-    overrides['team.repo'] = 'unreachable';
-    await refreshRepo();
-    expect(await repoItem.getValue()).toBeNull();
-  });
-});
-
 describe('묶음 크기 고정', () => {
   it('수집기에 예전에 바꾼 묶음 크기가 남아 있으면 기본값(10)으로 되돌린다', async () => {
     overrides['candidates.list'] = { ok: true, result: { cards: [], status: { ...STATUS, turnsPerBatch: 12 } } };
@@ -213,6 +203,17 @@ describe('우클릭 메뉴로 선택한 내용 보내기', () => {
     expect(calledMethods()).toContain('turns.append');
     expect(toast).toHaveBeenCalledTimes(1);
     expect(await lastError()).toBeNull();
+  });
+
+  it('수집이 꺼져 있으면 수집기에 보내지 않고 켜라고 안내한다', async () => {
+    overrides['candidates.list'] = { ok: true, result: { cards: [], status: { ...STATUS, autoCollect: false } } };
+    await send({ type: 'refresh' }, fromPopup());
+    nativeCalls.length = 0;
+    const toast = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined);
+    menuClicked({ menuItemId: 'syncup-send-selection', selectionText: '팀 결정 내용' }, { id: 7, url: 'https://chatgpt.com/c/c1', title: '대화' });
+    await vi.waitFor(() => expect(toast).toHaveBeenCalled());
+    expect(toast).toHaveBeenCalledExactlyOnceWith(7, { type: 'toast', text: '수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요', tone: 'error' });
+    expect(calledMethods()).not.toContain('turns.append');
   });
 });
 
@@ -244,5 +245,116 @@ describe('팝업에 보이는 마지막 오류', () => {
     const result = await send({ type: 'rpc', method: 'privacy.list', params: {} }, fromPage('http://localhost:3000/review'));
     expect(result).toEqual({ ok: false, error: '팀 접근 불가' });
     expect(await lastError()).toBeNull();
+  });
+});
+
+describe('검토할 카드 알림 (candidate-notice)', () => {
+  const cards = (count: number) => Array.from({ length: count }, (_, i) => ({ id: `c${i}`, relevance: 'related', tag: 'decision' }));
+  const refreshWith = async (count: number) => {
+    overrides['candidates.list'] = { ok: true, result: { cards: cards(count), status: STATUS } };
+    await send({ type: 'refresh' }, fromPopup());
+  };
+  const messages = (notify: { mock: { calls: unknown[][] } }) => notify.mock.calls.map(([, options]) => (options as { message: string }).message);
+
+  it('공유 후보가 늘었을 때만 "검토할 카드 N개" 알림을 띄우고, 같은 수로는 다시 띄우지 않는다', async () => {
+    const notify = vi.spyOn(fakeBrowser.notifications, 'create');
+    await refreshWith(2); // 시작할 때 0개를 봤으니 늘었다
+    await refreshWith(2);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(NOTICE_ID, expect.objectContaining({ type: 'basic', message: '검토할 카드 2개' }));
+    await refreshWith(1); // 하나 승인
+    expect(notify).toHaveBeenCalledTimes(1);
+    await refreshWith(3);
+    expect(messages(notify)).toEqual(['검토할 카드 2개', '검토할 카드 3개']);
+  });
+
+  it('처음 시작할 때(이전 수를 본 적 없음)는 이미 있는 카드로 알리지 않는다', async () => {
+    const notify = vi.spyOn(fakeBrowser.notifications, 'create');
+    await noticeBaselineItem.removeValue();
+    await refreshWith(5);
+    expect(notify).not.toHaveBeenCalled();
+    expect(await noticeBaselineItem.getValue()).toBe(5);
+  });
+
+  it('알림이 실패해도 상태 새로 고침은 성공하고 팝업 오류도 남지 않는다', async () => {
+    vi.spyOn(fakeBrowser.notifications, 'create').mockRejectedValue(new Error('notifications disabled'));
+    await refreshWith(2);
+    expect(await lastError()).toBeNull();
+    expect(fakeBrowser.action.setBadgeText).toHaveBeenCalledWith({ text: '2' });
+  });
+
+  it('알림을 누르면 개인 검토함(/review)을 열고, 다른 알림은 무시한다', async () => {
+    const open = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as never);
+    await fakeBrowser.notifications.onClicked.trigger('other-notice');
+    await settle();
+    expect(open).not.toHaveBeenCalled();
+    await fakeBrowser.notifications.onClicked.trigger(NOTICE_ID);
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith({ url: `${DEFAULT_WEB_URL}/review` }));
+  });
+});
+
+describe('채팅 탭 화면 읽기 점검 (tab-health)', () => {
+  it('refresh 알람마다 채팅 탭을 점검하고, 이상이 이어지면 그 탭에만 `!` 배지를 건다', async () => {
+    vi.spyOn(fakeBrowser.tabs, 'query').mockImplementation((async () => [{ id: 5 }]) as never);
+    vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue({
+      site: 'ChatGPT',
+      onConversation: true,
+      messageCount: 0,
+      selector: null,
+      guessedRoles: 0,
+    } as never);
+    const setBadge = vi.mocked(fakeBrowser.action.setBadgeText);
+    setBadge.mockClear();
+    const tick = () => fakeBrowser.alarms.onAlarm.trigger({ name: 'refresh', scheduledTime: Date.now(), persistAcrossSessions: false });
+
+    await tick();
+    await settle();
+    expect(setBadge).not.toHaveBeenCalledWith({ tabId: 5, text: '!' });
+    await tick();
+    await vi.waitFor(() => expect(setBadge).toHaveBeenCalledWith({ tabId: 5, text: '!' }));
+    // `!` 는 탭 단위로만 걸고, 전역 배지(tabId 없음)는 덮지 않는다
+    const warned = setBadge.mock.calls.map(([details]) => details as { tabId?: number; text?: string | null }).filter((d) => d.text === '!');
+    expect(warned.length).toBeGreaterThan(0);
+    expect(warned.every((d) => d.tabId === 5)).toBe(true);
+  });
+});
+
+describe('검토 대기 카드는 개수만 확장 저장소에 둔다', () => {
+  const SECRET = '발표는 금요일로 정했다 (비밀 결정 내용)';
+  const status = (extra: object[]) => ({
+    ok: true,
+    result: {
+      cards: [
+        { id: 'c1', relevance: 'related', tag: 'decision', content: SECRET },
+        { id: 'c2', relevance: 'related', tag: 'todo', content: SECRET },
+        { id: 'c3', relevance: 'related', tag: 'none', content: SECRET }, // 제안: 공유 후보 아님
+        ...extra,
+      ],
+      status: STATUS,
+    },
+  });
+  const storedText = async () => JSON.stringify(await fakeBrowser.storage.local.get(null));
+
+  it('공유 후보 수만 저장하고, 카드 본문은 어느 저장소 키에도 남기지 않는다', async () => {
+    overrides['candidates.list'] = status([{ id: 'p1', relevance: 'personal', content: SECRET }]);
+    await send({ type: 'refresh' }, fromPopup());
+    expect(await pendingCountItem.getValue()).toBe(2);
+    expect(await storedText()).not.toContain(SECRET);
+    expect(await storedText()).not.toContain('"c1"');
+  });
+
+  it('배지는 같은 수를 보여 준다', async () => {
+    overrides['candidates.list'] = status([]);
+    await send({ type: 'refresh' }, fromPopup());
+    expect(fakeBrowser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '2' });
+  });
+
+  it('확장이 업데이트되면 예전 판이 남긴 카드 본문(local:pending)을 지운다', async () => {
+    vi.spyOn(fakeBrowser.contextMenus, 'create').mockImplementation((() => 1) as never); // fakeBrowser 에 없는 우클릭 메뉴 만들기
+    await fakeBrowser.storage.local.set({ pending: [{ id: 'old', content: SECRET }], pendingCount: 4 });
+    await fakeBrowser.runtime.onInstalled.trigger({ reason: 'update' } as never);
+    await vi.waitFor(async () => expect(await fakeBrowser.storage.local.get('pending')).toEqual({}));
+    expect(await storedText()).not.toContain(SECRET);
+    expect(await pendingCountItem.getValue()).toBe(4); // 새 키는 건드리지 않는다
   });
 });

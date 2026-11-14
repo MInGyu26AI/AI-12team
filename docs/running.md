@@ -1,11 +1,11 @@
 # 실행 방법
 
-Mac 로컬 수집기를 띄우고 웹이나 Chrome 확장을 연결하는 순서다. 명령은 모두 저장소 루트에서 실행한다.
+로컬 수집기를 띄우고 웹이나 Chrome 확장을 연결하는 순서다. 명령은 모두 저장소 루트에서 실행한다. Windows에서 다른 점(Python 없는 `syncup.exe` 묶음, 파일 권한, 레지스트리 등록)은 [windows.md](windows.md)에 있다.
 구조는 [architecture.md](architecture.md), 팀 서버는 [team-server.md](team-server.md), 개인정보 처리는 [privacy.md](privacy.md)에 있다.
 
 ## 준비물
 
-- macOS ([지원 OS](#지원-os)), Python 3.11 이상, Rust 2024 edition을 빌드할 수 있는 `cargo`, Node.js와 npm
+- macOS 또는 Windows ([지원 OS](#지원-os)), Python 3.11 이상, Rust 2024 edition을 빌드할 수 있는 `cargo`, Node.js와 npm. Windows에서 묶음(`syncup.exe`)을 쓰면 Python·Rust는 필요 없다
 - Ollama와 기본 개인정보 모델 ([개인정보 모델 준비](#개인정보-모델-준비))
 - `OPENAI_API_KEY`. 키와 다른 공급자 설정은 [ai/README.md 설정](../ai/README.md#설정)
 - 팀 서버 주소와 관리자가 발급한 개인 연결 키 파일 ([team-server.md](team-server.md)). 이 Mac에서 직접 띄우려면 [한 기기에서 써 보기](team-server.md#한-기기에서-써-보기)
@@ -18,10 +18,10 @@ Codex·Claude Code 기록은 Rust 스캐너가 읽는다. 실행 파일은 Git�
 ```sh
 cargo build --release --locked --manifest-path scanner/Cargo.toml
 mkdir -p bin
-cp scanner/target/release/syncup-collector bin/
+cp scanner/target/release/syncup-scanner bin/
 ```
 
-수집기는 스캐너 실행 파일 `bin/syncup-collector`를 실행한다. 스캐너 코드가 바뀌면 다시 빌드해서 복사한다.
+수집기는 스캐너 실행 파일 `bin/syncup-scanner`(Windows는 `bin\syncup-scanner.exe`, 빌드 명령은 [windows.md](windows.md#원본에서))를 실행한다. 스캐너 코드가 바뀌면 다시 빌드해서 복사한다.
 
 ## 개인정보 모델 준비
 
@@ -93,10 +93,38 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
      --connection /절대/경로/개인-상태/connection.json \
      --output /절대/경로/새-native-폴더
    ```
-3. `com.syncup.collector.json`을 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`에 복사한다. `syncup-native`는 출력 폴더에 그대로 둔다. 매니페스트의 `path`가 이 파일을 가리킨다.
+3. `com.syncup.collector.json`을 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`에 복사한다. `syncup-native`는 출력 폴더에 그대로 둔다. 매니페스트의 `path`가 이 파일을 가리킨다. Windows에서는 복사하지 않고, 2단계가 출력한 `reg add` 명령으로 현재 사용자 레지스트리에 등록한다([windows.md](windows.md#windows에서-알아-둘-것)).
 4. 확장 팝업에서 프로젝트 주제와 개인 검토함 주소를 저장한다. 이 주소는 승인함 웹의 주소(배포 주소나 `npm run dev`의 `http://localhost:3000`)이고, 수집기가 출력하는 8876 주소가 아니다. 그 주소의 페이지는 개인 후보를 읽고 승인을 보낼 수 있으니 믿는 주소만 넣는다.
 
 `syncup-native`에는 Python 실행 파일, `collector/native_host.py`, `connection.json`의 절대 경로가 들어 있다. 이 가운데 하나나 확장 ID가 바뀌면 새 빈 폴더로 2~3단계를 다시 하고 `chrome://extensions`에서 확장을 새로고침한다. 수집기 파일이 `collector/`로 옮겨지기 전에 등록했다면 이 경우다(예전 실행기는 저장소 루트의 `native_host.py`를 찾는다).
+
+## ChatGPT 프로젝트 동기화 (확장 0.2.8)
+
+화면 수집과 별도로, 고른 ChatGPT 프로젝트의 내 대화를 5분마다 가져온다. 휴대폰 앱이나 다른 기기에서 한 대화도 들어온다. 무엇을 읽고 무엇이 나가는지는 [privacy.md](privacy.md#1-1-chatgpt-프로젝트-동기화-확장-028-초안-팀-합의-필요)에 있다.
+
+1. 수집기와 확장을 이 저장소의 새 버전으로 쓴다. 옛 수집기면 팝업에 `수집기를 새 버전으로 바꾸면 쓸 수 있어요`가 뜬다.
+2. chatgpt.com 탭을 하나 열어 두고 로그인한다. 확장을 새로 설치하거나 새로고침했으면 그 탭도 새로고침한다.
+3. 팝업에서 '프로젝트만 수집'을 켜고 프로젝트를 고른 뒤 동의한다. 켠 뒤에 끝난 턴부터 들어온다.
+4. 바로 가져오려면 팝업이나 채팅 화면의 '싱크 맞추기'를 누른다. 개인 검토함(`/review`)을 열 때도 한 번 맞춘다.
+
+팝업 상태 줄:
+
+| 보이는 문구 | 뜻과 할 일 |
+|---|---|
+| `동기화: N분 전 · ○○ 프로젝트` | 정상. 뒤에 오류 문구가 붙으면 마지막 동기화가 실패한 것이고, 다음 주기에 다시 한다 |
+| `chatgpt.com 탭을 열어 두세요` | 응답하는 탭이 없다. 탭을 열거나 새로고침한다 |
+| `ChatGPT에 로그인하세요` | 탭이 로그아웃 상태다 |
+| `수집이 멈춰 있어 동기화도 쉬어요…` | 수집이 일시정지됐거나 끝났다. 자동 수집을 다시 켠다 |
+| `켤 때와 다른 ChatGPT 계정이에요…` | 다른 계정으로 로그인했다. 껐다가 다시 켠다 |
+| `쉼: 요청 제한 · HH:MM에 다시` | ChatGPT가 요청을 제한했다. 그 시각까지 기다린다 |
+| `수집기에서 동기화가 꺼져 있어요. 다시 켜 주세요` | 수집기 상태 폴더를 새로 만들었거나 수집기 쪽에서 꺼졌다. 팝업에서 껐다 켠다 |
+| `고른 프로젝트를 찾을 수 없어요…` | 프로젝트를 지웠거나 접근할 수 없다. 껐다가 다시 고른다 |
+| `ChatGPT 화면이 바뀌어 동기화를 멈췄어요` | ChatGPT 응답 모양이 바뀌었다. 팀에 알린다 |
+| `수집기에 끄기를 전하는 중이에요` | 끌 때 수집기가 꺼져 있었다. 수집기를 켜면 다시 보낸다 |
+| `가져오지 못한 대화 N개` | 3번 연속 실패한 대화가 있다. 그 대화가 바뀌면 다시 시도한다 |
+
+- 동기화 켬·끔은 팝업에서만 바꿀 수 있다. 웹이나 다른 요청으로는 바꾸지 않는다.
+- 이 기능은 ChatGPT 웹의 내부 주소를 쓴다. 공개 API가 아니어서 ChatGPT가 바뀌면 멈출 수 있다.
 
 ## 상태 폴더와 포트
 
@@ -133,7 +161,7 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 ### 수집·분류
 
 - 일시중지·종료는 새 기록 읽기와 새 외부 AI 요청을 막는다. 이미 보낸 요청은 취소하지 못한다.
-- 스캐너가 실패하거나 스캐너 실행 파일 `bin/syncup-collector`가 없으면 검토함에 `대화 기록 확인 실패`가 보이고, 다음 확인 때 다시 시도한다.
+- 스캐너가 실패하거나 스캐너 실행 파일 `bin/syncup-scanner`가 없으면 검토함에 `대화 기록 확인 실패`가 보이고, 다음 확인 때 다시 시도한다.
 - 통합 분류가 실패해도 발화는 로컬에 남는다. 수집 중일 때 웹의 **분류 재시도**나 Python 검토함의 **다시 시도**로 다시 보낸다.
 - 보류된 발췌는 [privacy.md](privacy.md#3-사용자-제외와-보류)를 따른다.
 
@@ -149,4 +177,4 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 
 ## 지원 OS
 
-로컬 수집기는 macOS에서만 돈다. `collector/runtime.py`의 `ENABLED_PLATFORMS`와 `scanner/src/main.rs`의 `ENABLED_OS`에서 Windows·Linux 줄은 주석이고, 옵션이나 환경 변수로 켜는 방법은 없다. 팀 서버에는 이 제한이 없지만, `rust`·`team` 검사는 수집기도 띄우므로 macOS에서 돌린다.
+로컬 수집기는 macOS와 Windows에서 돈다. `collector/runtime.py`의 `ENABLED_PLATFORMS`와 `scanner/src/main.rs`의 `ENABLED_OS`에서 Linux 줄은 주석이고, 옵션이나 환경 변수로 켜는 방법은 없다. Windows의 설치·검사·검증 기록은 [windows.md](windows.md)에 있다. 팀 서버에는 이 제한이 없다. `run_checks.py`의 묶음은 macOS용이고, Windows에서는 `.github/workflows/windows.yml`이 수집기 검사를 돌린다.

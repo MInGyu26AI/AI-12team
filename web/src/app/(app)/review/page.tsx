@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -17,8 +17,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, USE_MOCK } from "@/lib/api";
+import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
 import { useTeam } from "@/lib/team";
-import { useReviewCandidates, useReviewSelection } from "@/lib/use-review";
+import { useReviewCandidates, useReviewSelection, useSyncOnOpen } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
 
 type Tab = "review" | "held" | "excluded";
@@ -35,6 +36,7 @@ export default function ReviewPage() {
   const router = useRouter();
   const team = useTeam();
   const review = useReviewCandidates();
+  useSyncOnOpen(); // 후보 구독이 먼저 걸린 뒤 시작한다
   const { collector } = review;
   const selection = useReviewSelection(review.shareable);
   const [sharing, setSharing] = useState(false);
@@ -43,16 +45,18 @@ export default function ReviewPage() {
   const [tab, setTab] = useState<Tab>("review");
   const [syncing, setSyncing] = useState(false);
 
-  // 승인함에 들어오면 쌓인 대화를 한 번 분류에 넣는다 (상태를 처음 받은 뒤. 짧은 시간 안의 재진입은 건너뜀)
-  const statusReady = !!collector.status;
-  const { autoSync } = collector;
-  useEffect(() => {
-    if (statusReady) void autoSync();
-  }, [statusReady, autoSync]);
+  // 상단 '싱크 맞추기' (들어올 때 자동 1회는 useSyncOnOpen). 대화 수집 화면과 같은 syncNow·결과 문구
   const syncNow = async () => {
     setSyncing(true);
-    await collector.sync();
-    setSyncing(false);
+    try {
+      const { tone, text } = syncNowSummary(await collector.syncNow("button"));
+      toast[tone](text);
+    } catch (error) {
+      const { tone, text } = syncNowErrorNotice(error);
+      toast[tone](text);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // 팀을 바꾸면 이전 팀에서 고른 체크와 충돌 경고를 버린다 (개인정보 목록은 아래에서 팀 id 로 다시 그린다)

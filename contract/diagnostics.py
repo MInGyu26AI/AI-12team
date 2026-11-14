@@ -7,12 +7,15 @@ import os
 import time
 
 
-def failure(stage, error, trace=''):
+def failure(stage, error, trace='', detail=None):
+    """detail: short text the caller knows holds no input, such as the scanner's failure kinds; left out when None."""
     status = getattr(error, 'code', None)
-    logging.getLogger('syncup').warning(json.dumps(dict(
-        stage=stage, error=type(error).__name__,
-        http_status=status if type(status) is int else None,
-        trace=hashlib.sha256(str(trace).encode()).hexdigest()[:12] if trace else None)))
+    record = dict(stage=stage, error=type(error).__name__,
+                  http_status=status if type(status) is int else None,
+                  trace=hashlib.sha256(str(trace).encode()).hexdigest()[:12] if trace else None)
+    if detail is not None:
+        record['detail'] = detail
+    logging.getLogger('syncup').warning(json.dumps(record))
 
 
 def model_fingerprint(client):

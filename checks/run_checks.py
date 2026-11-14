@@ -17,12 +17,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
 
-# (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`, which only runs on macOS),
-# Python 3 and Node with `npm ci` in web/ and extension/ (check_local_bridge starts Next from web/node_modules; the unit
-# tests run with each project's own runner); rust = macOS and the built scanner (bin/syncup-collector); team = macOS (it starts the collector), Docker and
+# (group, command, what it covers). Groups: local = macOS (check_integrity starts `app.py run`; on Windows,
+# .github/workflows/windows.yml runs the collector's checks instead), Python 3 and Node with `npm ci` in web/ and extension/ (check_local_bridge starts Next from web/node_modules; the unit
+# tests run with each project's own runner); rust = macOS and the built scanner (bin/syncup-scanner); team = macOS (it starts the collector), Docker and
 # server/requirements.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
+    ('local', [PY, 'checks/check_sync_intake.py'], '계정 동기화 창·접수·화면 경로 중복 (docs/sync-contract.md 3장)'),
     ('local', [PY, 'checks/check_pipeline_schema.py'], '로컬 DB 마이그레이션·승인 계약·TS 공용 상수'),
     ('local', [PY, 'checks/check_retention.py'], '원문·백업 7일 보존 정책'),
     ('local', [PY, 'checks/check_local_privacy.py'], '로컬 개인정보 필터·외부 전송 차단'),
@@ -35,13 +36,14 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_watch_paths.py'], '수집 루프 경로(표준·호환·비통합)'),
     ('local', [PY, 'checks/check_response_disconnect.py'], '응답 유실 시 RPC 오류 중복 방지'),
     ('local', [PY, 'checks/check_integrity.py'], '로컬 앱 회귀(격리 SQLite·가짜 팀 API로 전송·재시도·CLI 재시작)'),
+    ('local', [PY, 'checks/check_windows_support.py'], 'Windows 지원: ACL 규칙·키 파일 문구·스캐너 오류·native host 실행기·포트 (Windows에서는 실제 API)'),
     ('local', ['node', 'checks/check_local_bridge.cjs'], '웹 ↔ 로컬 수집기 연결(쿠키·출처·RPC)'),
     ('local', ['node', 'checks/check_mask_cases.cjs'], '가림 공용 사례: TypeScript 사본'),
     ('local', ['npm', '--prefix', 'web', 'test', '--silent'], '웹 단위 시험 (공유 폴러·승인함·/api/local 실패 응답)'),
     ('local', ['npm', '--prefix', 'extension', 'test', '--silent'], '확장 단위 시험 (메시지 응답·신뢰 주소·자동 수집·ChatGPT 추출)'),
     ('local', [PY, '-m', 'unittest', 'discover', '-s', 'tests', '-t', '.'], 'AI 모듈 (가림 공용 사례 Python 쪽 포함)'),
-    ('rust', [PY, 'checks/check_scanner.py'], 'Rust 스캐너: Codex 로그'),
-    ('rust', [PY, 'checks/check_claude.py'], 'Rust 스캐너: Claude Code 로그'),
+    ('rust', [PY, 'checks/check_scanner_codex.py'], 'Rust 스캐너: Codex 로그'),
+    ('rust', [PY, 'checks/check_scanner_claude.py'], 'Rust 스캐너: Claude Code 로그'),
     ('rust', [PY, 'checks/check_portability.py'], 'Rust 스캐너: 경로·OS 이식성'),
     # ServerRecovery inherits TeamIntegration (check_team_integration.py), which inherits TeamIsolation (check_teams.py),
     # so this one file runs all three suites once. Every other team file runs only its own tests (check_teams.own_tests).

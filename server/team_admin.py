@@ -35,15 +35,15 @@ def init(c, password_file):
     c.execute(sql.SQL('CREATE ROLE syncup_api LOGIN PASSWORD {} '
                       'NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION').format(sql.Literal(password)))
     apply_sql(c, 'team_schema.sql')
-    apply_sql(c, 'team_integration.sql')
+    apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
 
 
 def migrate_integration(c):
-    # team_integration.sql creates its tables once, so it runs only where they are missing. Every later
+    # team_decisions.sql creates its tables once, so it runs only where they are missing. Every later
     # change goes into team_upgrades.sql, which must stay safe to apply again on any database.
     if not c.execute("SELECT to_regclass('syncup.conflict_checks')").fetchone()[0]:
-        apply_sql(c, 'team_integration.sql')
+        apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
 
 

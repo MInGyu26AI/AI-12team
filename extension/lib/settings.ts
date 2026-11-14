@@ -2,6 +2,7 @@
 import { storage } from '#imports';
 import type { ExtStatus } from '@shared/bridge';
 import type { TeamCriteria } from '@shared/criteria';
+import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from '@shared/batch';
 import { isShareable } from '@shared/labels';
 import { SUBTOPICS, type RelatedCard, type Subtopic } from '@shared/types';
 
@@ -15,12 +16,13 @@ export interface Settings {
   projectTopic: string;
   userName: string;
   autoCollect: boolean; // false = 수집 일시정지 또는 종료 시각 지남
-  // 수집기가 보고한 묶음 크기 (화면은 TURNS_PER_BATCH 고정, 다르면 collector-status 가 기본값으로 되돌림).
+  // 대화 N회(질문+답변)마다 분류. 팀 고정값이라 팝업에서 바꾸지 않는다(수집기 값을 그대로 보여 준다).
   // 덜 찬 묶음은 수동 보내기("싱크 맞추기"·"싱크업에 보내기"·선택 보내기)만 바로 보낸다.
   // 수동 보내기도 수집 중일 때만 된다. 일시정지·종료 시각에는 남은 대화를 로컬 수집기에 두고, 다시 켜면 다음 묶음에 합친다
   turnsPerBatch?: number;
   endsAt?: string | null; // 수집 종료 시각 (ISO). 지나면 수집기가 새 수집과 AI 요청을 멈춘다
   bufferedTurns?: number;
+  nextBatchTurns?: number; // 다음 자동 분류까지 센 턴 (대화별, 답을 받은 턴만)
   lastCollectedAt?: string | null;
   // 팀 목표·범위·규칙 (설정 화면, 선택). 수집기 collection.configure 가 아직 받지 않아 확장에만 둔다 (shared/criteria.ts)
   teamCriteria?: TeamCriteria;
@@ -43,10 +45,15 @@ export const settingsFromStatus = (previous: Settings, status: ExtStatus): Setti
   turnsPerBatch: status.turnsPerBatch,
   endsAt: status.endsAt,
   bufferedTurns: status.bufferedTurns,
+  nextBatchTurns: status.nextBatchTurns,
   lastCollectedAt: status.lastCollectedAt,
 });
 
+// 묶음 크기 범위 1..MAX_TURNS_PER_BATCH. 로컬 수집기 collection_settings.configure 도 같은 범위만 받는다
+export const clampTurns = (turns: number) => Math.min(Math.max(Math.round(turns), 1), MAX_TURNS_PER_BATCH);
+
 // 수집기 status 를 옮기기 전에는 아래 값이 비어 있을 수 있으므로 항상 이 함수들로 읽는다
+export const turnsOf = (s: Settings) => clampTurns(s.turnsPerBatch ?? TURNS_PER_BATCH);
 export const endsAtOf = (s: Settings) => (s.endsAt ? new Date(s.endsAt) : null);
 export const isEnded = (s: Settings, now = Date.now()) => {
   const end = endsAtOf(s);
@@ -54,6 +61,17 @@ export const isEnded = (s: Settings, now = Date.now()) => {
 };
 
 export const isConfigured = (s: Settings) => !!(s.teamName.trim() && s.projectTopic.trim() && s.userName.trim());
+
+/**
+ * 수동 보내기(싱크업에 보내기·선택 보내기·우클릭)와 팝업의 '싱크 맞추기'를 막아야 하는 이유, 보낼 수 있으면 null.
+ * 수집기는 수집 중(autoCollect = 일시정지도 종료도 아님)일 때만 발화와 분류 요청을 받는다
+ */
+export function sendBlockedReason(s: Settings, now = Date.now()): string | null {
+  if (!isConfigured(s)) return '확장 아이콘을 눌러 먼저 설정해 주세요';
+  if (isEnded(s, now)) return '수집 종료 시각이 지났어요. 확장 팝업에서 종료 시각을 갱신하고 자동 수집을 켜 주세요';
+  if (!s.autoCollect) return '수집이 꺼져 있어요. 확장 팝업에서 자동 수집을 켜 주세요';
+  return null;
+}
 
 // 확장 자신이 로컬 수집기를 부른 마지막 실패. unreachable: 수집기에 닿지 못함, op: 실패한 호출 종류.
 // 언제 지우는지는 collector-status.ts 가 정한다.
@@ -67,8 +85,12 @@ export const collectStateItem = storage.defineItem<CollectState>('local:collectS
   fallback: { lastError: null },
 });
 
-// 검토 대기 카드: 개인(personal)은 버렸고 민감정보는 가린 상태
-export const pendingItem = storage.defineItem<RelatedCard[]>('local:pending', { fallback: [] });
+// 검토 대기 공유 후보 수. 팝업이 쓰는 것은 개수뿐이라 카드 본문은 확장 저장소에 두지 않는다
+// (브라우저를 껐다 켜도 남는 storage.local 에 카드 본문이 쌓이지 않게. 본문은 로컬 수집기와 개인 검토함에만 있다)
+export const pendingCountItem = storage.defineItem<number>('local:pendingCount', { fallback: 0 });
+
+// 예전 판이 검토 대기 카드 본문을 담던 키. 지금은 쓰지 않으므로 확장이 업데이트될 때 지운다 (background onInstalled)
+export const clearLegacyPendingCards = () => storage.removeItem('local:pending');
 
 // 배지와 팝업이 함께 쓰는 검토 대기 수. 수집기는 공유 후보만 보내지만 프로세스 경계라 한 번 더 거른다
 export const shareableCount = (cards: RelatedCard[]) => cards.filter(isShareable).length;

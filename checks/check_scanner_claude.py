@@ -15,7 +15,7 @@ from collection_session import bind_sharing
 import scanner_runner
 import standalone_classifier
 import delivery
-from check_scanner import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line, write_lock
+from check_scanner_codex import COLLECTION_STOPPED, decision_answers, fake_api, job_id, run_scanner, split_last_line, write_lock
 from local_fixtures import FAKE_TEAM, fake_team_api, post, server, work_gate
 from review_page import Review
 from storage import connect, initialize

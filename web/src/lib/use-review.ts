@@ -3,9 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import type { RelatedCard } from "@shared/types";
 import { boardTopicKeys, USE_MOCK } from "./api";
-import { useLocalCandidates } from "./local-candidates";
-import { useLocalCollector } from "./local-collector";
+import { useMockCandidates } from "./mock-candidates";
+import { syncAndRefresh, useLocalCollector } from "./local-collector";
 import { isChecked, mergeCandidates, selectionOf, type Overrides } from "./review-candidates";
+
+/**
+ * 승인함을 열 때 싱크 맞추기를 한 번 하고, 끝나면 후보를 다시 읽는다 (docs/sync-contract.md 5장).
+ * 실패하거나 확장이 없어도 조용히 넘어간다: 화면은 지금까지처럼 후보를 읽고, '확장 없음' 안내는 주기 읽기가 띄운다.
+ */
+export function useSyncOnOpen() {
+  const started = useRef(false); // StrictMode 가 효과를 두 번 돌려도 한 번만 (ref 는 그때도 유지된다)
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    syncAndRefresh("review-open").catch(() => {});
+  }, []);
+}
 
 // 팀 보드의 세부 주제 (화면을 열 때 한 번 읽는다)
 function useBoardTopicKeys() {
@@ -23,7 +36,7 @@ function useBoardTopicKeys() {
 
 export function useReviewCandidates() {
   const collector = useLocalCollector();
-  const local = useLocalCandidates();
+  const local = useMockCandidates();
   const boardKeys = useBoardTopicKeys();
   const pasted = USE_MOCK ? local : null;
   const collectedIds = new Set(collector.cards.map((c) => c.id));

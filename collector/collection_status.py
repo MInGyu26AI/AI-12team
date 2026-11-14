@@ -2,8 +2,8 @@
 from datetime import datetime, timezone
 import json
 
-from ai.syncup_ai.batch import group_turns
-from collection_settings import local_profile, read_options
+from ai.syncup_ai.batch import group_turns, take_ready_batches
+from collection_settings import local_profile, read_options, sync_windows
 from batch_classification import failed_batches
 from batch_queue import unbatched_turns
 from collection_session import active, bound_team, session_state
@@ -55,9 +55,17 @@ def _counts(c, team_id, start, failed, issues):
                 privacyExcluded=c.execute(EXCLUDED_COUNT, (team_id,)).fetchone()[0])
 
 
-def _buffered_turns(c, team_id, start):
-    """Turns stored this session that no batch has taken yet."""
-    return sum(len(group_turns(messages)) for messages in unbatched_turns(c, team_id, start).values())
+def _turn_counts(c, team_id, start):
+    """(bufferedTurns, nextBatchTurns) of this session's turns that no batch has taken yet.
+
+    bufferedTurns: every stored turn. nextBatchTurns: answered turns of the conversation closest to its next batch.
+    Batches are cut per conversation and an unanswered last question waits, so the two differ;
+    take_ready_batches with one turn per batch returns exactly the answered turns.
+    """
+    conversations = unbatched_turns(c, team_id, start).values()
+    buffered = sum(len(group_turns(messages)) for messages in conversations)
+    next_batch = max((len(take_ready_batches(messages, 1)[0]) for messages in conversations), default=0)
+    return buffered, next_batch
 
 
 def _recent_batches(c, team_id):
@@ -68,6 +76,13 @@ def _recent_batches(c, team_id):
                            turns=len(group_turns(messages)), trigger=json.loads(row['context']).get('trigger', 'auto'),
                            cardIds=[r[0] for r in c.execute('SELECT id FROM cards WHERE job=?', (row['job'],))]))
     return recent
+
+
+def _account_sync(state):
+    """{enabled, account, since} with since as ISO; None when account sync was never turned on."""
+    if not state:
+        return None
+    return dict(state, since=_iso(state['since']) if state['since'] is not None else None)
 
 
 def _privacy_state(gate):
@@ -81,13 +96,14 @@ def collection_status(pipeline):
         s = dict(c.execute('SELECT * FROM settings').fetchone())
         team_id = bound_team(c)
         options = read_options(c)
-        buffered = _buffered_turns(c, team_id, s['start'])
+        buffered, next_batch = _turn_counts(c, team_id, s['start'])
         last_collected = c.execute(LAST_COLLECTED, (team_id, s['start'])).fetchone()[0]
         failures = failed_batches(c, team_id)
         issues = [dict(id=i['id'], reason=i['reason'], received=i['received']) for i in unresolved_issues(c, team_id)]
         counts = _counts(c, team_id, s['start'], len(failures), len(issues))
         legacy = c.execute(LEGACY_CANDIDATE_COUNT).fetchone()[0]
         recent = _recent_batches(c, team_id)
+        windows = sync_windows(c, s)
     team = next((t for t in profile['teams'] if t['id'] == team_id), None)
     return dict(
         version='1',
@@ -96,6 +112,7 @@ def collection_status(pipeline):
         state=session_state(s),
         turnsPerBatch=options['turnsPerBatch'],
         bufferedTurns=buffered,
+        nextBatchTurns=next_batch,
         endsAt=_iso(s['end']),
         lastCollectedAt=_iso(last_collected) if last_collected is not None else None,
         teamId=team_id,
@@ -112,4 +129,6 @@ def collection_status(pipeline):
         intakeIssues=issues,
         privacy=_privacy_state(pipeline.privacy),
         counts=counts,
+        syncWindows=[dict(start=_iso(start), end=_iso(end)) for start, end in windows],
+        accountSync=_account_sync(options.get('accountSync')),
     )

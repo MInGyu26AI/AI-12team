@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { TURNS_PER_BATCH } from '@shared/batch';
-import { sendToBackground } from '@/lib/messages';
-import type { Settings } from '@/lib/settings';
+import { turnsOf, type Settings } from '@/lib/settings';
+import { Notice } from './Notice';
+import { runSyncNow } from './sync-actions';
+import { syncNowBlockedReason, type PopupNotice } from './sync-status';
 
 // 다음 분류까지 쌓인 대화 · "싱크 맞추기" · 검토 대기 카드 수 · 마지막 수집 시각
-export function QueueStatus({ settings, pendingCount }: { settings: Settings; pendingCount: number }) {
+export function QueueStatus({ settings, pendingCount, syncEnabled }: { settings: Settings; pendingCount: number; syncEnabled: boolean }) {
   const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState<PopupNotice | null>(null);
   const bufferedTurns = settings.bufferedTurns ?? 0;
-  // 쌓인 대화가 있으면 지금 분류에 넣고(flush), 없으면 수집기 상태만 다시 읽는다
-  const sync = async () => {
+  const nextBatchTurns = settings.nextBatchTurns ?? bufferedTurns; // 옛 수집기는 합계만 준다
+  const blocked = syncNowBlockedReason(settings, syncEnabled);
+  const syncNow = async () => {
     setSyncing(true);
-    const result = await sendToBackground({ type: bufferedTurns ? 'flush' : 'refresh' }).catch(() => null);
-    if (!result?.ok) alert(result?.error ?? '싱크 맞추기 실패');
+    setResult(null);
+    setResult(await runSyncNow());
     setSyncing(false);
   };
 
@@ -19,12 +22,21 @@ export function QueueStatus({ settings, pendingCount }: { settings: Settings; pe
     <section className="space-y-1 rounded-lg bg-gray-50 p-3">
       <div className="flex items-center justify-between gap-2">
         <p>
-          다음 분류까지 대화 <b>{bufferedTurns}</b>/{TURNS_PER_BATCH}회
+          다음 분류까지 대화 <b>{nextBatchTurns}</b>/{turnsOf(settings)}회
         </p>
-        <button className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40" disabled={syncing} onClick={sync}>
+        <button
+          className="rounded-md border bg-white px-2 py-0.5 text-xs disabled:opacity-40"
+          disabled={syncing || !!blocked}
+          title={blocked ?? undefined}
+          onClick={syncNow}
+        >
           {syncing ? '맞추는 중…' : '싱크 맞추기'}
         </button>
       </div>
+      {result && <Notice tone={result.tone}>{result.text}</Notice>}
+      {!settings.autoCollect && bufferedTurns > 0 && (
+        <p className="text-xs text-gray-500">쌓인 대화는 보관돼 있어요. 수집을 다시 켜면 다음 묶음에 합쳐요.</p>
+      )}
       <p>
         검토 대기 카드 <b className="text-tag-decision">{pendingCount}개</b>
       </p>

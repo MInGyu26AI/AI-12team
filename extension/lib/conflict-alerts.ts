@@ -4,7 +4,7 @@ import { storage } from '#imports';
 import { ALERT_LEVEL, alertLevel } from '@shared/labels';
 import type { Conflict } from '@shared/types';
 import { rpc } from './collector-rpc';
-import { pendingItem, settingsItem, shareableCount } from './settings';
+import { pendingCountItem, settingsItem } from './settings';
 import { webUrlOf } from './web-url';
 
 export const CONFLICT_ALARM = 'conflicts';
@@ -18,7 +18,7 @@ export const openConflictCountItem = storage.defineItem<number>('local:openConfl
 /** 배지: 미해결 충돌이 있으면 빨간 배지로 그 수, 없으면 검토 대기 카드 수 */
 export async function updateBadge() {
   const conflicts = await openConflictCountItem.getValue();
-  const pending = shareableCount(await pendingItem.getValue());
+  const pending = await pendingCountItem.getValue();
   try {
     await browser.action.setBadgeBackgroundColor({ color: conflicts ? '#c62828' : '#4f46e5' });
   } catch {
