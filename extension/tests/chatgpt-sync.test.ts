@@ -83,6 +83,8 @@ async function fakeCollector(_host: string, request: NativeRequest) {
         result: { newMessages: messages.length, queued: true, intakeIssues: [], outsideWindow: outsideWindowPerAppend, skippedTurns: 0, newTurns },
       };
     }
+    case 'team.conflicts': // the 1-minute conflict alert (conflict-alerts.ts) also runs during these tests
+      return { ok: true, result: { conflicts: [] } };
     default:
       return { ok: true, result: {} };
   }
