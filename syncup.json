@@ -4,15 +4,32 @@
     "name": "10게 2기조",
     "repo": "MInGyu26AI/AI-12team"
   },
-  "updated_at": "2026-11-14T22:39+09:00",
+  "updated_at": "2026-11-14T22:45+09:00",
   "summary": {
-    "decisions": 5,
-    "open_conflicts": 2,
+    "decisions": 7,
+    "open_conflicts": 3,
     "todos": 1,
     "todos_done": 0,
     "research": 2
   },
   "open_conflicts": [
+    {
+      "id": "x53c5259f57",
+      "topic_key": "확장 지원",
+      "judgement": "충돌",
+      "reason": "다른 사람이 합의 없이 양립할 수 없는 값을 정함",
+      "existing": {
+        "card_id": "924137ca6e6d98112a28f2a3e4354419bf0139745fae19a0bc4e146ce2bbf511",
+        "content": "확장 지원 = 크롬 우선",
+        "owner": "김하은"
+      },
+      "new": {
+        "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
+        "content": "확장 지원 우선순위 = 크롬 대신 사파리",
+        "owner": "김동균"
+      },
+      "status": "open"
+    },
     {
       "id": "xe6552c8753",
       "topic_key": "MVP 범위",
@@ -102,6 +119,22 @@
       "subtopic": "주제·목표",
       "current": [
         {
+          "card_id": "4dcd3e8fe2c36abdede72f191acd66bb42c8ee68512190850296776e412f707a",
+          "content": "확장 지원 우선순위 = 사파리 우선 (크롬 대신)",
+          "reason": null,
+          "owner": "김동균",
+          "decided_at": "2026-11-14T22:45+09:00",
+          "state": "active"
+        },
+        {
+          "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
+          "content": "확장 지원 우선순위 = 크롬 대신 사파리",
+          "reason": null,
+          "owner": "김동균",
+          "decided_at": "2026-11-14T22:45+09:00",
+          "state": "review"
+        },
+        {
           "card_id": "924137ca6e6d98112a28f2a3e4354419bf0139745fae19a0bc4e146ce2bbf511",
           "content": "확장 지원 = 크롬 우선",
           "reason": null,
@@ -111,7 +144,7 @@
         }
       ],
       "history": [],
-      "status": "settled"
+      "status": "review"
     }
   ],
   "todos": [
