@@ -8,6 +8,7 @@ import type { RelatedCard } from "@shared/types";
 import { CandidateCard } from "@/components/review/candidate-card";
 import { EmptyState } from "@/components/states";
 import { buttonVariants } from "@/components/ui/button";
+import { collectorLink, type CollectorLink } from "@/lib/local-collector";
 import type { useReviewCandidates, useReviewSelection } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,7 @@ export function CandidateList({ review, selection, othersOpen, onToggleOthers }:
   onToggleOthers: () => void;
 }) {
   const { collector } = review;
-  if (!review.total && !review.personal) return <NoCandidates available={collector.available} />;
+  if (!review.total && !review.personal) return <NoCandidates link={collectorLink(collector)} />;
   return (
     <div className="space-y-4">
       {review.shareable.map((c) => (
@@ -50,14 +51,17 @@ export function CandidateList({ review, selection, othersOpen, onToggleOthers }:
   );
 }
 
-function NoCandidates({ available }: { available: boolean }) {
+const NO_CANDIDATE_TEXT: Record<CollectorLink, string> = {
+  connected: `ChatGPT에서 대화를 ${TURNS_PER_BATCH}회 나누면 후보가 자동으로 올라와요. 바로 확인하려면 '싱크 맞추기'를 눌러 주세요.`,
+  "collector-off": "로컬 수집기가 꺼져 있어요. 수집기를 실행하거나 대화를 직접 붙여넣어 보세요.",
+  "extension-missing": "브라우저 확장을 설치하거나 대화를 직접 붙여넣어 보세요.",
+  checking: "수집기 연결을 확인하는 중이에요.",
+};
+
+function NoCandidates({ link }: { link: CollectorLink }) {
   return (
     <EmptyState title="승인할 후보가 없어요">
-      <p className="break-keep">
-        {available
-          ? `ChatGPT에서 대화를 ${TURNS_PER_BATCH}회 나누면 후보가 자동으로 올라와요. 바로 확인하려면 '싱크 맞추기'를 눌러 주세요.`
-          : "브라우저 확장을 설치하거나 대화를 직접 붙여넣어 보세요."}
-      </p>
+      <p className="break-keep">{NO_CANDIDATE_TEXT[link]}</p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         <Link href="/collect" className={cn(buttonVariants({ variant: "outline" }))}>
           대화 수집 상태
