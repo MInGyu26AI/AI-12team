@@ -6,6 +6,7 @@ import { Notice } from './Notice';
 import { saveSetup } from './save-setup';
 import { SubtopicPicker } from './SubtopicPicker';
 import { TextField } from './TextField';
+import { TopicField } from './TopicField';
 import { WebUrlField } from './WebUrlField';
 
 interface SetupFormProps {
@@ -48,7 +49,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
       {firstTime && <Notice tone="error">설정 안 됨: 아래 정보를 입력해야 수집을 시작할 수 있어요.</Notice>}
 
       <TextField label="등록된 팀 이름" value={teamName} placeholder="로컬 수집기 연결 필요" />
-      <TextField label="프로젝트 주제" value={projectTopic} onChange={setProjectTopic} placeholder="예: 팀 AI 메모리 서비스" />
+      <TopicField value={projectTopic} saved={initial.projectTopic} onChange={setProjectTopic} />
       <TextField label="연결된 사용자" value={userName} placeholder="로컬 수집기 연결 필요" />
 
       <SubtopicPicker value={subtopics} onChange={setSubtopics} />
