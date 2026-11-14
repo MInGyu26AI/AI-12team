@@ -35,7 +35,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+    <div className="flex flex-col items-center gap-2 rounded-[12px] border border-dashed border-card-border bg-card/60 p-8 text-center text-sm text-muted-foreground">
       <Inbox className="size-6" />
       <p className="font-medium text-foreground">{title}</p>
       {children}

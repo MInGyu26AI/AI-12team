@@ -29,8 +29,8 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
   return (
     <article
       className={cn(
-        "group flex gap-4 rounded-xl border-2 bg-card p-5 transition-colors",
-        checked ? TAG_BORDER[c.tag] : "border-transparent shadow-xs",
+        "group flex gap-3.5 rounded-[12px] border-[1.5px] bg-card p-[18px] transition-colors",
+        checked ? TAG_BORDER[c.tag] : "border-card-border",
       )}
     >
       <Checkbox
@@ -38,12 +38,12 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
         checked={checked}
         disabled={!isSelectable(c)}
         onCheckedChange={(v) => onCheckedChange(v === true)}
-        className="mt-1 size-5 data-checked:border-brand data-checked:bg-brand"
+        className="mt-0.5 size-5 rounded-[5px] border-[1.5px] border-foreground/25 bg-white data-checked:border-brand data-checked:bg-brand"
         aria-label="이 카드 선택"
       />
-      <div className="min-w-0 flex-1 space-y-2">
+      <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", TAG_COLOR[c.tag])}>{TAG_LABEL[c.tag]}</span>
+          <span className={cn("rounded-full px-2.5 py-[3px] text-xs leading-[1.5] font-medium", TAG_COLOR[c.tag])}>{TAG_LABEL[c.tag]}</span>
           {statusBadges(c).map((b) => (
             <span key={b.label} className={cn("rounded-full px-2 py-0.5 text-xs font-medium", b.color)}>
               {b.label}
@@ -91,7 +91,7 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
             </button>
           </form>
         ) : (
-          <label htmlFor={id} className="block cursor-pointer text-[17px] font-semibold break-keep">
+          <label htmlFor={id} className="block cursor-pointer text-base leading-[1.5] font-medium break-keep">
             {c.content}
           </label>
         )}
