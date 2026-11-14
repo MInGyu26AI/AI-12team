@@ -16,7 +16,8 @@ export interface CollectedMessage {
   conversationTitle?: string;
   url?: string;
   collectedAt: string; // ISO
-  // 아래 셋은 계정 동기화(docs/sync-contract.md 2장)가 붙인다. 화면 경로는 보내지 않는다(없으면 screen 으로 본다)
+  // 아래 셋은 계정 동기화(docs/sync-contract.md 2장)가 붙인다. 화면 경로는 보내지 않는다(없으면 screen 으로 본다).
+  // 예외: 웹 카톡 붙여넣기는 origin 없이 turnId(대화 덩어리)만 보낸다 (shared/kakaotalk.ts)
   createdAt?: string; // ChatGPT 서버의 메시지 작성 시각 (ISO, 시간대 포함). origin='sync' 이면 필수
   origin?: MessageOrigin;
   turnId?: string; // 그 턴의 사용자 메시지 id (접두사 없음). 같은 turnId 끼리 한 턴. origin='sync' 이면 필수

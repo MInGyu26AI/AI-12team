@@ -31,6 +31,8 @@ ChatGPT 동기화 갈래 1~8이 함께 지키는 약속입니다. 설계와 이�
 | `collectedAt` | 보낸 시각 | **`createdAt`과 같은 값** |
 | `conversationTitle` | 지금 그대로 | 보내지 않음 |
 
+웹 백업 입력의 카카오톡 붙여넣기는 `origin` 없이(화면 경로) `turnId`만 보냅니다. 값은 대화 덩어리 id이고, 수집기는 화면 경로의 `turnId`를 그대로 받아 같은 값끼리 한 턴으로 묶습니다(`collector/turn_intake.py` `_sync_fields`, `ai/syncup_ai/batch.py`). 위 표의 '보내지 않음'은 확장 화면 수집 기준입니다.
+
 동기화 경로의 `collectedAt`을 `createdAt`과 같게 두는 이유가 있습니다. 분류기(`ai/syncup_ai/classify.py`의 `_when`·`source_of`)는 `collectedAt`을 프롬프트 시각과 출처 라벨로 씁니다. 그래서 따라잡기로 가져온 옛 대화에도 실제 대화 시각이 찍혀야 합니다. 받은 시각은 수집기 `intake.received`에 따로 남습니다.
 
 ## 3. 수집기 RPC (갈래 1, `collector/`)

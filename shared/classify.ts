@@ -257,7 +257,12 @@ export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Car
   const cards: Card[] = [];
   for (const u of utterances) {
     let aiCards = 0;
-    for (const raw of splitSentences(u.text)) {
+    // 단톡방 한 줄의 화자("[채원] 좋아. 자막은 내가 넣을게")는 그 줄의 뒤 문장에도 이어진다. 다음 줄로는 넘기지 않는다
+    const sentences = u.text.split(/\n+/).flatMap((line) => {
+      const lineSpeaker = u.speaker === "user" ? line.trim().match(CHAT_LINE)?.[1] : undefined;
+      return splitSentences(line).map((raw) => ({ raw, lineSpeaker }));
+    });
+    for (const { raw, lineSpeaker } of sentences) {
       const { text: sentence, masked } = mask(raw);
       const chat = u.speaker === "user" ? sentence.match(CHAT_LINE) : null;
       const body = chat ? chat[2]! : sentence;
@@ -273,7 +278,7 @@ export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Car
         cards.push({ ...base, relevance: "personal", confidence: personal ? 0.85 : 0.5 }); // 개인: 문장은 저장하지 않는다
         continue;
       }
-      const card = relatedCard(base, sentence, body, tag, chat?.[1], scope);
+      const card = relatedCard(base, sentence, body, tag, chat?.[1] ?? lineSpeaker, scope);
       if (card.topic_key) scope.known.add(card.topic_key);
       cards.push(card);
     }

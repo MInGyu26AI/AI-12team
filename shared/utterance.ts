@@ -1,5 +1,6 @@
 // 웹 백업 입력(대화 붙여넣기·ChatGPT 내보내기 파일)이 만드는 발화. 두 모드 공용:
 // 실제 모드는 로컬 수집기(turns.append)로 보내고, 목업 모드는 shared/classify.ts mockClassify 로 분류한다.
+import type { CollectedMessage } from "./collector";
 import type { Speaker } from "./types";
 
 export interface Utterance {
@@ -10,6 +11,8 @@ export interface Utterance {
   speaker: Speaker;
   text: string;
   source: string; // 예: "ChatGPT, 2026-11-06 21:10" (format.ts formatSource)
+  site?: CollectedMessage["site"]; // 없으면 대화 id 가 있을 때 chatgpt-export, 없을 때 manual (web/src/lib/collector-intake.ts)
+  turnId?: string; // 같은 값끼리 분류 묶음의 1턴 (카톡 대화 덩어리, shared/kakaotalk.ts)
 }
 
 // 화자 표시: "나:" · "ChatGPT:", ChatGPT 영어 복사 "You said:" · "ChatGPT said:", 한국어 복사 "나의 말:" · "ChatGPT의 말:".

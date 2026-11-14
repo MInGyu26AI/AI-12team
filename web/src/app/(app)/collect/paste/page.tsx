@@ -73,7 +73,13 @@ export default function PastePage() {
             <TabsTrigger value="export">내보내기 파일 업로드</TabsTrigger>
           </TabsList>
           <TabsContent value="paste">
-            <PasteInput busy={busy} onClassify={classify("붙여넣은 대화")} />
+            <PasteInput
+              busy={busy}
+              onClassify={classify("붙여넣은 대화")}
+              me={team.me}
+              knownNames={knownNamesOf(team)}
+              teamName={team.name}
+            />
           </TabsContent>
           <TabsContent value="export">
             <ExportUpload busy={busy} onClassify={classify("ChatGPT 내보내기 파일")} />
