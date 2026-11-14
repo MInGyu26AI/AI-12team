@@ -252,7 +252,8 @@ export function mockClassify(utterances: Utterance[], ctx: ClassifyContext): Car
   const scope: Scope = {
     ctx,
     known: new Set(ctx.existingTopicKeys ?? []),
-    enabled: ctx.enabledSubtopics ? new Set<Subtopic>(ctx.enabledSubtopics) : null,
+    // 비어 있으면 모두 켬 (ai/syncup_ai/classify.py 와 같음, 로컬 수집기 기본값이 [])
+    enabled: ctx.enabledSubtopics?.length ? new Set<Subtopic>(ctx.enabledSubtopics) : null,
   };
   const cards: Card[] = [];
   for (const u of utterances) {
