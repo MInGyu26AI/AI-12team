@@ -1,0 +1,484 @@
+﻿case_id,input
+C-001,"Situation: A team confirmed that its survey will target first-year students. A new sentence in a member's AI chat reads, ""Imagine we abandoned the survey and made a game instead."" No team decision followed.
+Request: Classify the hypothetical statement and avoid comparing it as a real change.
+How should I respond?"
+C-001-1,"Situation: A team approved, “Our field study will take place at the river park.” (Nora Ellis, 2026-11-12 08:30; topic_key: Study site). A later message says, “Let’s move the whole study to the moon, haha.” (Eli Brooks, 2026-11-14 08:30; topic_key: Study site); the surrounding conversation makes clear it is a joke.
+Request: Determine whether the new message should be excluded from decision comparison and whether any alert should appear.
+How should I respond?"
+C-002,"Situation: A team previously approved, “If the prototype is stable by Friday, we will include the voice-control feature.” (Ravi Singh, 2026-11-12 16:00; topic_key: Feature scope). A new approved statement says, “The prototype will ship without voice control.” (Elena García, 2026-11-14 09:30; topic_key: Release scope). The statements do not say whether the stability condition was met.
+Request: Compare the conditional and unconditional decisions, lowering confidence and marking the result for human review if their relationship is ambiguous.
+How should I respond?"
+C-003,"Situation: The team’s current decision is “The prototype will support English and French.” (Isabel Martin, 2026-11-12 09:00; topic_key: Language support). A newly approved decision says, “Add Arabic as a supported language alongside English and French.” (Isabel Martin, 2026-11-14 09:00; topic_key: Localization).
+Request: Determine whether the new decision expands the existing scope without removing it or replaces the current language set.
+How should I respond?"
+C-004,"Situation: A team has decided that the analysis will cover all survey respondents. A new approved decision limits a particular chart to respondents under 25. The broader analysis scope and the chart-specific scope may coexist.
+Request: Evaluate the overlap in scope and determine whether the new decision is a compatible refinement or an incompatible change.
+How should I respond?"
+C-005,"Situation: A staff member receives several statements from an AI conversation, including a confirmed project title, a personal complaint about a roommate, and a work assignment. One sentence combines the project title with a private relationship detail.
+Request: Separate the relevant items, exclude unrelated personal content, mask sensitive information in the mixed sentence, and compare only approved team decisions.
+How should I respond?"
+C-006,"Situation: Two approved decisions about the same project target were entered within seconds: one says the workshop will be held online, and one says it will be held in person. They have different owners and no recorded team agreement. The approval timestamps may reflect simultaneous submissions.
+Request: Compare the pair and determine whether the result is clear enough to alert immediately or should be marked for human review.
+How should I respond?"
+C-007,"Situation: An approved decision assigns the project’s public-facing title as “Green Streets.” A new statement assigns the same project a public-facing title of “Living Blocks.” The two decisions have different topic keys because one was filed under branding and the other under project identity.
+Request: Check whether the decisions concern the same target despite their different topic keys, then report the result.
+How should I respond?"
+C-008,"Situation: A candidate message says the team’s report will discuss a member’s family circumstances, then includes private relationship details unrelated to the project decision. The report-scope decision and the personal details appear in the same sentence.
+Request: Mask sensitive relationship and family information and ensure only genuinely project-related decision content is considered.
+How should I respond?"
+C-009,"Situation: A project team changed its target audience from high-school students to first-year university students. A later approved decision by another member returns the target audience to high-school students without mentioning agreement.
+Request: Use the current target-audience decision in the revision chain and determine whether the latest statement conflicts.
+How should I respond?"
+C-009-1,"Situation: A project first selected a paper prototype, then the original owner changed the current decision to a clickable prototype. A third teammate now submits an approved decision to use a coded prototype, without mentioning team agreement.
+Request: Compare the third decision against the current clickable-prototype decision, not the superseded paper-prototype decision, and report the result.
+How should I respond?"
+C-010,"Situation: A project team decided to include a comparison of two payment providers in its report (Lena Ortiz, 2026-11-06 14:00). A new decision says to compare four providers, without stating whether the original two-provider analysis is being replaced or retained.
+Request: Assess the overlap and ambiguity in scope, assign confidence, and mark the result for human review if it falls below the threshold.
+How should I respond?"
+C-010-1,"Situation: The current approved team decision says that only two regions will be included in the study. A new approved decision says the study will include the same two regions plus a third, and the wording does not clarify whether the earlier scope is retained or replaced.
+Request: Assess whether the new scope is a compatible expansion or an incompatible revision, and lower confidence for human review if the relationship is ambiguous.
+How should I respond?"
+C-011,"Situation: A team previously agreed to run interviews in person. A new approved statement says, ""We decided to conduct the interviews remotely,"" but the record does not identify who approved it or whether the team agreed; the two approaches are incompatible.
+Request: Compare the target and values, assess the missing authority information, and use human review if confidence is below 0.6.
+How should I respond?"
+C-012,"Situation: A project has an existing decision to use a 30-day trial period for participants (Aiden Ross, 2026-11-02 12:00). Another member submits a decision for a 45-day trial period for the same participants, but the record does not say whether this is a revision or a second cohort.
+Request: Assess whether the target and scope overlap; if the cohort relationship is ambiguous, assign confidence below 0.6 and request review.
+How should I respond?"
+C-013,"Situation: An existing decision says not to publish individual survey responses. A new decision says to publish anonymized aggregate statistics, without proposing to publish individual responses.
+Request: Determine whether the new statement negates the same target or concerns a compatible scope.
+How should I respond?"
+C-014,"Situation: A teammate writes, “What if we dropped the entire user-testing phase?” with a laughing emoji. The current approved plan includes user testing, and there is no evidence of agreement or a real change.
+Request: Determine whether the joke is a decision and whether it should trigger an alert.
+How should I respond?"
+C-015,"Situation: Two valid existing decisions both match a new statement: one says the team will use a short online survey, and another says it will use a long in-person survey. The new statement merely says, “We will use a survey,” with no details.
+Request: Identify the ambiguity between valid existing decisions and leave the result for human review if confidence is below 0.6.
+How should I respond?"
+C-016,"Situation: An existing decision says the team will include a consent form in the research packet. A new statement says consent will be obtained verbally, but the source does not clarify whether the written form is being replaced or whether both methods will be used.
+Request: Compare the potential overlap cautiously and use “needs review” if the decision relationship remains ambiguous.
+How should I respond?"
+C-017,"Situation: A newly approved statement says the team will replace the interview method with a survey. The existing interview decision has the same target, and the new decision maker is a different teammate who provides no evidence of agreement.
+Request: Compare the methods as incompatible values for the same target and determine the appropriate alert.
+How should I respond?"
+C-017-1,"Situation: The current approved decision is to use a paper questionnaire. A different team member submits “Switch the questionnaire to an online form,” but there is no indication of team agreement or authorization from the original decision-maker.
+Request: Determine whether the incompatible decision should be treated as a change or conflict.
+How should I respond?"
+C-018,"Situation: A team’s current valid decision is “The interview guide will contain 12 questions.” (Mina Park, 2026-11-12 10:00; topic_key: Interview guide). A newly approved statement says, “The guide will contain 15 questions.” (Joon Lee, 2026-11-14 10:00; topic_key: Interview length); no agreement to revise the number is recorded.
+Request: Compare the two numeric values for the same target and return the judgment and alert outcome.
+How should I respond?"
+C-019,"Situation: The team’s current decision is “Use a mixed-methods approach.” A new candidate says, “A recent study found that mixed-methods projects take 20% longer.” The statement reports research but does not propose or confirm a team decision.
+Request: Classify the candidate and determine whether it should be compared with the existing decision.
+How should I respond?"
+C-020,"Situation: A team first approved “Use anonymous feedback forms,” then later superseded it with “Collect named feedback with consent.” A delayed integration replays the original anonymous-form decision as if it were new.
+Request: Check the candidate against valid current decisions and avoid treating a superseded record as the current baseline.
+How should I respond?"
+C-021,"Situation: A teammate shares, “The survey shows 62% of respondents prefer text alerts.” The existing team decision is to use email alerts, but the new sentence reports a finding and does not say the team changed its choice.
+Request: Classify the new statement as research or a decision and avoid inferring a change without an approved outcome.
+How should I respond?"
+C-022,"Situation: A teammate’s AI conversation says, “We could use a web survey,” followed several messages later by, “The team approved the web survey after comparing the alternatives.” Only the first message was imported as a candidate.
+Request: Check whether the supplied candidate contains a confirmed decision; if necessary, request the surrounding context before comparison.
+How should I respond?"
+C-023,"Situation: The team’s approved decision says the survey will target first-year students. A new approved decision says it will target international first-year students, with no indication that other first-year students are excluded.
+Request: Check whether the narrower description preserves the original target scope or changes it.
+How should I respond?"
+C-024,"Situation: The team’s current decision says the survey will target first-year students. A new approved decision says it will target international students across all years, and the overlap with the original population is unclear.
+Request: Assess the target and scope carefully, and use a confidence below 0.6 with a review outcome if the relationship cannot be resolved.
+How should I respond?"
+C-025,"Situation: A candidate about the project says, “We chose the community garden as the case study. My home address is 18 Willow Lane, and please mail me the consent forms there.”
+Request: Mask the address even though it appears in a relevant project sentence, and compare only the approved case-study decision.
+How should I respond?"
+C-026,"Situation: A project conversation contains the statements “I will draft the methods section by Thursday” and “Let’s use interviews rather than a questionnaire.” The first is an assigned task, while the second is a confirmed decision.
+Request: Separate and classify both items, keep the task out of decision comparison, and compare the research-method decision.
+How should I respond?"
+C-027,"Situation: A new approved decision says that the project will use no more than three data sources. The existing decision says to use three data sources, so the values may be equivalent despite different wording.
+Request: Compare the final values and scope carefully, then determine whether this is the same decision or an incompatible change.
+How should I respond?"
+C-028,"Situation: A comparison request contains two newly approved statements from the same person about the same target, but their approval timestamps are identical and the export does not identify which one came later. One says to use a paper form and the other says to use an online form.
+Request: Do not assume a revision order from the conflicting records; assess the ambiguity and leave the case for human review if confidence is below 0.6.
+How should I respond?"
+C-029,"Situation: The team previously agreed not to collect precise location data. The same decision-maker later approves collecting precise location data after the team changes its privacy design.
+Request: Determine whether the new negating decision is a change or a conflict.
+How should I respond?"
+C-030,"Situation: A new candidate says, “We’ll use the short survey,” but the team name, project topic, enabled subtopics, owner, and approval status are absent from the submission. Several teams use the same survey wording for different projects.
+Request: Identify the missing classification and comparison context and route the candidate for clarification rather than assuming a match.
+How should I respond?"
+C-031,"Situation: A team decided to conduct interviews with first-year students. A new decision assigns a separate survey to graduate students; neither decision excludes the other group or method.
+Request: Assess whether the scopes can coexist and return the appropriate judgment without generating an unnecessary alert.
+How should I respond?"
+C-032,"Situation: A teammate submits one approved sentence that confirms both a new analysis method and a new presentation date. The project already has decisions for both targets, and the two changes have different owners.
+Request: Separate the compound statement into individual decisions, compare each against its current target decision, and return an outcome for each.
+How should I respond?"
+C-033,"Situation: An approved statement says the team will use a particular interview method. A second clause in the same statement says interviews will be conducted only with participants who provide consent; the consent requirement does not remove the method.
+Request: Compare the method decision and its added qualification with the existing decision, and determine whether the qualification narrows or replaces the existing scope.
+How should I respond?"
+C-034,"Situation: Two records in a design project share the topic_key ""branding."" The existing decision is ""The team name is CedarLab"" (Nina Shah, 2026-11-06 11:30), while the new decision is ""The CedarLab logo will use a circular mark"" (Owen Reed, 2026-11-08 14:10).
+Request: Compare the actual decision targets rather than relying on the shared topic key, and report the judgment.
+How should I respond?"
+C-034-1,"Situation: A team’s existing decisions include “Our group name is Northstar.” (Iris Wong, 2026-11-09 10:00; topic_key: Team name) and a new approved statement, “Use navy for the Northstar logo.” (Ben Carter, 2026-11-14 12:00; topic_key: Brand colors).
+Request: Determine whether the shared word “Northstar” makes these decisions comparable or whether they concern different targets.
+How should I respond?"
+C-034-2,"Situation: A team’s current decision is “The service name is Northstar.” (Avery Kim, 2026-11-08 10:00), stored under the topic key “Branding.” A new decision says “The Northstar logo will use teal.” (Jordan Lee, 2026-11-09 10:00), also stored under “Branding.”
+Request: Check whether the shared topic key means these decisions should be compared, and return the judgment and alert outcome.
+How should I respond?"
+C-034-3,"Situation: A project decision says “The team name will be Harbor.” A teammate’s approved design decision says “The harbor illustration will appear on the landing page.” The repeated word is coincidental and the illustration is not the team identity.
+Request: Check whether the targets are distinct despite the similar wording and report whether the pair is unrelated.
+How should I respond?"
+C-034-4,"Situation: The team approved a service name, “Northstar.” A new approved decision says the logo for the Northstar service will use a circular mark. The name and logo share a word, but they are separate targets.
+Request: Check whether the decisions concern the same target and avoid an alert if both can be true.
+How should I respond?"
+C-034-5,"Situation: The existing topic key “Visual identity” contains the approved decision that the team name is “North Star.” A new decision under the same key says the North Star logo will use a circular icon; both can be true.
+Request: Check whether the matching topic key is enough to treat these as conflicting decisions.
+How should I respond?"
+C-035,"Situation: An existing approved decision says, ""If the prototype is stable by Friday, include offline mode"" (Mina Das, 2026-11-08 12:00). A later candidate says, ""Keep the prototype online-only"" (Eli Brooks, 2026-11-10 15:00), but does not say whether the Friday condition was met.
+Request: Compare the conditional and unconditional decisions, lowering confidence and requesting human review if their relationship cannot be determined.
+How should I respond?"
+C-035-1,"Situation: A contest team decided that the demo would support a basic export feature if time permitted (Nora Bell, 2026-11-10 09:00). The next approved decision says the demo must support export, but gives no information about whether the time condition was satisfied or whether the team intended to override it.
+Request: Evaluate the conditional decision pair and return a cautious confidence score with the review outcome when warranted.
+How should I respond?"
+C-036,"Situation: The team has decided to use PostgreSQL. A teammate asks an AI, “Using PostgreSQL, draft the database tables,” and the request is submitted as a candidate statement.
+Request: Check whether the decision stated as a premise should be treated as a new decision or as a repeated existing decision.
+How should I respond?"
+C-036-1,"Situation: A valid team decision says, “We will use PostgreSQL for the project database.” (Priya Shah, 2026-11-13 13:30; topic_key: Database). A teammate’s approved request says, “Please design the schema assuming PostgreSQL.” (Ethan Wu, 2026-11-14 10:15; topic_key: Data design).
+Request: Assess whether the request repeats the database decision as a premise or changes it, and report the appropriate judgment and alert.
+How should I respond?"
+C-037,"Situation: The team has chosen “Oriole” as its team name. A new approved decision says the Oriole logo will use a dark green background; no logo colors have previously been decided.
+Request: Determine whether the shared word makes these decisions a conflict or whether they concern different targets.
+How should I respond?"
+C-038,"Situation: An existing decision says the dashboard will show monthly totals. A new decision says the dashboard will show monthly totals only for the pilot campus, but it is unclear whether the pilot-campus restriction narrows the old decision or describes a separate dashboard view.
+Request: Return a confidence score reflecting the ambiguity and leave the case for human review if confidence is below 0.6.
+How should I respond?"
+C-039,"Situation: A team decided that it would add a recommendation feature if development time remains. A later approved statement says recommendations will be included, without clarifying whether the time condition still applies.
+Request: Judge the relationship cautiously and mark the result as requiring review if the condition makes the comparison ambiguous.
+How should I respond?"
+C-039-1,"Situation: A team agreed to offer free delivery when the project budget permits it. A newly submitted approved statement says delivery will always be free, but it is unclear whether the budget condition still applies.
+Request: Compare the conditional and unconditional decisions, lowering confidence and requesting human review if their relationship is ambiguous.
+How should I respond?"
+C-040,"Situation: The existing approved decision includes a login screen in the prototype. A different teammate now says the login screen must be removed, without reporting agreement from the team.
+Request: Judge the incompatible decision and determine whether a red conflict alert is appropriate.
+How should I respond?"
+C-040-1,"Situation: A design team approved, “The home screen will include a search bar.” (Olivia Reed, 2026-11-10 13:00; topic_key: Home screen). A different teammate later approved, “Do not include a search bar on the home screen.” (Kai Tanaka, 2026-11-14 09:45; topic_key: Search feature); no group agreement is mentioned.
+Request: Evaluate the negation against the existing decision and return the judgment, confidence, and alert outcome.
+How should I respond?"
+C-040-2,"Situation: The team previously agreed to include a map feature in the first release. A different member now submits, “Do not include the map feature,” as an approved decision, with no evidence that the team agreed to the reversal.
+Request: Assess whether the new negative decision is compatible with the existing one and apply the correct outcome.
+How should I respond?"
+C-041,"Situation: The existing decision says the poster will use a two-column layout. A new decision says the poster’s references section will use one column; the references occupy a designated section and do not replace the overall layout.
+Request: Determine whether this is compatible added specificity or an incompatible change to the same layout.
+How should I respond?"
+C-042,"Situation: The existing decision says a chart will show total monthly applications. A new decision says it will show monthly approved applications; it is unclear whether this is a second chart or a replacement that excludes rejected applications.
+Request: Assess the overlapping scope and avoid asserting a change or conflict with high confidence until the target is clarified.
+How should I respond?"
+C-042-1,"Situation: The current decision is to use a bar chart for the survey results. A new decision says to use a line chart for the results over time, a subset of the survey results, but does not say whether the bar chart is being replaced.
+Request: Determine whether the visualizations concern overlapping or distinct scopes, and mark the result for review if that relationship is too ambiguous to judge confidently.
+How should I respond?"
+C-043,"Situation: The team’s current valid decision is “We will use a local server if the venue’s Wi-Fi is unreliable.” (Mina Park, 2026-11-13 09:00; topic_key: Deployment). A new decision says, “The demo will run only on the venue Wi-Fi.” (Joon Lee, 2026-11-14 14:00; topic_key: Demo setup); the venue’s Wi-Fi status is not known.
+Request: Assess the potentially conditional relationship and return a low-confidence review result if the available information does not resolve it.
+How should I respond?"
+C-044,"Situation: A team’s existing decision is “The workshop will start with a short quiz.” (Chen Wei, 2026-11-11 10:00; topic_key: Workshop opening). A newly captured statement says, “Should we start the workshop with a short quiz?” (Chen Wei, 2026-11-14 10:00; topic_key: Workshop opening); the speaker is asking for opinions, and no approval follows.
+Request: Classify the new statement before comparison and avoid treating an unconfirmed question as a team decision.
+How should I respond?"
+C-045,"Situation: A team’s current decision is “The infographic will use three sections.” (Ava Johnson, 2026-11-12 14:00; topic_key: Infographic structure). A newly approved sentence says, “We will use four sections for the infographic, and I will prepare the source list by Monday.” (Ava Johnson, 2026-11-14 14:00; topic_key: Infographic work).
+Request: Split the compound statement into individual items, classify each item, and compare only the decision with the existing valid decision.
+How should I respond?"
+C-046,"Situation: A new approved sentence says, “We will name the prototype Echo, and I will prepare the test script by Wednesday.” (Harper Chen, 2026-11-14 12:00; topic_key: Naming and testing). The existing decision is “The prototype will be called Beacon.” (Sam Rivera, 2026-11-12 12:00; topic_key: Product name).
+Request: Split the sentence into a naming decision and a work task, compare only the naming decision with the existing product-name decision, and preserve task details separately.
+How should I respond?"
+C-046-1,"Situation: A teammate submits one approved sentence: “Let’s use the name RiverLab, and I’ll finish the data-cleaning script by Friday.” The team already has an approved service name but no decision about the script deadline.
+Request: Split the compound statement into separate items, compare the name decision, and identify the script commitment as a task rather than a decision.
+How should I respond?"
+C-047,"Situation: A team agreed to use a blue-and-white visual theme. A later decision made by the same member changes the theme to green-and-white. Another member then submits an approved decision to use a black-and-gold theme without evidence of a team agreement.
+Request: Compare the latest decision with the current theme, not the original one, and report the judgment and notification.
+How should I respond?"
+C-047-1,"Situation: The team’s current decision chain is: the initial choice was a printed poster, which was later changed to a digital poster by one member. A third member now submits an approved decision to print the poster, without team agreement.
+Request: Compare the new decision with the current digital-poster decision, not the superseded initial decision, and report the correct outcome.
+How should I respond?"
+C-048,"Situation: Two valid existing decisions appear to govern the same target: one says the report should use a chronological structure, while another later record says it should use thematic sections. The system has no indication that either record superseded the other. A new decision adds a third structure.
+Request: Check which existing decisions are current and valid before comparison, and avoid selecting a comparison target arbitrarily.
+How should I respond?"
+C-048-1,"Situation: The existing-decision store contains two valid-looking decisions for the same target with incompatible values, and neither is marked superseded. A newly approved statement sets a third value.
+Request: Flag the inconsistent comparison history for human review rather than silently choosing one baseline, and provide an appropriately low confidence score.
+How should I respond?"
+C-049,"Situation: A teammate submits the approved compound statement, “We’ll call the tool Cedar, and I’ll draft the onboarding copy by Tuesday.” The current decision list contains no service-name decision. The speaker is known, and Tuesday’s calendar date is available.
+Request: Split the statement into items, classify the decision and task separately, and send only eligible decisions to comparison.
+How should I respond?"
+C-050,"Situation: The existing decision includes an optional translation feature in the release. A different teammate submits, “Do not include translation in the release,” with no team agreement.
+Request: Compare the incompatible inclusion and exclusion decisions and return the appropriate alert outcome.
+How should I respond?"
+C-051,"Situation: A proposal to use a printed poster was superseded by an approved decision to use an interactive kiosk. A new decision-maker now approves a digital projection instead, and the original poster decision remains visible in the history.
+Request: Use the current kiosk decision as the comparison baseline and disregard the superseded poster decision for judgment.
+How should I respond?"
+C-052,"Situation: A teammate posts, “The team agreed to use PostgreSQL.” A second member’s approved statement says, “Build the tables for PostgreSQL,” using the existing choice as an instruction rather than proposing a new database.
+Request: Treat the database choice in the request as a premise and avoid a duplicate-decision alert.
+How should I respond?"
+C-053,"Situation: A current approved decision says the dashboard will show monthly results. A new approved decision says the dashboard will show weekly results as well as monthly results, and does not remove the monthly view.
+Request: Check whether the new cadence preserves the existing value and whether any notification is appropriate.
+How should I respond?"
+C-054,"Situation: A source record lists the new decision’s owner as “the group,” while its sentence says, “I changed the evaluation method to peer review.” The existing decision was made by one named person, and no agreement is documented.
+Request: Assess whether the source establishes a team agreement or leaves authorship and authority ambiguous; lower confidence and request human review if necessary.
+How should I respond?"
+C-055,"Situation: A member’s AI conversation says, “The project is called Harbor Watch. I prefer working with Claude, and the team agreed the results chart will be a bar chart.” The model preference is personal and unrelated to the project decision.
+Request: Separate personal preference from the approved project decision and compare only the bar-chart decision.
+How should I respond?"
+C-056,"Situation: A team’s decision specifies that its website will support English. A new approved statement specifies that the website’s help page will also support Spanish, without saying that English support is being removed.
+Request: Determine whether the added language support is compatible specificity or scope expansion and avoid a false conflict if both languages remain supported.
+How should I respond?"
+C-057,"Situation: A new decision appears to be a change from an existing decision, but the owner field is blank and the original sentence only says, “We should switch to a one-page summary.” No team agreement is recorded.
+Request: Compare the target and values, but do not guess who made or approved the change; lower confidence and request human review where required.
+How should I respond?"
+C-058,"Situation: An approved decision says the prototype will use a blue header. Another approved decision says the landing page will use a green header. Both are stored under the broad topic key “Colors,” but they concern different screens.
+Request: Determine whether the decisions concern distinct targets that can coexist and avoid an unnecessary alert.
+How should I respond?"
+C-059,"Situation: An approved conditional decision says that the team will add a second language if time permits. A later approved decision says the product will support only English, without explaining whether the condition was assessed or withdrawn.
+Request: Apply the conditional-decision rule, provide a confidence score, and leave the result for review if the relationship is ambiguous.
+How should I respond?"
+C-060,"Situation: The current decision states that the prototype will support offline access for “field testing.” A newly approved statement says it will not support offline access during the pilot, but it is unclear whether the pilot is the same field-testing phase.
+Request: Assess the ambiguous overlap between the targets, assign a suitably cautious confidence score, and leave the result for human review if confidence is below 0.6.
+How should I respond?"
+C-061,"Situation: A team lead decided that the rehearsal would be on December 3 (Robin Kim, 2026-11-04 16:00). The same lead later approves moving the rehearsal to December 5 (Robin Kim, 2026-11-07 09:30).
+Request: Determine whether the date difference is a change by the same decision-maker and apply the corresponding alert.
+How should I respond?"
+C-061-1,"Situation: A member first decided that the team’s internal review would happen on Monday. The same member later submits an approved decision moving the review to Tuesday because of a room booking.
+Request: Determine whether this is a change or a conflict and identify the appropriate alert.
+How should I respond?"
+C-062,"Situation: A project team assigned Jordan as its coordinator (Ari Patel, 2026-11-07 10:30). A different member approves ""Taylor is coordinator now"" without mentioning a team vote or agreement.
+Request: Compare the role assignments and determine whether this is an incompatible reassignment requiring a conflict alert.
+How should I respond?"
+C-063,"Situation: The team's enabled subtopics are project goals, research, work products, scheduling, external requirements, and presentation. A relevant approved decision assigns a member to maintain the team's shared glossary, which does not clearly fit any listed subtopic.
+Request: Classify the statement using the available context, select an appropriate subtopic such as other team-related content if needed, and compare the decision without treating the unfamiliar category as unrelated.
+How should I respond?"
+C-064,"Situation: The team previously assigned the presentation's opening section to Hana and its closing section to Felix. A new approved decision assigns Hana to deliver the closing section, without saying whether Felix's assignment has been removed.
+Request: Check whether this is a reassignment of the same role or an additional assignment, and use human review if the records do not establish the intended change.
+How should I respond?"
+C-065,"Situation: A competition notice sets the final submission deadline as October 12. The team approves an internal editing deadline of October 10, and no one is proposing a different external submission date.
+Request: Compare the scopes and avoid raising an alert if the internal and external deadlines can both hold.
+How should I respond?"
+C-065-1,"Situation: The team’s approved internal deadline for draft review is April 5. A new statement says the instructor’s final submission deadline is April 12. The dates belong to different milestones.
+Request: Compare the target and scope of each date and determine whether both deadlines can hold.
+How should I respond?"
+C-066,"Situation: A teammate says, “I might be able to take the lead on the poster, maybe.” No one has confirmed the assignment, while the existing decision assigns the poster lead to another person.
+Request: Check whether the tentative statement is a confirmed role decision or should be excluded from comparison.
+How should I respond?"
+C-067,"Situation: The same teammate who assigned Elena as presentation lead now approves handing the role to Ravi. The assignment concerns the same presentation and has not already been superseded by another decision.
+Request: Determine whether the role reassignment is a change and whether the system should show a blue alert.
+How should I respond?"
+C-068,"Situation: A competition team’s current role assignment is “Mira will be the team’s safety lead.” (Mira Desai, 2026-11-12 15:00; topic_key: Safety role). A different member approves, “Assign Theo as safety lead instead.” (Theo Nguyen, 2026-11-14 11:30; topic_key: Safety responsibilities); there is no evidence of team agreement.
+Request: Compare the role assignments and decide whether to flag a conflict or treat the new statement as a change.
+How should I respond?"
+C-068-1,"Situation: The existing decision assigns one teammate as team lead. A different teammate submits an approved statement assigning themselves to lead instead, with no evidence of team agreement or an authorized handoff.
+Request: Treat the statements as competing assignments to the same position and return the judgment, confidence, and alert outcome.
+How should I respond?"
+C-069,"Situation: The current valid decision is “The project meeting will move to Thursday at 17:00.” (Rosa Martínez, 2026-11-12 12:00; topic_key: Meeting schedule). A newly approved compound statement says, “We agreed to keep the Thursday meeting at 17:00, and I have a medical appointment for follow-up care.” (Rosa Martínez, 2026-11-14 12:00; topic_key: Team operations).
+Request: Separate the team decision from the personal material, mask sensitive information, and compare only the relevant decision.
+How should I respond?"
+C-070,"Situation: A project team’s current decision is “The first test session is on May 7.” (Lena Fischer, 2026-11-12 08:00; topic_key: Test date). A different member approves, “Move the first test session to May 9.” (Diego Ruiz, 2026-11-14 08:00; topic_key: Trial schedule); no team agreement is recorded.
+Request: Assess the date change against the existing decision and return the judgment, confidence, and required alert.
+How should I respond?"
+C-070-1,"Situation: The team previously decided to submit its proposal on 18 May. A different member submits an approved decision to submit on 20 May, and no team agreement to move the date is recorded.
+Request: Treat the date difference according to the decision rules and report the judgment, confidence, and notification outcome.
+How should I respond?"
+C-071,"Situation: The current valid decision is “The team lead is responsible for approving purchases.” (Maya Patel, 2026-11-12 08:00; topic_key: Purchase approval). A new approved statement says, “The finance coordinator will approve purchases under $100, while the team lead retains approval for larger purchases.” (Noah Brooks, 2026-11-14 08:00; topic_key: Spending workflow); the team has not recorded whether this was agreed.
+Request: Determine whether the new statement adds a non-overlapping responsibility or reassigns part of the existing role, and use a review result if the scope or approval is ambiguous.
+How should I respond?"
+C-072,"Situation: A team previously assigned a member to be the meeting facilitator. A second member submits an approved decision assigning that person to be the note-taker instead. The records do not establish whether one person can hold both positions or whether the facilitator assignment was replaced.
+Request: Assess whether the role targets overlap enough to decide confidently or whether the case should be marked for human review.
+How should I respond?"
+C-072-1,"Situation: A team decision assigns Morgan as the submission contact. A different teammate submits a new approved statement assigning Taylor as submission contact, but the scope does not say whether Taylor is replacing Morgan or is an additional backup.
+Request: Assess whether the reassignment is clearly conflicting or ambiguous enough to require human review.
+How should I respond?"
+C-073,"Situation: A teammate says, “I cannot attend Wednesday’s meeting because of a medical appointment.” The message also mentions that the meeting might move, but no team agreement to change the meeting time is stated.
+Request: Avoid sharing the personal health information and determine whether there is any confirmed team decision to compare.
+How should I respond?"
+C-074,"Situation: A candidate says, “Since I have a visa appointment, I’ll send my section later.” It refers to a personal immigration matter and a possible delivery time, but does not clearly establish a team-approved change to the project schedule.
+Request: Protect the sensitive personal information and assess whether the remaining statement qualifies as a team decision or task.
+How should I respond?"
+C-075,"Situation: A team has an approved decision, “Mira will give the final presentation.” A candidate says, “Mira will build the slide deck.” The two statements are filed under the same broad presentation topic.
+Request: Determine whether these statements concern the same target and whether a conflict alert is appropriate.
+How should I respond?"
+C-075-1,"Situation: The team’s presentation decision assigns the opening section to Noor. A new decision assigns the closing section to another member, and does not reassign the opening section.
+Request: Check whether these are assignments for different presentation segments and suppress an alert if both assignments can stand.
+How should I respond?"
+C-076,"Situation: The existing decision assigns the budget review to “Alex Kim.” A new decision assigns it to “A. Kim,” but the workspace has two members whose names could match that abbreviation.
+Request: Assess whether the owner identity is sufficiently clear to determine whether the new assignment is a change or a conflict.
+How should I respond?"
+C-077,"Situation: A team recorded “The pilot will launch in March” and later recorded “The pilot will launch in April.” A new member then submits “The pilot will launch in May,” but the system cannot determine whether the April record superseded March or whether both remain active.
+Request: Resolve the comparison baseline if possible; otherwise assign a low-confidence review outcome rather than comparing against an obsolete decision.
+How should I respond?"
+C-078,"Situation: The current decision says, “If the pilot has at least 100 sign-ups, launch in May.” A new approved decision says, “Launch in May.” The new statement does not clarify whether the sign-up condition still applies.
+Request: Compare the conditional and unconditional statements, using a low confidence score and review status if necessary.
+How should I respond?"
+C-079,"Situation: The team decided that Lila will be the presentation speaker. A different teammate submits, “I’ll present instead,” without mentioning approval from the team or Lila.
+Request: Compare the role assignments and determine whether the new speaker assignment is a conflict.
+How should I respond?"
+C-079-1,"Situation: The team assigned Lina as presentation speaker. A different member later submits, “I’ll take over the presentation,” as an approved decision, but no team agreement is recorded.
+Request: Compare the role assignments and determine whether the different person’s reassignment should be treated as a conflict.
+How should I respond?"
+C-080,"Situation: The team decided that Omar will moderate the panel. Omar later approves, “I’m handing the moderator role to Priya,” and no one else has changed that assignment.
+Request: Determine whether the same person’s role reassignment is a change and whether a blue alert should be shown.
+How should I respond?"
+C-081,"Situation: One conversation includes “The proposal is due on Monday” and “The visual summary is due on Tuesday.” Both are approved, but the records were mistakenly given the same topic key, “deadline.”
+Request: Compare the actual targets and avoid raising an alert solely because the topic keys match.
+How should I respond?"
+C-082,"Situation: A team member’s existing approved decision sets the internal draft deadline to Monday. That same member later approves a revision setting it to Wednesday.
+Request: Compare the dates and determine whether this is a change by the same person, including the appropriate notification.
+How should I respond?"
+C-082-1,"Situation: The same owner who set a team’s internal draft deadline to October 7 later approves October 9 after discovering that a required dataset will arrive late.
+Request: Determine whether the differing date is a change and whether a blue notification should appear.
+How should I respond?"
+C-083,"Situation: A new approved decision changes a team role from “research lead” to “analysis lead,” but the team’s role list shows that the two positions have different responsibilities and can be held by separate people.
+Request: Determine whether the new assignment replaces the existing role or concerns a distinct role, and avoid treating similar role labels as automatically conflicting.
+How should I respond?"
+C-084,"Situation: A team approved Omar as facilitator. A different member later submits, “I’ll facilitate instead,” as an approved decision, with no meeting agreement recorded.
+Request: Compare the role assignments and determine whether the different member’s reassignment creates a conflict.
+How should I respond?"
+C-085,"Situation: An approved decision assigns one member to present the project. A later approved decision assigns another member to create the slide deck; neither statement changes the other person’s responsibility.
+Request: Determine whether these are different role and work-product targets that can coexist.
+How should I respond?"
+C-086,"Situation: A professor's feedback says the project must cite at least eight sources. The team later approves using six sources in the final report, while a separate research note says the team has currently reviewed six sources but has not decided how many to cite.
+Request: Classify the research note as information rather than a decision, and compare the approved six-source decision with the external requirement.
+How should I respond?"
+C-087,"Situation: A competition organizer requires a demo to run offline. The team approves a demo plan that requires a live internet connection for its core feature.
+Request: Check whether the team decision violates the external condition for the same demo target.
+How should I respond?"
+C-088,"Situation: A contest organizer’s notice says, “The live demonstration must be completed within 6 minutes.” (Organizer notice, 2026-11-12 10:00; topic_key: Demo duration). The team approves, “We will allocate 2 minutes to setup and 3 minutes to the live demonstration.” (Ben Carter, 2026-11-14 10:00; topic_key: Presentation schedule).
+Request: Check whether the team’s timing violates the external condition or can coexist with it, and return the appropriate judgment.
+How should I respond?"
+C-089,"Situation: A competition organizer has required entries to be submitted as a PDF. A team member submits an approved decision to submit the final entry as a slide deck file instead; the team has not recorded any permission to use a different format.
+Request: Assess the team’s planned submission against the external requirement and report the judgment and alert.
+How should I respond?"
+C-089-1,"Situation: The event organizer has specified that each team may submit one video of no more than four minutes. The team then approves a six-minute submission for that same entry, and the external limit is recorded as a decision.
+Request: Compare the team decision with the external condition for the same target and identify the appropriate alert.
+How should I respond?"
+C-090,"Situation: An instructor requires citations in APA style. The team approves a decision to format the report’s citations in Chicago style, with no indication that the instructor has waived the requirement.
+Request: Identify whether these are decisions about the same target and report the conflict outcome if applicable.
+How should I respond?"
+C-090-1,"Situation: A course instructor’s published requirement says “The submitted report must be no longer than 8 pages.” The team has recorded that as an external-condition decision. A team member later submits “We have decided to submit a 10-page report.” without stating that the instructor changed the requirement.
+Request: Compare the team decision with the external condition for the same report and identify the appropriate judgment.
+How should I respond?"
+C-090-2,"Situation: A course team recorded an external instructor requirement that the report must be no more than eight pages. A team member later submits an approved team decision to write a 10-page report.
+Request: Compare the team decision with the external condition as decisions about the same report-length target and report the judgment and alert.
+How should I respond?"
+C-091,"Situation: A team has an enabled subtopic list that excludes “External partnerships.” A new approved statement says, “We will partner with the city library for the pilot.” The existing decisions include a library partnership decision under an older topic key.
+Request: Use the supplied classification context to classify the statement and compare it with the existing decision despite the subtopic-list discrepancy.
+How should I respond?"
+C-092,"Situation: The organizer’s published deadline is November 8. A team member submits an approved decision saying the team will submit on November 10, although no extension is mentioned.
+Request: Assess the date difference in light of the external deadline and report the judgment.
+How should I respond?"
+C-093,"Situation: A teammate writes, “The evaluation will use a rubric; I’ll compare three existing rubrics; and the instructor says the final report must be submitted as a PDF.” These clauses contain a possible decision, a research activity, and an external requirement.
+Request: Separate and classify each clause in the prescribed order, then compare only any confirmed team decision.
+How should I respond?"
+C-094,"Situation: The instructor’s feedback states that the written report must use APA citations. A team member submits an approved decision to use numbered citations in that same written report, and no revised instructor guidance is available.
+Request: Treat the external requirement as a decision about the same target and assess the incompatible team choice.
+How should I respond?"
+C-095,"Situation: A presentation team decided on a 12-minute presentation (Iris Wu, 2026-11-07 17:20). A later approved decision says, ""Use 12 minutes total, including a four-minute live demonstration"" (Leo Park, 2026-11-09 10:10).
+Request: Determine whether the added detail removes or changes the original scope, and apply the appropriate alert behavior.
+How should I respond?"
+C-095-1,"Situation: A team agreed that its final presentation will last 12 minutes. A later approved statement says the 12-minute presentation will include a four-minute demonstration. The added detail does not change the total duration.
+Request: Determine whether the later statement is a compatible refinement or a conflicting decision, and state the notification outcome.
+How should I respond?"
+C-095-2,"Situation: A competition team approved a 12-minute presentation. A later approved decision specifies that 4 of those 12 minutes will be used for the live demonstration; it does not change the total presentation length.
+Request: Compare the two presentation decisions and say whether the added detail warrants an alert.
+How should I respond?"
+C-095-3,"Situation: An approved decision sets the presentation length at 12 minutes. A later approved statement says that the 12-minute presentation will include a 3-minute demonstration; the original total duration remains in force.
+Request: Check whether the added detail changes the existing scope or simply makes it more specific, and return the judgment and alert outcome.
+How should I respond?"
+C-096,"Situation: A project team decided to submit its prototype as a web app. A new approved decision says to submit the same prototype as a native mobile app, but uses a different topic key and does not say that the web app is still included.
+Request: Determine whether the submission target is the same and whether the two delivery formats are incompatible, despite the different topic keys.
+How should I respond?"
+C-097,"Situation: A candidate message says, “Send the approved presentation slides to 555-010-4821; the presentation format remains the one the team chose.” The phone number appears inside a project-related sentence.
+Request: Preserve and compare only the relevant decision content, masking the phone number before processing or display.
+How should I respond?"
+C-097-1,"Situation: A candidate sentence says, “The team agreed to send the grant draft to my home address, 18 Cedar Lane.” The sentence appears project-related, but it includes a personal address.
+Request: Prepare the relevant decision for comparison while masking the sensitive address before it is stored or shown.
+How should I respond?"
+C-098,"Situation: A debate team’s existing decision is “Each speaker gets 4 minutes.” (Nadia Ali, 2026-11-12 17:00; topic_key: Speaking time). The new approved decision says, “Each 4-minute speaking slot will include up to 45 seconds for rebuttal.” (Nadia Ali, 2026-11-14 08:45; topic_key: Rebuttal format).
+Request: Check whether the added detail removes or preserves the original speaking-time decision, and return the judgment, confidence, and notification outcome.
+How should I respond?"
+C-098-1,"Situation: A team has decided to give a 12-minute presentation. A newly approved decision specifies that three of those 12 minutes will be used for a live demonstration, without changing the total presentation length.
+Request: Assess whether the more specific new statement preserves the existing decision and provide the resulting judgment.
+How should I respond?"
+C-099,"Situation: The team’s existing valid decisions list contains two unresolved entries for the same target: “The showcase will be on June 3.” (Ari Kim, 2026-11-10 10:00; topic_key: Showcase date) and “The showcase will be on June 5.” (Mira Desai, 2026-11-12 10:00; topic_key: Showcase date). A new approved statement says, “The showcase is scheduled for June 4.” (Jules Bennett, 2026-11-14 10:00; topic_key: Event schedule).
+Request: Identify that the existing records do not establish a single current valid decision, and return a low-confidence result for human review rather than silently selecting one.
+How should I respond?"
+C-100,"Situation: The existing valid decision is “The team will submit one combined report.” (Daniel Evans, 2026-11-12 13:00; topic_key: Submission package). A new approved statement says, “Each member will upload an individual reflection in addition to the combined report.” (Grace Park, 2026-11-14 13:00; topic_key: Individual reflections).
+Request: Determine whether the additional individual submission replaces the combined report or can coexist with it.
+How should I respond?"
+C-101,"Situation: The team approved, “If the venue confirms a projector, we will show the live dashboard.” A later approved statement says, “We will show the live dashboard,” but does not mention whether the venue confirmed the equipment.
+Request: Determine whether the conditional and unconditional statements can be reconciled, and use the required review outcome if their relationship is ambiguous.
+How should I respond?"
+C-102,"Situation: A team’s current report decision is “Submit a PDF only.” A different member submits “Submit both a PDF and an HTML version,” without stating that the PDF-only restriction was removed by team agreement.
+Request: Assess whether the new format adds compatible detail or conflicts with the existing “only” restriction.
+How should I respond?"
+C-103,"Situation: A decision log contains an old entry saying that the final demo will be in Room 204. The project lead says the room was never confirmed and that the entry was only a suggestion, but the system currently marks it as an existing valid decision.
+Request: Check whether the comparison should proceed as an approved decision and flag the unreliable decision status for staff review rather than silently treating it as authoritative.
+How should I respond?"
+C-104,"Situation: The same person initially decided to submit the proposal as a PDF, later changed it to a slide deck with team agreement, and now submits an approved decision to submit a web page instead. The decision history still contains all three entries.
+Request: Compare the latest decision with the current slide-deck decision, not the superseded PDF decision.
+How should I respond?"
+C-105,"Situation: The existing valid decision says the team will submit one joint application. A new approved decision says each member will submit an individual application, without a recorded agreement to change the submission arrangement.
+Request: Determine whether the arrangements are incompatible for the same submission target and apply the appropriate alert.
+How should I respond?"
+C-106,"Situation: A project member submits an approved decision to publish interview excerpts publicly. The sentence also contains the interviewee’s home address and a note about the interviewee’s immigration status.
+Request: Mask the address and identity-status information before processing, then assess only the permitted decision content against existing decisions.
+How should I respond?"
+C-107,"Situation: Two teammates submit approved decisions minutes apart: one says the team will present on June 12 and the other says June 13. The records do not identify whether the dates refer to different sessions, and the owners are aliases that may belong to the same person.
+Request: Assess the target and owner ambiguity, assign confidence accordingly, and leave the result for human review if confidence is below 0.6.
+How should I respond?"
+C-108,"Situation: An approved team decision says all workshop participants will receive printed handouts. A later decision says online attendees will receive downloadable handouts; it does not say whether printed handouts for in-person attendees are being discontinued.
+Request: Compare the decisions by participant scope and request human review if the overlap or replacement intent is unclear.
+How should I respond?"
+C-109,"Situation: A team has an existing approved decision that the final presentation will be delivered in person. A new statement says, “If the venue closes, we will present by video call,” and the venue’s status is still unknown.
+Request: Evaluate the conditional fallback against the current presentation decision and use a low-confidence review outcome if their relationship is ambiguous.
+How should I respond?"
+C-110,"Situation: A teammate submits an approved statement that the presentation will begin at 2:00 p.m. The existing approved decision says the poster session begins at 2:00 p.m.; both events are scheduled separately.
+Request: Check whether the shared time and presentation-related wording conceal distinct targets that can both remain valid.
+How should I respond?"
+C-111,"Situation: One teammate approved a submission deadline of Monday, while another teammate later approves Tuesday as the deadline. No team agreement or correction from the original owner is mentioned.
+Request: Compare the dates as decisions about the same target and report whether the result is a conflict, a change, or something else.
+How should I respond?"
+C-112,"Situation: The team’s existing decision says the budget is $2,400. The same owner submits a new approved decision setting it to $2,600 after recalculating costs; there is no evidence that anyone else made the revision.
+Request: Treat the numerical difference according to the decision owner and determine whether it is a change.
+How should I respond?"
+C-113,"Situation: The comparison service finds two current valid decisions with the same target and approval time but contradictory values. The new approved decision appears to match one and conflict with the other.
+Request: Do not choose an arbitrary baseline; identify the inconsistent existing record and leave the comparison for staff review.
+How should I respond?"
+C-114,"Situation: A teammate proposes an approved project change in an AI conversation, but the team’s approval status is unclear and the submitted record does not say whether the proposal was accepted.
+Request: Verify whether this is an approved team decision before comparing it with existing decisions; do not treat an unconfirmed proposal as a decision.
+How should I respond?"
+C-115,"Situation: A newly approved statement reverses a prior decision, but the recorded owner appears under a nickname not present in the team's member list. The content is clearly incompatible with the current value, and no team agreement is mentioned.
+Request: Assess whether the decision-maker identity can be matched reliably; use a confidence below 0.6 and request human confirmation if authorship determines whether the outcome is a change or conflict.
+How should I respond?"
+C-115-1,"Situation: A teammate submits a new decision with owner “Mina,” while the existing decision’s owner is “M. Park.” The records may refer to the same person, but the system has no confirmed identity mapping.
+Request: Avoid assuming whether the same-person change rule applies; assign low confidence and request human verification if needed.
+How should I respond?"
+C-116,"Situation: A decision record has a clear owner and content, but its approval date is missing. The team later submits a conflicting decision, and the history is needed to determine which one is current.
+Request: Identify the missing provenance needed for reliable chain comparison and request human or system clarification rather than infer chronology.
+How should I respond?"
+C-117,"Situation: Two approved records have the same normalized content and topic key, but one has no original sentence and the other has an original sentence that appears to describe a different scope. Their recorded approval times also conflict.
+Request: Identify the inconsistent comparison data and determine whether the result should be left for human review rather than inferred from normalized content alone.
+How should I respond?"
+C-118,"Situation: A new approved decision conflicts with an existing decision, but the submitted record has no owner and no approval timestamp. The system cannot determine who made the decision or when it became current.
+Request: Report the uncertainty and avoid assigning a confident change or conflict judgment without the missing attribution and date information.
+How should I respond?"
+C-119,"Situation: The only matching record is marked withdrawn after the team reversed it. A newly approved decision concerns the same target but is consistent with the withdrawn value, while no current valid decision is listed.
+Request: Check decision validity and avoid treating a withdrawn record as the current baseline; request review if the valid comparison target cannot be established.
+How should I respond?"
+C-120,"Situation: A staff member uploads candidate statements before the team name, project topic, enabled subtopics, or existing topic-key list has been loaded. One statement mentions a team name but the project connection is unclear.
+Request: Request or load the required team classification context before determining relevance, subtopic, or display tag.
+How should I respond?"
+C-120-1,"Situation: The team’s project topic and name have not yet been provided to the comparison agent. A candidate decision mentions the team name but describes a feature that may belong to a different project with a similar name.
+Request: Ask for or load the missing team name, project topic, enabled subtopics, and existing topic keys before classifying or comparing the candidate.
+How should I respond?"
+C-121,"Situation: A newly approved statement says, “We’ll go with the compact version,” but the record contains several possible targets: a compact report layout, a compact device prototype, and a compact presentation format. The owner and approval time are known, but the referent is not.
+Request: Avoid guessing which existing decision is being changed; assign low confidence and leave the case for human review if the target cannot be resolved.
+How should I respond?"
+C-122,"Situation: A candidate sentence says, “I think the new plan is better.” The surrounding AI conversation refers to both the revised research question and a different chart design, and no clear final value is quoted in the submission.
+Request: Determine whether the approved decision can be normalized and matched to a specific target, or whether clarification and review are needed.
+How should I respond?"
+C-123,"Situation: A candidate statement concerns a project subtopic that is disabled in the team’s classification settings. The statement appears to be a confirmed decision and may overlap with an existing decision under an enabled subtopic.
+Request: Load the team’s enabled-subtopic context, classify the candidate in the prescribed order, and identify whether it can be compared or requires human review.
+How should I respond?"
+C-124,"Situation: A comparison is ambiguous because two statements use a broad term, “launch,” for different possible milestones. The model’s confidence is 0.58, even though its provisional judgment would otherwise be a change.
+Request: Apply the confidence threshold, leave the outcome as requiring review, and do not show a blue change alert while confidence remains below 0.6.
+How should I respond?"
+C-125,"Situation: A member submits, ""Use the reimbursement account listed here for the team purchase,"" followed by full bank-account details. The team has an approved decision about which materials to buy, but no decision about payment-account handling.
+Request: Redact the account information and classify the payment instruction correctly without exposing or comparing the sensitive details.
+How should I respond?"

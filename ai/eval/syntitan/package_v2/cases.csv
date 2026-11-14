@@ -1,0 +1,782 @@
+﻿Case ID,Category,Title,Summary,Situation,Difference from routine inquiries,Related documents (file · section · passage)
+C-001,주제·목표·범위·방향,Hypothetical Alternative,First-year survey target retained; game idea appears only in an AI chat,"A team confirmed that its survey will target first-year students. A new sentence in a member's AI chat reads, ""Imagine we abandoned the survey and made a game instead."" No team decision followed.","The new wording is explicitly hypothetical, and no team decision followed; it is not presented as a newly approved change to compare with the existing decision.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 10 | 농담·가정 | 주제는 청년 주거로 확정 | 차라리 주제를 통째로 바꿔버릴까 ㅋㅋ | 알림 없음 (결정이 아님. 쌍으로 들어오면 무관) |”"
+C-002,주제·목표·범위·방향,Conditional Feature Decision,Friday stability condition on voice control remains unaddressed by later release statement,"A team previously approved, “If the prototype is stable by Friday, we will include the voice-control feature.” (Ravi Singh, 2026-11-12 16:00; topic_key: Feature scope). A new approved statement says, “The prototype will ship without voice control.” (Elena García, 2026-11-14 09:30; topic_key: Release scope). The statements do not say whether the stability condition was met.","The earlier decision is conditional on stability, whereas the new statement says voice control will not be included; whether the condition was met is unstated.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”"
+C-003,주제·목표·범위·방향,Scope Expansion,Arabic added alongside the already selected English and French languages,"The team’s current decision is “The prototype will support English and French.” (Isabel Martin, 2026-11-12 09:00; topic_key: Language support). A newly approved decision says, “Add Arabic as a supported language alongside English and French.” (Isabel Martin, 2026-11-14 09:00; topic_key: Localization).",The new decision expands the previously stated set of supported languages rather than replacing the existing languages or addressing an unrelated scope.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-004,주제·목표·범위·방향,Chart-Specific Scope,"All respondents remain in analysis, while one chart covers respondents under 25",A team has decided that the analysis will cover all survey respondents. A new approved decision limits a particular chart to respondents under 25. The broader analysis scope and the chart-specific scope may coexist.,"The new respondent restriction applies only to a particular chart, not to the broader analysis, and the two scopes may coexist.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”"
+C-005,주제·목표·범위·방향,Private Detail Combination,Confirmed project title combined with an unrelated private relationship detail in one sentence,"A staff member receives several statements from an AI conversation, including a confirmed project title, a personal complaint about a roommate, and a work assignment. One sentence combines the project title with a private relationship detail.","Rather than presenting work-related and unrelated personal content separately, one sentence combines a project title with a private relationship detail.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 1단계 관련성 | 개인 | 팀 프로젝트와 관련 없는 내용 (공유 안 함, 여기서 분류 끝) | 점심, 약속, 기분, 다른 수업, 병원 | 오늘 점심 김밥 먹었어. | ""수요일 병원 가서 회의 못 가"" → 개인. 회의 변경은 팀 합의 후 결정으로 기록 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”"
+C-006,주제·목표·범위·방향,Conflicting Decisions,Online and in-person workshop decisions entered seconds apart by different owners,"Two approved decisions about the same project target were entered within seconds: one says the workshop will be held online, and one says it will be held in person. They have different owners and no recorded team agreement. The approval timestamps may reflect simultaneous submissions.","The opposing decisions appear to have been approved and entered nearly simultaneously, rather than one being compared with an established existing team decision; there is also no recorded agreement to establish which decision, if either, is the team's prior position.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-007,주제·목표·범위·방향,Project Title Conflict,Green Streets and Living Blocks assigned as public titles under different topic keys,An approved decision assigns the project’s public-facing title as “Green Streets.” A new statement assigns the same project a public-facing title of “Living Blocks.” The two decisions have different topic keys because one was filed under branding and the other under project identity.,The decisions are filed under different topic keys even though they concern the same project's public-facing title.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-008,주제·목표·범위·방향,Private Detail Combination,Report scope and unrelated private relationship information appear in the same sentence,"A candidate message says the team’s report will discuss a member’s family circumstances, then includes private relationship details unrelated to the project decision. The report-scope decision and the personal details appear in the same sentence.","The report-scope decision is stated alongside private details unrelated to the project decision, rather than being presented on its own.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“관련성 → 소주제 → 표시 순서로 판단 (민감정보는 어느 단계든 가림)”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 1단계 관련성 | 개인 | 팀 프로젝트와 관련 없는 내용 (공유 안 함, 여기서 분류 끝) | 점심, 약속, 기분, 다른 수업, 병원 | 오늘 점심 김밥 먹었어. | ""수요일 병원 가서 회의 못 가"" → 개인. 회의 변경은 팀 합의 후 결정으로 기록 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”"
+C-009,주제·목표·범위·방향,Audience Reversal,Approved later decision restores high-school audience after switch to first-year university students,A project team changed its target audience from high-school students to first-year university students. A later approved decision by another member returns the target audience to high-school students without mentioning agreement.,"The later decision returns to the audience from before the intervening change, and it does not mention agreement.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”"
+C-010,조사 활동,Scope Ambiguity,Four-provider comparison stated without saying whether the original two-provider analysis remains,"A project team decided to include a comparison of two payment providers in its report (Lena Ortiz, 2026-11-06 14:00). A new decision says to compare four providers, without stating whether the original two-provider analysis is being replaced or retained.","Unlike the routine case where the later decision clearly supersedes the earlier scope, this case leaves unclear whether the original two-provider analysis is replaced or retained.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-011,조사 활동,Decision Conflict,"Remote interviews stated against the earlier in-person plan, with approver and team agreement unidentified","A team previously agreed to run interviews in person. A new approved statement says, ""We decided to conduct the interviews remotely,"" but the record does not identify who approved it or whether the team agreed; the two approaches are incompatible.","Unlike a clearly team-approved decision, the record does not establish who approved the new statement or whether the team agreed to it, leaving its status uncertain.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-012,조사 활동,Scope Ambiguity,A 45-day trial for the same participants without clarifying revision or second cohort,"A project has an existing decision to use a 30-day trial period for participants (Aiden Ross, 2026-11-02 12:00). Another member submits a decision for a 45-day trial period for the same participants, but the record does not say whether this is a revision or a second cohort.","The record leaves open whether the different duration revises the existing decision or applies to a second cohort, so it is unclear whether the decisions concern the same scope.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-013,조사 활동,Compatible Addition,Anonymized aggregate statistics added while individual survey responses remain unpublished,"An existing decision says not to publish individual survey responses. A new decision says to publish anonymized aggregate statistics, without proposing to publish individual responses.","The decisions concern different scopes of publication: the existing decision concerns individual responses, while the new one concerns anonymized aggregate statistics and does not propose publishing individual responses.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”"
+C-014,조사 활동,Hypothetical Proposal,A joking question proposes dropping user testing without evidence of an actual plan change,"A teammate writes, “What if we dropped the entire user-testing phase?” with a laughing emoji. The current approved plan includes user testing, and there is no evidence of agreement or a real change.",The statement is a hypothetical rather than evidence of an approved decision or actual change; the laughing emoji is incidental.,"classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 10 | 농담·가정 | 주제는 청년 주거로 확정 | 차라리 주제를 통째로 바꿔버릴까 ㅋㅋ | 알림 없음 (결정이 아님. 쌍으로 들어오면 무관) |”"
+C-015,조사 활동,Ambiguous Match,Undetailed survey statement matches existing short-online and long-in-person survey decisions,"Two valid existing decisions both match a new statement: one says the team will use a short online survey, and another says it will use a long in-person survey. The new statement merely says, “We will use a survey,” with no details.","Unlike a routine comparison with an existing decision, the new statement is broad enough to match two valid existing decisions that specify different formats, without indicating which one it refers to.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-016,조사 활동,Scope Ambiguity,"Verbal consent stated alongside an existing consent form, without clarifying replacement or addition","An existing decision says the team will include a consent form in the research packet. A new statement says consent will be obtained verbally, but the source does not clarify whether the written form is being replaced or whether both methods will be used.","Unlike a clearly stated update or contradiction, the new statement does not establish whether verbal consent replaces the written form or is used alongside it.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-017,조사 활동,Unconfirmed Revision,"Survey replaces interviews in a new approval from a different teammate, without agreement evidence","A newly approved statement says the team will replace the interview method with a survey. The existing interview decision has the same target, and the new decision maker is a different teammate who provides no evidence of agreement.","The new decision replaces the interview method with a survey, and it was made by a different teammate without evidence of agreement.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-018,조사 활동,Unconfirmed Revision,"Fifteen guide questions conflict with the existing twelve, across differently named topics, without revision agreement","A team’s current valid decision is “The interview guide will contain 12 questions.” (Mina Park, 2026-11-12 10:00; topic_key: Interview guide). A newly approved statement says, “The guide will contain 15 questions.” (Joon Lee, 2026-11-14 10:00; topic_key: Interview length); no agreement to revise the number is recorded.","The statements use different topic keys even though both describe the guide's question count, and no agreement to revise the existing number is recorded.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-019,조사 활동,Research Finding,A study's duration finding about mixed-methods projects without proposing a project decision,"The team’s current decision is “Use a mixed-methods approach.” A new candidate says, “A recent study found that mixed-methods projects take 20% longer.” The statement reports research but does not propose or confirm a team decision.","The routine comparison case is still a team decision, whereas this candidate is a research report rather than a proposed or confirmed team decision.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 조사 | 알게 된 사실, 조사 결과, 외부 조건 → 참고 자료 | ~래, ~에 따르면, 찾아보니, 교수님이 ~랬어 | 심사 기준에 AI 활용도가 있대. | 개인 취향(""난 ChatGPT가 더 편해"")은 개인. 소주제 '자료 조사'와 이름이 비슷하지만, 표시 '조사'는 사실·정보 전체(외부 조건 포함)를 뜻함. 출처는 문장에 드러난 것만 적음 |”
+
+classification.md · Sync up 분류 기준표 > 2. 회의록 대응표
+“| 조사 | 관련 → 소주제(주로 자료 조사, 과제 조건·피드백) → 표시 '조사' | 사실·자료·외부 조건 | ChatGPT 공유 프로젝트는 유료 플랜이 필요해. → 관련 / 자료 조사 / 조사 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”"
+C-020,조사 활동,Stale Decision,Earlier anonymous-form decision replayed after named feedback with consent superseded it,"A team first approved “Use anonymous feedback forms,” then later superseded it with “Collect named feedback with consent.” A delayed integration replays the original anonymous-form decision as if it were new.","The replay is not a duplicate of the current decision: it is a previously approved decision that was superseded, arriving later and being presented as new.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-021,조사 활동,Research Finding,A 62% preference for text alerts reported while email alerts remain the team decision,"A teammate shares, “The survey shows 62% of respondents prefer text alerts.” The existing team decision is to use email alerts, but the new sentence reports a finding and does not say the team changed its choice.","The shared statement reports a survey finding rather than a newly approved team choice, so it does not itself state a change to the existing decision.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 조사 | 알게 된 사실, 조사 결과, 외부 조건 → 참고 자료 | ~래, ~에 따르면, 찾아보니, 교수님이 ~랬어 | 심사 기준에 AI 활용도가 있대. | 개인 취향(""난 ChatGPT가 더 편해"")은 개인. 소주제 '자료 조사'와 이름이 비슷하지만, 표시 '조사'는 사실·정보 전체(외부 조건 포함)를 뜻함. 출처는 문장에 드러난 것만 적음 |”"
+C-022,조사 활동,Incomplete Context,Tentative web-survey suggestion imported without later messages reporting team approval,"A teammate’s AI conversation says, “We could use a web survey,” followed several messages later by, “The team approved the web survey after comparing the alternatives.” Only the first message was imported as a candidate.","The imported candidate is an earlier suggestion, even though a later message in the same conversation says the team approved the same option after comparing alternatives. The candidate therefore reflects an earlier point in the decision sequence than the later approval.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 수업 팀플 | 주제를 청년 주거로 하면 어때? | 관련 | — | 해당 없음 (제안) | — | 확정 표현 없음 → 공유 후보 제외 |”"
+C-023,조사 활동,Population Refinement,International first-year students specified without excluding other first-year students,"The team’s approved decision says the survey will target first-year students. A new approved decision says it will target international first-year students, with no indication that other first-year students are excluded.","The new target is a subgroup of the previously stated audience, but the case does not say whether that subgroup replaces the broader audience or is simply specified within it.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-024,조사 활동,Population Ambiguity,"International students across all years compared with first-year students, with overlap unspecified","The team’s current decision says the survey will target first-year students. A new approved decision says it will target international students across all years, and the overlap with the original population is unclear.","The new target group spans all years and is defined by international-student status, so its relationship to the existing first-year group is unclear rather than a plainly separate or fully replacing population.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-025,조사 활동,Personal Information,Community garden case study accompanied by a home address and request to mail forms,"A candidate about the project says, “We chose the community garden as the case study. My home address is 18 Willow Lane, and please mail me the consent forms there.”","Alongside the project decision, the candidate includes a home address and a request to mail consent forms, which are not themselves team decisions.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 1단계 관련성 | 관련 | 팀 이름 + 프로젝트 주제(팀 만들 때 입력)와 관련 있는 내용 | 프로젝트 주제와 연결되는 단어, 팀원 이름, 과제·발표·제출 | 주제는 청년 주거 문제로 하자. | 팀 이름만으로 판단하지 않고 프로젝트 주제를 함께 봄 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”"
+C-026,조사 활동,Mixed Content,An assigned methods-section deadline appears alongside a confirmed interviews-over-questionnaire choice,"A project conversation contains the statements “I will draft the methods section by Thursday” and “Let’s use interviews rather than a questionnaire.” The first is an assigned task, while the second is a confirmed decision.","The conversation includes an assigned task as well as a confirmed decision, so the two statements have different roles.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 할 일 | 누군가 해야 할 팀 작업 → 담당자·기한 추출 | ~할게, ~해야 해, ~까지, ~가 맡아, ~해 줘 | 자료 정리는 내가 금요일까지 할게. | ""내가""는 말한 사람, 날짜 표현은 실제 날짜로. 없으면 미정. 발표자·사회자·팀장처럼 자리를 정하는 말은 결정, 결과물이 있는 일을 맡기면 할 일 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”"
+C-027,조사 활동,Equivalent Wording,A three-source maximum stated alongside the existing decision to use three sources,"A new approved decision says that the project will use no more than three data sources. The existing decision says to use three data sources, so the values may be equivalent despite different wording.","The new decision sets a maximum, whereas the existing decision specifies a number to use; those statements may not have the same scope.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-028,조사 활동,Decision Conflict,"Paper and online form approvals share a timestamp, leaving their order unidentified","A comparison request contains two newly approved statements from the same person about the same target, but their approval timestamps are identical and the export does not identify which one came later. One says to use a paper form and the other says to use an online form.","Instead of a new statement being compared with an existing decision, the request presents two newly approved, incompatible statements about the same target with identical timestamps and no ordering information.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-029,조사 활동,Decision Revision,Precise location collection approved by the same decision-maker after privacy-design changes,The team previously agreed not to collect precise location data. The same decision-maker later approves collecting precise location data after the team changes its privacy design.,"The later approval reverses the earlier position on precise location data, with a changed privacy design as the stated context and the same decision-maker approving it.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-030,조사 활동,Missing Project Context,"Short-survey candidate lacks team, project, subtopic, owner, and approval details","A new candidate says, “We’ll use the short survey,” but the team name, project topic, enabled subtopics, owner, and approval status are absent from the submission. Several teams use the same survey wording for different projects.","The candidate lacks the identifying details needed to establish its scope, and the same wording is used by several teams for different projects.","classification.md · Sync up 분류 기준표 > 4. 출력 형식(JSON) — 백엔드(AI 담당) 전달용
+“프롬프트에 팀 이름, 프로젝트 주제, 켜 둔 소주제 목록, 기존 세부 주제 목록을 함께 넣어야 합니다.”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”"
+C-031,조사 활동,Compatible Addition,"Graduate-student survey added alongside first-year-student interviews, with neither group excluded",A team decided to conduct interviews with first-year students. A new decision assigns a separate survey to graduate students; neither decision excludes the other group or method.,"The new decision has a distinct group and method, with no exclusion between the decisions, so the comparison turns on whether their scopes differ rather than whether one changes or conflicts with the other.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-032,조사 활동,Multiple Decisions,One approved statement changes analysis method and presentation date under different owners,"A teammate submits one approved sentence that confirms both a new analysis method and a new presentation date. The project already has decisions for both targets, and the two changes have different owners.","The submitted sentence combines changes to two existing decision targets with different owners, rather than presenting one decision target for comparison.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-033,조사 활동,Decision Qualification,Interview method retained with consent required for participants,An approved statement says the team will use a particular interview method. A second clause in the same statement says interviews will be conducted only with participants who provide consent; the consent requirement does not remove the method.,The statement adds a consent condition for participants while explicitly retaining the interview method.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-034,작업 결과물,Distinct Deliverables,A team-name decision and a circular logo-mark decision share the branding topic.,"Two records in a design project share the topic_key ""branding."" The existing decision is ""The team name is CedarLab"" (Nina Shah, 2026-11-06 11:30), while the new decision is ""The CedarLab logo will use a circular mark"" (Owen Reed, 2026-11-08 14:10).","Unlike that same-scope comparison, these records address different decisions—the team name and the logo—even though they share a topic key.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“같은 단어가 있어도 대상이 다르면 무관. 예: ""모바일 앱 = 행사 이후"" / ""앱 아이콘 = 둥근 사각형""”"
+C-035,작업 결과물,Conditional Scope,"An online-only statement follows a Friday-conditioned offline option, with the condition status unstated.","An existing approved decision says, ""If the prototype is stable by Friday, include offline mode"" (Mina Das, 2026-11-08 12:00). A later candidate says, ""Keep the prototype online-only"" (Eli Brooks, 2026-11-10 15:00), but does not say whether the Friday condition was met.","The earlier decision makes offline mode conditional on the prototype being stable by Friday, while the later candidate says to keep it online-only without stating whether that condition was met.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-036,작업 결과물,Implementation Instruction,A request to draft PostgreSQL tables uses the team's existing database choice.,"The team has decided to use PostgreSQL. A teammate asks an AI, “Using PostgreSQL, draft the database tables,” and the request is submitted as a candidate statement.","Unlike a repeated statement of the team's decision, the submitted statement is a request that takes PostgreSQL as an existing premise, rather than itself stating a new decision.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 할 일 | 누군가 해야 할 팀 작업 → 담당자·기한 추출 | ~할게, ~해야 해, ~까지, ~가 맡아, ~해 줘 | 자료 정리는 내가 금요일까지 할게. | ""내가""는 말한 사람, 날짜 표현은 실제 날짜로. 없으면 미정. 발표자·사회자·팀장처럼 자리를 정하는 말은 결정, 결과물이 있는 일을 맡기면 할 일 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“요청 속 전제로 같은 결정을 말함: ""MySQL 기준으로 테이블 짜 줘"" → 같음”"
+C-037,작업 결과물,Distinct Deliverables,"The team name is chosen, while a newly approved decision specifies a dark green logo background.",The team has chosen “Oriole” as its team name. A new approved decision says the Oriole logo will use a dark green background; no logo colors have previously been decided.,"The existing decision establishes the team name, while the new decision concerns the logo background; no prior logo color decision exists. This is a different-scope situation rather than a comparison against an existing logo-color decision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“이름만 비슷한 다른 대상: ""팀 이름 = 북극성"" / ""북극성 로고 색 = 남색"" → 무관”"
+C-038,작업 결과물,Scope Ambiguity,"Monthly totals are limited to the pilot campus in a new dashboard decision, with view scope unclear.","An existing decision says the dashboard will show monthly totals. A new decision says the dashboard will show monthly totals only for the pilot campus, but it is unclear whether the pilot-campus restriction narrows the old decision or describes a separate dashboard view.",The case leaves open whether the pilot-campus restriction narrows the existing decision or concerns a separate dashboard view.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-039,작업 결과물,Conditional Scope,A later statement includes recommendations without clarifying the earlier remaining-time condition.,"A team decided that it would add a recommendation feature if development time remains. A later approved statement says recommendations will be included, without clarifying whether the time condition still applies.","The earlier decision explicitly makes inclusion conditional on development time, while the later statement says the feature will be included without clarifying whether that condition remains.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-040,작업 결과물,Unconfirmed Change,A teammate calls for removing the prototype login screen without reporting team agreement.,"The existing approved decision includes a login screen in the prototype. A different teammate now says the login screen must be removed, without reporting agreement from the team.","Unlike the routine comparison, the contrary position is reported as one teammate's statement without reported team agreement, rather than as a team-approved new decision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 6 | 부정 표현 | 박지민: 로그인 기능 넣자 | 이서준: 로그인은 빼자 | 충돌 |”"
+C-041,작업 결과물,Nested Specification,A one-column references section sits within a poster already assigned a two-column overall layout.,The existing decision says the poster will use a two-column layout. A new decision says the poster’s references section will use one column; the references occupy a designated section and do not replace the overall layout.,The new decision applies only to a designated section and does not replace the overall layout decision.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-042,작업 결과물,Replacement Ambiguity,Monthly approved applications replace or supplement total monthly applications; chart count is unstated.,The existing decision says a chart will show total monthly applications. A new decision says it will show monthly approved applications; it is unclear whether this is a second chart or a replacement that excludes rejected applications.,"The new metric could either be an additional chart or a replacement for the existing chart, so the relationship between the decisions is unclear.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-043,작업 결과물,Conditional Scope,"Venue-Wi-Fi-only demo setup follows a conditional local-server decision, while Wi-Fi reliability is unknown.","The team’s current valid decision is “We will use a local server if the venue’s Wi-Fi is unreliable.” (Mina Park, 2026-11-13 09:00; topic_key: Deployment). A new decision says, “The demo will run only on the venue Wi-Fi.” (Joon Lee, 2026-11-14 14:00; topic_key: Demo setup); the venue’s Wi-Fi status is not known.","The existing decision is conditional and allows a local-server fallback, whereas the new decision exclusively specifies venue Wi-Fi; whether the condition for the fallback applies is unknown.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”"
+C-044,작업 결과물,Unaccepted Proposal,"A newly captured quiz question repeats the existing workshop-opening decision, without subsequent approval.","A team’s existing decision is “The workshop will start with a short quiz.” (Chen Wei, 2026-11-11 10:00; topic_key: Workshop opening). A newly captured statement says, “Should we start the workshop with a short quiz?” (Chen Wei, 2026-11-14 10:00; topic_key: Workshop opening); the speaker is asking for opinions, and no approval follows.","The later statement is an opinion-seeking question, not an approved new decision, so it differs in decision status rather than expressing a new decision to compare.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 수업 팀플 | 주제를 청년 주거로 하면 어때? | 관련 | — | 해당 없음 (제안) | — | 확정 표현 없음 → 공유 후보 제외 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 7 | 제안과 결정 | 주제를 바꾸면 어때? (제안) | 주제는 청년 주거로 확정 | 알림 없음 (제안은 결정이 아니라 비교하지 않음. 쌍으로 들어오면 무관) |”"
+C-045,작업 결과물,Compound Statement,An approved infographic statement changes three sections to four and assigns a Monday source-list task.,"A team’s current decision is “The infographic will use three sections.” (Ava Johnson, 2026-11-12 14:00; topic_key: Infographic structure). A newly approved sentence says, “We will use four sections for the infographic, and I will prepare the source list by Monday.” (Ava Johnson, 2026-11-14 14:00; topic_key: Infographic work).","The new sentence combines a changed infographic decision with a separate source-list commitment, and the topic keys are not identical.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-046,작업 결과물,Compound Statement,An approved statement renames Beacon to Echo and assigns a Wednesday test-script task.,"A new approved sentence says, “We will name the prototype Echo, and I will prepare the test script by Wednesday.” (Harper Chen, 2026-11-14 12:00; topic_key: Naming and testing). The existing decision is “The prototype will be called Beacon.” (Sam Rivera, 2026-11-12 12:00; topic_key: Product name).","The new sentence combines a product-naming decision, which overlaps with the existing decision, with a separate test-script commitment that has a different scope.","classification.md · Sync up 분류 기준표 > 2. 회의록 대응표
+“| 확장 | 2단계 소주제 | 팀 관련 내용을 활동별로 나눠 보드 정리에 사용 | 소주제·세부 주제가 달라도 '결정'끼리 충돌 비교 (같은 세부 주제 먼저) |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-047,작업 결과물,Unconfirmed Change,"The same member changes blue-and-white to green-and-white, followed by another member's black-and-gold decision.",A team agreed to use a blue-and-white visual theme. A later decision made by the same member changes the theme to green-and-white. Another member then submits an approved decision to use a black-and-gold theme without evidence of a team agreement.,"The submission comes after an intervening theme change by one member, and the later member’s approved decision has no evidence of team agreement. The case therefore involves both a sequence of decisions and a distinction between an approval and evidence of team agreement, not just a different color choice.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-048,작업 결과물,Conflicting Decisions,"Chronological and thematic report structures remain valid, and a new record adds a third structure.","Two valid existing decisions appear to govern the same target: one says the report should use a chronological structure, while another later record says it should use thematic sections. The system has no indication that either record superseded the other. A new decision adds a third structure.","Unlike the routine comparison with one existing decision, the new decision is being compared against two valid existing decisions that already disagree, with no indication that one supersedes the other.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“세부 주제(topic_key)는 보드에서 결정을 묶는 기준이고, 충돌 비교 순서를 정합니다. 팀 서버는 같은 팀에 먼저 올라온 유효한 결정 전체와 비교하고, 같은 세부 주제를 먼저 봅니다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-049,작업 결과물,Compound Statement,An approved statement names the tool Cedar and assigns its speaker onboarding copy by Tuesday.,"A teammate submits the approved compound statement, “We’ll call the tool Cedar, and I’ll draft the onboarding copy by Tuesday.” The current decision list contains no service-name decision. The speaker is known, and Tuesday’s calendar date is available.","The submitted statement combines a team-level naming choice with the speaker’s individual task commitment, and there is no existing service-name decision to compare against.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 할 일 | 누군가 해야 할 팀 작업 → 담당자·기한 추출 | ~할게, ~해야 해, ~까지, ~가 맡아, ~해 줘 | 자료 정리는 내가 금요일까지 할게. | ""내가""는 말한 사람, 날짜 표현은 실제 날짜로. 없으면 미정. 발표자·사회자·팀장처럼 자리를 정하는 말은 결정, 결과물이 있는 일을 맡기면 할 일 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”"
+C-050,작업 결과물,Unconfirmed Change,A teammate asks to exclude an optional release translation feature without team agreement.,"The existing decision includes an optional translation feature in the release. A different teammate submits, “Do not include translation in the release,” with no team agreement.","The opposing submission has no team agreement, so it may be an individual proposal rather than an agreed team decision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 6 | 부정 표현 | 박지민: 로그인 기능 넣자 | 이서준: 로그인은 빼자 | 충돌 |”"
+C-051,작업 결과물,Decision Revision,"Poster and kiosk decisions precede a new digital-projection decision, with the poster retained in history.","A proposal to use a printed poster was superseded by an approved decision to use an interactive kiosk. A new decision-maker now approves a digital projection instead, and the original poster decision remains visible in the history.","The decision history includes an earlier poster proposal that was superseded by the kiosk decision, before a new decision-maker approves projection.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-052,작업 결과물,Implementation Instruction,An approved instruction requests PostgreSQL tables after another member reports the database choice.,"A teammate posts, “The team agreed to use PostgreSQL.” A second member’s approved statement says, “Build the tables for PostgreSQL,” using the existing choice as an instruction rather than proposing a new database.","The approved statement is an implementation instruction that relies on the existing choice, rather than a new proposal or restatement of the choice itself.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“요청 속 전제로 같은 결정을 말함: ""MySQL 기준으로 테이블 짜 줘"" → 같음”"
+C-053,작업 결과물,Additive Specification,Weekly results are added alongside the dashboard's existing monthly results.,"A current approved decision says the dashboard will show monthly results. A new approved decision says the dashboard will show weekly results as well as monthly results, and does not remove the monthly view.","Rather than replacing the existing monthly interval with a different one, the new decision adds a weekly view while retaining the monthly view.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-054,작업 결과물,Decision Attribution,"The record owner is listed as the group, but the sentence says, “I changed”.","A source record lists the new decision’s owner as “the group,” while its sentence says, “I changed the evaluation method to peer review.” The existing decision was made by one named person, and no agreement is documented.","The new decision’s collective owner attribution does not align straightforwardly with its first-person wording, against a background of an individually made existing decision and no documented agreement.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-055,작업 결과물,Multiple Decisions,"One conversation names Harbor Watch and a bar chart, alongside a personal Claude preference.","A member’s AI conversation says, “The project is called Harbor Watch. I prefer working with Claude, and the team agreed the results chart will be a bar chart.” The model preference is personal and unrelated to the project decision.","The conversation also contains a personal preference that is unrelated to the project decision, an expected case for the task’s unrelated classification.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 1단계 관련성 | 개인 | 팀 프로젝트와 관련 없는 내용 (공유 안 함, 여기서 분류 끝) | 점심, 약속, 기분, 다른 수업, 병원 | 오늘 점심 김밥 먹었어. | ""수요일 병원 가서 회의 못 가"" → 개인. 회의 변경은 팀 합의 후 결정으로 기록 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 개인 (헷갈림) | 해커톤 | 난 ChatGPT가 Claude보다 편하더라. | 개인 | — | — | — | 개인 취향, 팀 결정 아님 |”"
+C-056,작업 결과물,Additive Specification,A new statement adds Spanish to the help page without stating that website-wide English support ends.,"A team’s decision specifies that its website will support English. A new approved statement specifies that the website’s help page will also support Spanish, without saying that English support is being removed.","The new language support applies specifically to a help page, while the existing decision applies to the website; the new statement also does not say English support is being removed.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-057,작업 결과물,Unconfirmed Change,"Blank owner field, proposed switch to a one-page summary, and no recorded team agreement","A new decision appears to be a change from an existing decision, but the owner field is blank and the original sentence only says, “We should switch to a one-page summary.” No team agreement is recorded.","The apparent change is being compared against a source that is not established in the text as an agreed team decision: its owner is blank, and no team agreement is recorded.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-058,작업 결과물,Distinct Deliverables,Blue prototype header and green landing-page header stored under the shared “Colors” topic key,"An approved decision says the prototype will use a blue header. Another approved decision says the landing page will use a green header. Both are stored under the broad topic key “Colors,” but they concern different screens.","The decisions share the broad key “Colors,” but concern different screens, making their scopes different rather than conflicting.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“같은 단어가 있어도 대상이 다르면 무관. 예: ""모바일 앱 = 행사 이후"" / ""앱 아이콘 = 둥근 사각형""”"
+C-059,작업 결과물,Conditional Scope,"Conditional second language if time permits, followed by an English-only decision without condition assessment or withdrawal","An approved conditional decision says that the team will add a second language if time permits. A later approved decision says the product will support only English, without explaining whether the condition was assessed or withdrawn.","The earlier decision is conditional, while the later one states an English-only outcome without saying whether the condition was assessed or withdrawn.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”"
+C-060,작업 결과물,Scope Ambiguity,"Existing field-testing offline support and pilot exclusion, with equivalence between the phases unclear","The current decision states that the prototype will support offline access for “field testing.” A newly approved statement says it will not support offline access during the pilot, but it is unclear whether the pilot is the same field-testing phase.","The phase covered by each decision may or may not be the same, so it is unclear whether they apply to overlapping scopes.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-061,역할·일정,Schedule Change,Rehearsal moved from December 3 to December 5 by the same team lead,"A team lead decided that the rehearsal would be on December 3 (Robin Kim, 2026-11-04 16:00). The same lead later approves moving the rehearsal to December 5 (Robin Kim, 2026-11-07 09:30).","The later decision changes the date for the same rehearsal; this is a meaningful change branch, but a routine one for decision comparison.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-062,역할·일정,Role Reassignment,"Coordinator named Jordan, then another member approved Taylor without a stated team agreement","A project team assigned Jordan as its coordinator (Ari Patel, 2026-11-07 10:30). A different member approves ""Taylor is coordinator now"" without mentioning a team vote or agreement.",The new assignment is approved by a different member without mentioning a team vote or agreement; the underlying comparison is still between two assignments for the same role.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“11번은 분류 기준표 v2 에서 생긴 유형이다. ""발표는 유나가 하자"" 다음에 다른 사람이 ""발표는 내가 할게"" → 충돌,”"
+C-063,역할·일정,Unmapped Responsibility,Shared-glossary maintenance assignment outside all six enabled subtopics,"The team's enabled subtopics are project goals, research, work products, scheduling, external requirements, and presentation. A relevant approved decision assigns a member to maintain the team's shared glossary, which does not clearly fit any listed subtopic.",The decision's subject does not clearly map to any of the team's enabled subtopics; the routine comparison itself is not otherwise described as unusual.,"classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 2단계 소주제 | 기타 | 위 6개에 맞지 않는 팀 관련 내용 | — | 팀 규칙은 단톡방 공지로 하자. | 팀 이름, 팀 규칙 등 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 할 일 | 누군가 해야 할 팀 작업 → 담당자·기한 추출 | ~할게, ~해야 해, ~까지, ~가 맡아, ~해 줘 | 자료 정리는 내가 금요일까지 할게. | ""내가""는 말한 사람, 날짜 표현은 실제 날짜로. 없으면 미정. 발표자·사회자·팀장처럼 자리를 정하는 말은 결정, 결과물이 있는 일을 맡기면 할 일 |”
+
+classification.md · Sync up 분류 기준표 > 2. 회의록 대응표
+“| 할 일 | 관련 → 소주제(맡은 일의 내용에 따라) → 표시 '할 일' | 행동·담당 표현이 있는 팀 작업 | 기준표는 내가 내일까지 만들게. → 관련 / 작업·결과물 / 할 일 |”"
+C-064,역할·일정,Overlapping Assignment,"Hana newly assigned the closing section already assigned to Felix, with no removal stated","The team previously assigned the presentation's opening section to Hana and its closing section to Felix. A new approved decision assigns Hana to deliver the closing section, without saying whether Felix's assignment has been removed.",The new decision repeats the existing closing-section assignment with a different person but does not say whether it supersedes Felix’s assignment or leaves both assignments in place.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“11번은 분류 기준표 v2 에서 생긴 유형이다. ""발표는 유나가 하자"" 다음에 다른 사람이 ""발표는 내가 할게"" → 충돌,”"
+C-065,역할·일정,Internal Deadline,October 10 internal editing deadline alongside the competition's October 12 submission deadline,"A competition notice sets the final submission deadline as October 12. The team approves an internal editing deadline of October 10, and no one is proposing a different external submission date.","The approved date is for internal editing, not external submission, and no competing external submission date is proposed.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 2단계 소주제 | 역할·일정 | 역할 분담 방식, 팀 내부 마감, 회의 시간, 정산 같은 팀 운영 | ~까지, 회의, 모이자, 정산, 분담 | 회의는 매주 화요일 8시에 하자. | 팀 내부 마감은 역할·일정, 교수님·주최 측 제출 기한은 발표·제출. 할 일은 맡은 일의 내용으로 소주제를 정함 (보고서 쓰기 → 작업·결과물) |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 2단계 소주제 | 과제 조건·피드백 | 교수님·주최 측 공지, 평가 기준, 분량·형식, 받은 피드백 | 교수님이, 공지, 평가 기준, 분량, 형식, 피드백 | 교수님이 10쪽 이내로 하랬어. | 팀이 정한 게 아니라 외부에서 주어진 조건 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”"
+C-066,역할·일정,Tentative Role Offer,"Tentative offer to lead the poster without confirmation, alongside another person's assignment","A teammate says, “I might be able to take the lead on the poster, maybe.” No one has confirmed the assignment, while the existing decision assigns the poster lead to another person.","The statement is tentative and the assignment is unconfirmed, rather than a team-approved new decision ready to compare with the existing assignment.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-067,역할·일정,Role Reassignment,Original presentation lead reassigns Elena's role to Ravi for the same presentation,The same teammate who assigned Elena as presentation lead now approves handing the role to Ravi. The assignment concerns the same presentation and has not already been superseded by another decision.,"The same teammate who made the original assignment now approves handing the role to someone else, and no intervening decision has superseded the original assignment.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“같은 사람이 ""발표는 서준이한테 넘길게"" → 변경.”"
+C-068,역할·일정,Role Reassignment,"Mira's safety-lead assignment challenged by another member naming Theo, without recorded team agreement","A competition team’s current role assignment is “Mira will be the team’s safety lead.” (Mira Desai, 2026-11-12 15:00; topic_key: Safety role). A different member approves, “Assign Theo as safety lead instead.” (Theo Nguyen, 2026-11-14 11:30; topic_key: Safety responsibilities); there is no evidence of team agreement.","The replacement is approved by a different member, but the case gives no evidence of team agreement; the two records also use different topic keys despite referring to the safety-lead role.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“11번은 분류 기준표 v2 에서 생긴 유형이다. ""발표는 유나가 하자"" 다음에 다른 사람이 ""발표는 내가 할게"" → 충돌,”"
+C-069,역할·일정,Compound Schedule Statement,Approved statement reaffirms Thursday at 17:00 while also mentioning follow-up medical care,"The current valid decision is “The project meeting will move to Thursday at 17:00.” (Rosa Martínez, 2026-11-12 12:00; topic_key: Meeting schedule). A newly approved compound statement says, “We agreed to keep the Thursday meeting at 17:00, and I have a medical appointment for follow-up care.” (Rosa Martínez, 2026-11-14 12:00; topic_key: Team operations).","The new statement combines the matching meeting decision with an unrelated personal appointment, and its topic_key differs from the current decision's topic_key.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 복합 | 해커톤 | 서비스명은 싱크업으로 하고, 기준표는 내가 내일까지 만들게. | 관련 | 주제·목표 + 작업·결과물 | 결정 + 할 일 | 서비스명 / 분류 기준 | 문장을 나눠 각각 분류 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“같은 결정을 다른 사람이 다시 전함: 박지민 ""서비스명은 싱크업"" / 이서준 ""지민이가 정한 싱크업으로 가기로 했어"" → 같음”"
+C-070,역할·일정,Unconfirmed Schedule Change,"Different member proposes May 9 for the first test session over May 7, without team agreement","A project team’s current decision is “The first test session is on May 7.” (Lena Fischer, 2026-11-12 08:00; topic_key: Test date). A different member approves, “Move the first test session to May 9.” (Diego Ruiz, 2026-11-14 08:00; topic_key: Trial schedule); no team agreement is recorded.","The statements use different topic_key labels even though both refer to the first test session; the new statement explicitly says to move the session. This is an ordinary decision-change comparison, not an unfamiliar event relationship.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-071,역할·일정,Approval Responsibility Change,Finance coordinator assigned purchases under $100 while team lead retains larger purchases; agreement unstated,"The current valid decision is “The team lead is responsible for approving purchases.” (Maya Patel, 2026-11-12 08:00; topic_key: Purchase approval). A new approved statement says, “The finance coordinator will approve purchases under $100, while the team lead retains approval for larger purchases.” (Noah Brooks, 2026-11-14 08:00; topic_key: Spending workflow); the team has not recorded whether this was agreed.",The new decision does not simply replace the team lead: it gives the finance coordinator approval responsibility for purchases under $100 while retaining the team lead for larger purchases. The team has not recorded whether this was agreed.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-072,역할·일정,Role Compatibility,"Existing facilitator assignment followed by note-taker assignment, with dual-role compatibility and replacement unstated",A team previously assigned a member to be the meeting facilitator. A second member submits an approved decision assigning that person to be the note-taker instead. The records do not establish whether one person can hold both positions or whether the facilitator assignment was replaced.,"The relationship between the two assignments is unresolved: the new role may be additional, or it may replace the existing facilitator assignment.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-073,역할·일정,Meeting Absence,"Wednesday meeting absence due to a medical appointment, with a possible move but no stated team agreement","A teammate says, “I cannot attend Wednesday’s meeting because of a medical appointment.” The message also mentions that the meeting might move, but no team agreement to change the meeting time is stated.","The message reports an individual attendance constraint and a possible move, not a stated team-agreed decision to change the meeting time.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 개인 (헷갈림) | 공통 | 수요일 병원 가서 회의 못 갈 것 같아. | 개인 | — | — | — | 건강 정보 포함. 회의 변경은 팀 합의 후 결정 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“개인 사정이 섞인 문장: ""수요일 병원 가서 회의 못 가"" → 개인 문장이라 결정이 아님, 비교하지 않음”"
+C-074,역할·일정,Personal Schedule Mention,"Visa appointment cited alongside a later section delivery, without a team-approved schedule change","A candidate says, “Since I have a visa appointment, I’ll send my section later.” It refers to a personal immigration matter and a possible delivery time, but does not clearly establish a team-approved change to the project schedule.","The candidate is a personal statement about a possible later delivery, rather than a clearly established team-approved schedule change.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 1단계 관련성 | 개인 | 팀 프로젝트와 관련 없는 내용 (공유 안 함, 여기서 분류 끝) | 점심, 약속, 기분, 다른 수업, 병원 | 오늘 점심 김밥 먹었어. | ""수요일 병원 가서 회의 못 가"" → 개인. 회의 변경은 팀 합의 후 결정으로 기록 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 개인 (헷갈림) | 공통 | 수요일 병원 가서 회의 못 갈 것 같아. | 개인 | — | — | — | 건강 정보 포함. 회의 변경은 팀 합의 후 결정 |”"
+C-075,역할·일정,Separate Presentation Duties,Mira assigned the final presentation and attributed slide-deck creation in a separate statement,"A team has an approved decision, “Mira will give the final presentation.” A candidate says, “Mira will build the slide deck.” The two statements are filed under the same broad presentation topic.",The decisions concern distinct tasks but share a broad topic; the key comparison is whether the shared topic means they concern the same scope.,"classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 할 일 | 누군가 해야 할 팀 작업 → 담당자·기한 추출 | ~할게, ~해야 해, ~까지, ~가 맡아, ~해 줘 | 자료 정리는 내가 금요일까지 할게. | ""내가""는 말한 사람, 날짜 표현은 실제 날짜로. 없으면 미정. 발표자·사회자·팀장처럼 자리를 정하는 말은 결정, 결과물이 있는 일을 맡기면 할 일 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 수업 팀플 | 발표는 유나가 하자. | 관련 | 발표·제출 | 결정 | 발표 담당 | 발표자를 정하는 말은 결정 (발표 = 최유나). 결과물이 있는 일을 맡기면 할 일 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 3 | 범위가 다른 결정 | 발표는 유나가 하자 | PPT 제작은 서준이가 하자 | 무관 |”"
+C-076,역할·일정,Ambiguous Assignee,"Budget review assigned to Alex Kim and A. Kim, with two possible matching members","The existing decision assigns the budget review to “Alex Kim.” A new decision assigns it to “A. Kim,” but the workspace has two members whose names could match that abbreviation.","Unlike the routine comparison with a clearly identified assignee, the new decision uses an abbreviation that could refer to either of two members.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-077,역할·일정,Conflicting Schedule Records,"Pilot launch recorded for March, April, and May without clear supersession between earlier records","A team recorded “The pilot will launch in March” and later recorded “The pilot will launch in April.” A new member then submits “The pilot will launch in May,” but the system cannot determine whether the April record superseded March or whether both remain active.","Unlike a routine comparison against a clear existing decision, this case has two prior records and it is unclear whether the later one replaced the earlier one or whether both remain active.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-078,역할·일정,Conditional Schedule,New unconditional May launch statement following a prior 100-sign-up condition,"The current decision says, “If the pilot has at least 100 sign-ups, launch in May.” A new approved decision says, “Launch in May.” The new statement does not clarify whether the sign-up condition still applies.","The existing decision explicitly makes the May launch conditional on at least 100 sign-ups, while the new decision states the launch date without mentioning that condition.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”"
+C-079,역할·일정,Role Reassignment,Another teammate claims the presentation role despite Lila's existing assignment and no stated approval,"The team decided that Lila will be the presentation speaker. A different teammate submits, “I’ll present instead,” without mentioning approval from the team or Lila.","The new statement is phrased as the teammate’s own intention, and it does not mention approval from the team or the originally chosen speaker.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“11번은 분류 기준표 v2 에서 생긴 유형이다. ""발표는 유나가 하자"" 다음에 다른 사람이 ""발표는 내가 할게"" → 충돌,”"
+C-080,역할·일정,Role Reassignment,Omar approves transferring his panel-moderator role to Priya,"The team decided that Omar will moderate the panel. Omar later approves, “I’m handing the moderator role to Priya,” and no one else has changed that assignment.","Omar, the person originally assigned as moderator, is the one who approves handing the role to Priya, and the situation states that no one else changed the assignment.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“같은 사람이 ""발표는 서준이한테 넘길게"" → 변경.”"
+C-081,역할·일정,Misfiled Deadlines,Proposal due Monday and visual summary due Tuesday filed under the same deadline key,"One conversation includes “The proposal is due on Monday” and “The visual summary is due on Tuesday.” Both are approved, but the records were mistakenly given the same topic key, “deadline.”","The decisions concern different deliverables and deadlines, yet were assigned the same broad topic key, creating a scope distinction within a shared label.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-082,역할·일정,Deadline Revision,Same member revises the internal draft deadline from Monday to Wednesday,A team member’s existing approved decision sets the internal draft deadline to Monday. That same member later approves a revision setting it to Wednesday.,"The approved deadline is explicitly revised from Monday to Wednesday; this is a change to compare, rather than a repeated or unrelated decision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-083,역할·일정,Distinct Role Assignment,Research-lead assignment changed to analysis lead despite distinct responsibilities and separately holdable positions,"A new approved decision changes a team role from “research lead” to “analysis lead,” but the team’s role list shows that the two positions have different responsibilities and can be held by separate people.","The decision presents the roles as a change from one to the other, while the role list says they have different responsibilities and may be held by separate people.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-084,역할·일정,Role Reassignment,Different member claims Omar's facilitator role without recorded team agreement,"A team approved Omar as facilitator. A different member later submits, “I’ll facilitate instead,” as an approved decision, with no meeting agreement recorded.","The later replacement is submitted as an approved decision by the member who would facilitate, but no meeting agreement is recorded; this differs from a straightforward, documented team decision to replace Omar.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“11번은 분류 기준표 v2 에서 생긴 유형이다. ""발표는 유나가 하자"" 다음에 다른 사람이 ""발표는 내가 할게"" → 충돌,”"
+C-085,역할·일정,Separate Presentation Duties,"One member assigned to present and another to create the slide deck, with neither duty replaced",An approved decision assigns one member to present the project. A later approved decision assigns another member to create the slide deck; neither statement changes the other person’s responsibility.,"The decisions assign different responsibilities to different members, and the case explicitly says neither assignment changes the other's responsibility.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 3 | 범위가 다른 결정 | 발표는 유나가 하자 | PPT 제작은 서준이가 하자 | 무관 |”"
+C-086,외부 조건·피드백,Source Count Requirement,"Professor requires eight citations; final report approved for six, while reviewed-source count remains undecided","A professor's feedback says the project must cite at least eight sources. The team later approves using six sources in the final report, while a separate research note says the team has currently reviewed six sources but has not decided how many to cite.","The case includes a separate note with the same number, but it describes sources reviewed rather than sources to cite and leaves the citation count undecided.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 2단계 소주제 | 과제 조건·피드백 | 교수님·주최 측 공지, 평가 기준, 분량·형식, 받은 피드백 | 교수님이, 공지, 평가 기준, 분량, 형식, 피드백 | 교수님이 10쪽 이내로 하랬어. | 팀이 정한 게 아니라 외부에서 주어진 조건 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 조사 | 알게 된 사실, 조사 결과, 외부 조건 → 참고 자료 | ~래, ~에 따르면, 찾아보니, 교수님이 ~랬어 | 심사 기준에 AI 활용도가 있대. | 개인 취향(""난 ChatGPT가 더 편해"")은 개인. 소주제 '자료 조사'와 이름이 비슷하지만, 표시 '조사'는 사실·정보 전체(외부 조건 포함)를 뜻함. 출처는 문장에 드러난 것만 적음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”"
+C-087,외부 조건·피드백,Offline Demo Requirement,Offline demo requirement alongside an approved core feature requiring live internet access,A competition organizer requires a demo to run offline. The team approves a demo plan that requires a live internet connection for its core feature.,"The conflicting statement is an organizer-imposed requirement, not an earlier team decision as in the nearest routine case.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”"
+C-088,외부 조건·피드백,Demo Duration Requirement,Six-minute live-demo maximum; approved schedule allocates two minutes for setup and three for demonstration,"A contest organizer’s notice says, “The live demonstration must be completed within 6 minutes.” (Organizer notice, 2026-11-12 10:00; topic_key: Demo duration). The team approves, “We will allocate 2 minutes to setup and 3 minutes to the live demonstration.” (Ben Carter, 2026-11-14 10:00; topic_key: Presentation schedule).","The notice sets a maximum for the live demonstration itself, whereas the team's decision allocates time between setup and the demonstration; these are related but distinct timing scopes.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-089,외부 조건·피드백,Submission Format Requirement,PDF entry requirement alongside an approved decision to submit a slide deck file,A competition organizer has required entries to be submitted as a PDF. A team member submits an approved decision to submit the final entry as a slide deck file instead; the team has not recorded any permission to use a different format.,"Rather than being only a comparison between team decisions, this case puts an approved internal decision in tension with an external organizer's requirement, and says that permission for the different format is not recorded.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 조사 | 알게 된 사실, 조사 결과, 외부 조건 → 참고 자료 | ~래, ~에 따르면, 찾아보니, 교수님이 ~랬어 | 심사 기준에 AI 활용도가 있대. | 개인 취향(""난 ChatGPT가 더 편해"")은 개인. 소주제 '자료 조사'와 이름이 비슷하지만, 표시 '조사'는 사실·정보 전체(외부 조건 포함)를 뜻함. 출처는 문장에 드러난 것만 적음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”"
+C-090,외부 조건·피드백,Citation Style Requirement,"APA citation requirement alongside approved Chicago-style citations, without instructor waiver","An instructor requires citations in APA style. The team approves a decision to format the report’s citations in Chicago style, with no indication that the instructor has waived the requirement.","The opposing condition is an instructor's requirement rather than an existing team decision, so the situation raises a different comparison relationship from the routine decision-to-decision comparison described in the work scope.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 조사 | 알게 된 사실, 조사 결과, 외부 조건 → 참고 자료 | ~래, ~에 따르면, 찾아보니, 교수님이 ~랬어 | 심사 기준에 AI 활용도가 있대. | 개인 취향(""난 ChatGPT가 더 편해"")은 개인. 소주제 '자료 조사'와 이름이 비슷하지만, 표시 '조사'는 사실·정보 전체(외부 조건 포함)를 뜻함. 출처는 문장에 드러난 것만 적음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”"
+C-091,외부 조건·피드백,External Partnership Decision,"Enabled subtopics exclude external partnerships; new library-pilot decision, with an older library decision","A team has an enabled subtopic list that excludes “External partnerships.” A new approved statement says, “We will partner with the city library for the pilot.” The existing decisions include a library partnership decision under an older topic key.","The related subtopic is excluded from the enabled list, but an existing partnership decision is present under an older topic key.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“세부 주제(topic_key)는 보드에서 결정을 묶는 기준이고, 충돌 비교 순서를 정합니다. 팀 서버는 같은 팀에 먼저 올라온 유효한 결정 전체와 비교하고, 같은 세부 주제를 먼저 봅니다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 2 | 같은 대상, 다른 주제 이름 | 박지민 [MVP 범위]: 확장 제외 | 이서준 [기능 범위]: 확장도 넣자 | 충돌 |”"
+C-092,외부 조건·피드백,Submission Deadline,"Published November 8 deadline alongside approved November 10 submission, with no extension mentioned","The organizer’s published deadline is November 8. A team member submits an approved decision saying the team will submit on November 10, although no extension is mentioned.","The stated comparison is between the team’s approved decision and the organizer’s published deadline, rather than between two team decisions; the proposed date is later than the published deadline.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”"
+C-093,외부 조건·피드백,Mixed Statement,"Rubric evaluation proposal, comparison of three existing rubrics, and instructor’s PDF submission requirement","A teammate writes, “The evaluation will use a rubric; I’ll compare three existing rubrics; and the instructor says the final report must be submitted as a PDF.” These clauses contain a possible decision, a research activity, and an external requirement.","Instead of presenting only a clear team decision for comparison, the statement mixes a possible decision with an activity and an external requirement, so the relevant decision content must be distinguished.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 2단계 소주제 | 자료 조사 | 논문, 기사, 통계, 사례, 비교 결과 (조사 활동 자체) | 찾아보니, ~에 따르면, 통계, 사례, 비교해 보니 | 청년 월세 비중이 78%래. | 조사 내용 자체가 중심일 때만. 조사를 바탕으로 정했으면 해당 소주제의 결정 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 2단계 소주제 | 과제 조건·피드백 | 교수님·주최 측 공지, 평가 기준, 분량·형식, 받은 피드백 | 교수님이, 공지, 평가 기준, 분량, 형식, 피드백 | 교수님이 10쪽 이내로 하랬어. | 팀이 정한 게 아니라 외부에서 주어진 조건 |”
+
+classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”"
+C-094,외부 조건·피드백,Citation Style Requirement,"APA feedback for written report alongside approved numbered citations, with no revised guidance","The instructor’s feedback states that the written report must use APA citations. A team member submits an approved decision to use numbered citations in that same written report, and no revised instructor guidance is available.","The conflicting position is stated as instructor feedback, not as an existing team decision; the case does not say that the feedback was previously recorded or approved as a team decision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 8 | 외부 조건 위반 | 교수님: 보고서는 10쪽 이내 | 팀: 보고서는 15쪽으로 쓰자 | 충돌 |”"
+C-095,발표·제출,Presentation Duration,12-minute presentation with a four-minute live demonstration,"A presentation team decided on a 12-minute presentation (Iris Wu, 2026-11-07 17:20). A later approved decision says, ""Use 12 minutes total, including a four-minute live demonstration"" (Leo Park, 2026-11-09 10:10).",The later decision adds that a four-minute live demonstration is included in the 12-minute total; the earlier decision states the duration without specifying that detail.,"conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-096,발표·제출,Submission Format,Same prototype changed from a web app to a native mobile app under a different topic key,"A project team decided to submit its prototype as a web app. A new approved decision says to submit the same prototype as a native mobile app, but uses a different topic key and does not say that the web app is still included.","The new decision concerns the same prototype but has a different topic key and does not clarify whether the native app replaces or supplements the web app, leaving the relationship between the decisions unclear.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-097,발표·제출,Personal Information,Approved slide-sharing message includes a phone number within a project-related sentence,"A candidate message says, “Send the approved presentation slides to 555-010-4821; the presentation format remains the one the team chose.” The phone number appears inside a project-related sentence.","The message gives a specific phone number as the destination for sending the slides, while the format statement simply reaffirms an existing choice. The message therefore contains statements about different decision aspects.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 민감정보 | 해커톤 | 발표 자료는 010-1234-5678로 보내 줘. | 관련 | 발표·제출 | 할 일 | 발표 자료 | 전화번호는 [연락처]로 가림 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“같은 결정을 다른 사람이 다시 전함: 박지민 ""서비스명은 싱크업"" / 이서준 ""지민이가 정한 싱크업으로 가기로 했어"" → 같음”"
+C-098,발표·제출,Speaking Time,Existing four-minute speaker slots now include up to 45 seconds for rebuttal,"A debate team’s existing decision is “Each speaker gets 4 minutes.” (Nadia Ali, 2026-11-12 17:00; topic_key: Speaking time). The new approved decision says, “Each 4-minute speaking slot will include up to 45 seconds for rebuttal.” (Nadia Ali, 2026-11-14 08:45; topic_key: Rebuttal format).","The new decision assigns part of the established speaking slot to rebuttal, adding a format detail while retaining the four-minute slot.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-099,발표·제출,Event Date,"Two valid showcase dates, June 3 and June 5, precede a June 4 schedule","The team’s existing valid decisions list contains two unresolved entries for the same target: “The showcase will be on June 3.” (Ari Kim, 2026-11-10 10:00; topic_key: Showcase date) and “The showcase will be on June 5.” (Mira Desai, 2026-11-12 10:00; topic_key: Showcase date). A new approved statement says, “The showcase is scheduled for June 4.” (Jules Bennett, 2026-11-14 10:00; topic_key: Event schedule).","Instead of a comparison against one settled existing decision, the new date is being considered alongside two unresolved entries that already disagree about the same target.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-100,발표·제출,Submission Package,Individual reflections added alongside the existing combined report,"The existing valid decision is “The team will submit one combined report.” (Daniel Evans, 2026-11-12 13:00; topic_key: Submission package). A new approved statement says, “Each member will upload an individual reflection in addition to the combined report.” (Grace Park, 2026-11-14 13:00; topic_key: Individual reflections).","The new requirement is explicitly additive rather than a replacement or contradiction of the combined-report decision, and the statements have different topic keys.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-101,발표·제출,Dashboard Demonstration,Later unconditional dashboard plan follows an approval conditioned on projector confirmation,"The team approved, “If the venue confirms a projector, we will show the live dashboard.” A later approved statement says, “We will show the live dashboard,” but does not mention whether the venue confirmed the equipment.","The earlier decision states a condition, but the later statement omits whether that condition was met, leaving unclear whether it restates the conditional decision or changes its scope.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-102,발표·제출,Submission Package,A second member proposes PDF and HTML despite the current PDF-only decision,"A team’s current report decision is “Submit a PDF only.” A different member submits “Submit both a PDF and an HTML version,” without stating that the PDF-only restriction was removed by team agreement.","The new decision requires HTML in addition to PDF, whereas the existing decision limits submissions to PDF only; the member does not say that the existing restriction was removed by team agreement.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-103,발표·제출,Presentation Venue,"Room 204 listed for the final demo, though the lead calls it an unconfirmed suggestion","A decision log contains an old entry saying that the final demo will be in Room 204. The project lead says the room was never confirmed and that the entry was only a suggestion, but the system currently marks it as an existing valid decision.","The existing entry is not merely a prior decision with a different value: its status as a decision is disputed, despite the system marking it valid.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 수업 팀플 | 주제를 청년 주거로 하면 어때? | 관련 | — | 해당 없음 (제안) | — | 확정 표현 없음 → 공유 후보 제외 |”"
+C-104,발표·제출,Submission Format,"Same decision-maker's history moves from PDF to agreed slides, then a web page","The same person initially decided to submit the proposal as a PDF, later changed it to a slide deck with team agreement, and now submits an approved decision to submit a web page instead. The decision history still contains all three entries.","Rather than a single prior decision, the history contains an initial decision, a team-agreed revision, and a further approved decision about the same proposal format.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-105,발표·제출,Submission Arrangement,Individual applications proposed against an existing joint-application decision,"The existing valid decision says the team will submit one joint application. A new approved decision says each member will submit an individual application, without a recorded agreement to change the submission arrangement.","The decisions differ on how applications are submitted, and there is no recorded agreement to change the existing arrangement; this is a meaningful condition for distinguishing a change from a conflict.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-106,발표·제출,Personal Information,Public interview excerpts appear in a statement containing a home address and immigration status,A project member submits an approved decision to publish interview excerpts publicly. The sentence also contains the interviewee’s home address and a note about the interviewee’s immigration status.,"The submitted decision includes the interviewee’s home address and immigration status in material intended for public release, making the content being compared meaningfully different from a routine decision to publish interview excerpts.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”"
+C-107,발표·제출,Event Date,June 12 and June 13 presentation records lack session distinction and have possibly shared aliases,"Two teammates submit approved decisions minutes apart: one says the team will present on June 12 and the other says June 13. The records do not identify whether the dates refer to different sessions, and the owners are aliases that may belong to the same person.","Instead of a straightforward comparison against an existing decision, there are two near-simultaneous submissions with different dates, and the records do not establish whether they concern the same session or the same owner.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-108,발표·제출,Handout Distribution,Downloadable handouts for online attendees added alongside printed handouts for workshop participants,An approved team decision says all workshop participants will receive printed handouts. A later decision says online attendees will receive downloadable handouts; it does not say whether printed handouts for in-person attendees are being discontinued.,"The later decision names a specific attendee group and a different handout format, while the existing decision covers all participants; it is unclear from the stated facts whether this is an addition or a replacement for any part of the earlier decision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 4. 알림을 띄우면 안 되는 경우
+“기존 범위를 없애지 않는 구체화: ""발표 10분"" / ""발표 10분 중 데모 3분"" → 같음”"
+C-109,발표·제출,Presentation Format,Video-call presentation proposed if the venue closes; venue status remains unknown,"A team has an existing approved decision that the final presentation will be delivered in person. A new statement says, “If the venue closes, we will present by video call,” and the venue’s status is still unknown.","The new format is conditional on the venue closing, rather than being an unconditional replacement of the in-person decision; whether the condition applies is not yet known.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 4 | 조건부 결정 | 시간 남으면 Claude도 지원하자 | ChatGPT만 지원하자 | 확인 필요 (확신도 0.6 미만) |”"
+C-110,발표·제출,Event Schedule,Presentation and separately scheduled poster session both begin at 2:00 p.m.,A teammate submits an approved statement that the presentation will begin at 2:00 p.m. The existing approved decision says the poster session begins at 2:00 p.m.; both events are scheduled separately.,"The decisions concern separately scheduled events, so the matching time does not make them decisions about the same scope.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 무관 | 대상·범위가 달라 두 결정이 함께 성립한다 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“topic_key 가 같아도 대상이 다르면 무관, topic_key 가 달라도 대상이 같으면 비교한다.”"
+C-111,발표·제출,Submission Deadline,Monday and later Tuesday deadlines approved by different teammates without recorded agreement,"One teammate approved a submission deadline of Monday, while another teammate later approves Tuesday as the deadline. No team agreement or correction from the original owner is mentioned.","The differing deadlines were approved separately by two teammates, and the second approval came later without a stated correction or agreement; this makes the relationship between the approvals relevant to distinguishing a change from a conflict.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 5 | 숫자·날짜만 다름 | 박지민: 마감은 금요일 | 이서준: 마감은 토요일 | 충돌 (같은 사람이면 변경) |”"
+C-112,결정 비교·판정,Decision Revision,"Same owner sets the approved budget from $2,400 to $2,600 after recalculating costs","The team’s existing decision says the budget is $2,400. The same owner submits a new approved decision setting it to $2,600 after recalculating costs; there is no evidence that anyone else made the revision.","The new decision is from the same owner and follows a cost recalculation, with no evidence that another person made the revision.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 변경 | 같은 사람이 기존 결정을 고치거나, 팀 합의(""회의에서"", ""다들"", ""합의"")로 바꾼다 | 변경 알림 (파랑) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-113,결정 비교·판정,Conflicting Decisions,Two current valid decisions share a target and approval time but have contradictory values,The comparison service finds two current valid decisions with the same target and approval time but contradictory values. The new approved decision appears to match one and conflict with the other.,"Instead of comparing the new decision with a single consistent existing decision, staff find two current valid decisions for the same target and approval time that contradict each other, leaving the new decision aligned with one and in conflict with the other.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-114,결정 비교·판정,Approval Ambiguity,"AI-conversation project change has unclear team approval, and the record does not say whether it was accepted","A teammate proposes an approved project change in an AI conversation, but the team’s approval status is unclear and the submitted record does not say whether the proposal was accepted.","Whether the proposed change was accepted is unclear, unlike a routine submission with an explicit acceptance status.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 수업 팀플 | 주제를 청년 주거로 하면 어때? | 관련 | — | 해당 없음 (제안) | — | 확정 표현 없음 → 공유 후보 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 해커톤 | Claude가 싱크업이라는 이름을 추천했어. | 관련 | 주제·목표 | 조사 | 서비스명 | AI의 제안을 전한 것. 팀이 받아들였다는 표현이 없음 |”"
+C-115,결정 기록·이력,Unidentified Owner,Reversed prior value recorded under an owner nickname absent from the team member list,"A newly approved statement reverses a prior decision, but the recorded owner appears under a nickname not present in the team's member list. The content is clearly incompatible with the current value, and no team agreement is mentioned.","The decision conflict itself is a familiar comparison; the added condition is that the recorded owner appears under a nickname absent from the member list, leaving attribution uncertain.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 충돌 | 겹치는 범위에서 두 값이 함께 성립할 수 없고, 다른 사람이 합의 없이 정했다 | 충돌 알림 (빨강) |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-116,결정 기록·이력,Missing Approval Time,Missing approval date before a later conflicting decision requiring history to establish current status,"A decision record has a clear owner and content, but its approval date is missing. The team later submits a conflicting decision, and the history is needed to determine which one is current.","The existing record has no approval date, so the conflict involves a gap in the chronology needed to determine which decision is current.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 1. 입력과 출력
+“| 날짜 | 승인된 시각 | 2026-11-06 21:10 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-117,결정 기록·이력,Conflicting Duplicate Records,"Matching normalized content and topic key, differing original sentences, and conflicting approval times","Two approved records have the same normalized content and topic key, but one has no original sentence and the other has an original sentence that appears to describe a different scope. Their recorded approval times also conflict.","Unlike a straightforward same-or-different decision comparison, the records agree on normalized content and topic but give conflicting signals about scope and approval chronology, with the original sentence missing from one record.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“| 같음 | 같은 대상의 최종 값이 같다. 표현 차이, 기존 범위를 없애지 않는 구체화도 같음 | 없음 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-118,결정 기록·이력,Missing Decision Metadata,Conflicting approved decision without a recorded owner or approval timestamp,"A new approved decision conflicts with an existing decision, but the submitted record has no owner and no approval timestamp. The system cannot determine who made the decision or when it became current.","Unlike the routine comparison, the submitted record lacks both an owner and an approval timestamp, so the decision's maker and when it became current cannot be determined.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 1. 입력과 출력
+“입력: 기존 결정 1개와 새 결정 1개. 결정마다 다음 필드가 있다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 1. 입력과 출력
+“| owner | 결정한 사람 | 이서준 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 1. 입력과 출력
+“| 날짜 | 승인된 시각 | 2026-11-06 21:10 |”"
+C-119,결정 기록·이력,Withdrawn Decision,"Withdrawn matching record followed by a consistent approved value, with no current valid decision listed","The only matching record is marked withdrawn after the team reversed it. A newly approved decision concerns the same target but is consistent with the withdrawn value, while no current valid decision is listed.","Instead of comparing the new decision with a current valid decision, the only matching record is withdrawn after a reversal, and the new decision aligns with that withdrawn value.","classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“세부 주제(topic_key)는 보드에서 결정을 묶는 기준이고, 충돌 비교 순서를 정합니다. 팀 서버는 같은 팀에 먼저 올라온 유효한 결정 전체와 비교하고, 같은 세부 주제를 먼저 봅니다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 3. 예외 상황 10가지
+“| 9 | 여러 사람 연쇄 결정 | A → B 로 바뀐 현재 결정 B | C가 다시 정함 | 현재 결정(B)과 비교. 이미 바뀐 A와는 비교하지 않음 |”"
+C-120,결정 대상·범위 식별,Missing Project Context,"Candidate statements uploaded before team, topic, subtopic, and topic-key context was loaded; one names the team","A staff member uploads candidate statements before the team name, project topic, enabled subtopics, or existing topic-key list has been loaded. One statement mentions a team name but the project connection is unclear.","The upload occurs before the context needed for comparison is loaded, and a statement's mention of a team does not clarify its project connection.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 1단계 관련성 | 관련 | 팀 이름 + 프로젝트 주제(팀 만들 때 입력)와 관련 있는 내용 | 프로젝트 주제와 연결되는 단어, 팀원 이름, 과제·발표·제출 | 주제는 청년 주거 문제로 하자. | 팀 이름만으로 판단하지 않고 프로젝트 주제를 함께 봄 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“세부 주제(topic_key)는 보드에서 결정을 묶는 기준이고, 충돌 비교 순서를 정합니다. 팀 서버는 같은 팀에 먼저 올라온 유효한 결정 전체와 비교하고, 같은 세부 주제를 먼저 봅니다.”
+
+classification.md · Sync up 분류 기준표 > 4. 출력 형식(JSON) — 백엔드(AI 담당) 전달용
+“프롬프트에 팀 이름, 프로젝트 주제, 켜 둔 소주제 목록, 기존 세부 주제 목록을 함께 넣어야 합니다.”"
+C-121,결정 대상·범위 식별,Target Ambiguity,"“Compact version” could mean the report layout, device prototype, or presentation format","A newly approved statement says, “We’ll go with the compact version,” but the record contains several possible targets: a compact report layout, a compact device prototype, and a compact presentation format. The owner and approval time are known, but the referent is not.","Unlike the routine comparison, the statement’s referent cannot be identified among several possible targets, leaving the decision comparison uncertain.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”"
+C-122,결정 대상·범위 식별,Target Ambiguity,“New plan” could refer to the revised research question or a different chart design,"A candidate sentence says, “I think the new plan is better.” The surrounding AI conversation refers to both the revised research question and a different chart design, and no clear final value is quoted in the submission.","Unlike the routine case with one clear decision to compare, this submission leaves it unclear which of two topics the candidate sentence concerns and does not quote a clear final value.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 3단계 표시 | 결정 | 팀이 확정·합의·변경한 내용 → 충돌 확인 대상 | ~로 하자, ~로 정했어, 확정, ~로 바꾸자, ~하지 말자 | 분석은 군집분석으로 바꾸자. | ""~하면 어때?"" 같은 제안·질문은 결정 아님 → 공유 후보에서 제외 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 결정 (헷갈림) | 수업 팀플 | 주제를 청년 주거로 하면 어때? | 관련 | — | 해당 없음 (제안) | — | 확정 표현 없음 → 공유 후보 제외 |”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”"
+C-123,결정 대상·범위 식별,Disabled Subtopic,"Confirmed decision under a disabled subtopic, potentially overlapping an enabled-subtopic decision",A candidate statement concerns a project subtopic that is disabled in the team’s classification settings. The statement appears to be a confirmed decision and may overlap with an existing decision under an enabled subtopic.,"The candidate concerns a disabled subtopic, yet may overlap with a decision under an enabled subtopic; this combines a disabled classification state with a possible cross-subtopic match.","classification.md · Sync up 분류 기준표 > 2. 회의록 대응표
+“| 확장 | 2단계 소주제 | 팀 관련 내용을 활동별로 나눠 보드 정리에 사용 | 소주제·세부 주제가 달라도 '결정'끼리 충돌 비교 (같은 세부 주제 먼저) |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“세부 주제(topic_key)는 보드에서 결정을 묶는 기준이고, 충돌 비교 순서를 정합니다. 팀 서버는 같은 팀에 먼저 올라온 유효한 결정 전체와 비교하고, 같은 세부 주제를 먼저 봅니다.”
+
+classification.md · Sync up 분류 기준표 > 4. 출력 형식(JSON) — 백엔드(AI 담당) 전달용
+“프롬프트에 팀 이름, 프로젝트 주제, 켜 둔 소주제 목록, 기존 세부 주제 목록을 함께 넣어야 합니다.”"
+C-124,결정 대상·범위 식별,Low Confidence,“Launch” may refer to different milestones; model confidence is 0.58,"A comparison is ambiguous because two statements use a broad term, “launch,” for different possible milestones. The model’s confidence is 0.58, even though its provisional judgment would otherwise be a change.","The shared broad term “launch” could refer to different milestones, making the provisional change judgment ambiguous; the confidence of 0.58 also falls below the stated 0.6 threshold.","conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“**확인 필요**: 판정과 상관없이 확신도가 0.6 미만이면 서비스는 '확인 필요'(노랑)로 남기고 사람이 정하게 한다. 애매한 쌍은 확신도를 낮게 써야 한다.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“판정 순서: 대상이 같은지 먼저 본다 → 최종 값이 같은지 → 같은 사람인지 / 팀 합의인지.”
+
+conflict_rules_v2.md · 싱크업 결정 충돌 판정 규칙 (2차 케이스 요청) > 2. 판정 4가지
+“같은 단어가 있어도 대상이 다르면 무관. 예: ""모바일 앱 = 행사 이후"" / ""앱 아이콘 = 둥근 사각형""”"
+C-125,Unclassified,Bank Account Details,Full reimbursement-account details accompanying a materials purchase with no payment-account decision,"A member submits, ""Use the reimbursement account listed here for the team purchase,"" followed by full bank-account details. The team has an approved decision about which materials to buy, but no decision about payment-account handling.","The submitted decision concerns payment-account handling, while the existing decision concerns materials; the two decisions have different scopes.","classification.md · Sync up 분류 기준표 > 1. 분류 기준
+“| 별도 검사 | 민감정보 | 전화번호, 주소, 계좌, 건강, 금융, 연애, 가족, 체류·신분 정보 | 전화번호 형식, 계좌번호, 병원, 진단, 돈 문제, 비자 | 010-1234-5678로 연락 줘. | 관련 문장 안에 있어도 해당 부분만 가림 |”
+
+classification.md · Sync up 분류 기준표 > 3. 분류 예시 24개
+“| 할 일 | 수업 팀플 | 정산은 내 계좌 [계좌]로 받고 나눠 줄게. | 관련 | 역할·일정 | 할 일 | 정산 | 결과물 없는 팀 운영 일 → 역할·일정. 계좌번호는 가림 |”"
