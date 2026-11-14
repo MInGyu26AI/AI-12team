@@ -4,32 +4,15 @@
     "name": "10게 2기조",
     "repo": "MInGyu26AI/AI-12team"
   },
-  "updated_at": "2026-11-14T22:45+09:00",
+  "updated_at": "2026-11-14T22:46+09:00",
   "summary": {
-    "decisions": 7,
-    "open_conflicts": 5,
+    "decisions": 6,
+    "open_conflicts": 3,
     "todos": 1,
     "todos_done": 0,
     "research": 2
   },
   "open_conflicts": [
-    {
-      "id": "x53c5259f57",
-      "topic_key": "확장 지원",
-      "judgement": "충돌",
-      "reason": "다른 사람이 합의 없이 양립할 수 없는 값을 정함",
-      "existing": {
-        "card_id": "924137ca6e6d98112a28f2a3e4354419bf0139745fae19a0bc4e146ce2bbf511",
-        "content": "확장 지원 = 크롬 우선",
-        "owner": "김하은"
-      },
-      "new": {
-        "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
-        "content": "확장 지원 우선순위 = 크롬 대신 사파리",
-        "owner": "김동균"
-      },
-      "status": "open"
-    },
     {
       "id": "x61188da9f1",
       "topic_key": "확장 지원",
@@ -43,23 +26,6 @@
       "new": {
         "card_id": "4dcd3e8fe2c36abdede72f191acd66bb42c8ee68512190850296776e412f707a",
         "content": "확장 지원 우선순위 = 사파리 우선 (크롬 대신)",
-        "owner": "김동균"
-      },
-      "status": "open"
-    },
-    {
-      "id": "xc1d0d01b2f",
-      "topic_key": "지원 브라우저",
-      "judgement": "충돌",
-      "reason": "다른 사람이 합의 없이 양립할 수 없는 값을 정함",
-      "existing": {
-        "card_id": "dfdf54cf97d9ce8aa57b4354f7e8d9134d10ff0b10caca8035bb82114abd1727",
-        "content": "지원 브라우저 = 크롬 우선",
-        "owner": "김단비"
-      },
-      "new": {
-        "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
-        "content": "확장 지원 우선순위 = 크롬 대신 사파리",
         "owner": "김동균"
       },
       "status": "open"
@@ -161,14 +127,6 @@
           "state": "review"
         },
         {
-          "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
-          "content": "확장 지원 우선순위 = 크롬 대신 사파리",
-          "reason": null,
-          "owner": "김동균",
-          "decided_at": "2026-11-14T22:45+09:00",
-          "state": "review"
-        },
-        {
           "card_id": "924137ca6e6d98112a28f2a3e4354419bf0139745fae19a0bc4e146ce2bbf511",
           "content": "확장 지원 = 크롬 우선",
           "reason": null,
@@ -177,7 +135,16 @@
           "state": "active"
         }
       ],
-      "history": [],
+      "history": [
+        {
+          "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
+          "content": "확장 지원 우선순위 = 크롬 대신 사파리",
+          "reason": null,
+          "owner": "김동균",
+          "decided_at": "2026-11-14T22:45+09:00",
+          "state": "rejected"
+        }
+      ],
       "status": "review"
     }
   ],
@@ -208,5 +175,24 @@
       "added_at": "2026-11-14T19:18+09:00"
     }
   ],
-  "resolved_conflicts": []
+  "resolved_conflicts": [
+    {
+      "id": "x53c5259f57",
+      "topic_key": "확장 지원",
+      "judgement": "충돌",
+      "reason": "다른 사람이 합의 없이 양립할 수 없는 값을 정함",
+      "existing": {
+        "card_id": "924137ca6e6d98112a28f2a3e4354419bf0139745fae19a0bc4e146ce2bbf511",
+        "content": "확장 지원 = 크롬 우선",
+        "owner": "김하은"
+      },
+      "new": {
+        "card_id": "c2a0c49a084dd47c319bb21e25d30a9494305822a2f9a695edd7569573dd5448",
+        "content": "확장 지원 우선순위 = 크롬 대신 사파리",
+        "owner": "김동균"
+      },
+      "resolution": "keep-existing",
+      "note": ""
+    }
+  ]
 }
