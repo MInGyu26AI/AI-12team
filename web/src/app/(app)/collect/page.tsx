@@ -2,23 +2,26 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from "@shared/batch";
+import { TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
+import { RepoLinkRow } from "@/components/board/repo-status";
 import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
-import { canSyncNow, useLocalCollector } from "@/lib/local-collector";
+import { canSyncNow, collectorLink, useLocalCollector } from "@/lib/local-collector";
 import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
+import { useRepo } from "@/lib/use-repo";
 import { cn } from "@/lib/utils";
 
 // 피그마 3번: 대화 자동 수집 (브라우저 확장 상태·수집 기준·최근 수집)
 export default function CollectPage() {
   const collector = useLocalCollector();
+  const repo = useRepo();
   const st = collector.status;
   const connected = collector.available && !!st;
+  const link = collectorLink(collector); // 확장 없음과 로컬 수집기 꺼짐을 나눠 안내한다
   const pendingIds = new Set(collector.cards.map((c) => c.id));
   const [syncing, setSyncing] = useState(false);
 
@@ -47,17 +50,24 @@ export default function CollectPage() {
       {collector.error && <p role="alert">{collector.error}</p>}
       <ExtensionMissingDialog missing={collector.extensionMissing} />
       {connected && <CollectionSettings status={st} onChange={collector.updateSettings} />}
+      {connected && repo.status && (
+        <section className="rounded-xl border bg-card px-6 py-4" aria-label="레포 연결">
+          <RepoLinkRow status={repo.status} />
+        </section>
+      )}
 
       {/* 연결된 AI */}
       <section className="rounded-xl border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
           <h2 className="font-semibold">연결된 AI</h2>
-          {connected ? (
+          {link === "connected" ? (
             <span className="rounded-full bg-ok-soft px-3 py-1 text-xs font-semibold text-ok">로컬 수집기 연결됨</span>
-          ) : collector.checked ? (
+          ) : link === "extension-missing" ? (
             <Link href="/install" className="rounded-full bg-warn-soft px-3 py-1 text-xs font-semibold text-warn">
               브라우저 확장 설치 필요 →
             </Link>
+          ) : link === "collector-off" ? (
+            <span className="rounded-full bg-warn-soft px-3 py-1 text-xs font-semibold text-warn">로컬 수집기 꺼짐 · 수집기를 실행해 주세요</span>
           ) : (
             <span className="text-xs text-muted-foreground">확장 확인 중…</span>
           )}
@@ -69,13 +79,15 @@ export default function CollectPage() {
               ? st.lastCollectedAt
                 ? `마지막 수집 ${fmtMDHM(new Date(st.lastCollectedAt))}`
                 : "아직 수집한 대화가 없어요"
-              : "브라우저 확장을 설치하면 연결돼요"
+              : link === "collector-off"
+                ? "확장은 연결됐어요. 로컬 수집기를 실행하면 수집을 시작해요"
+                : "브라우저 확장을 설치하면 연결돼요"
           }
           on={connected}
           action={
             connected ? (
               <ConnectedChip />
-            ) : (
+            ) : link === "collector-off" ? null : (
               <Link href="/install" className="rounded-lg bg-brand-soft px-4 py-2 text-sm font-semibold text-brand">
                 연결하기
               </Link>
@@ -84,7 +96,13 @@ export default function CollectPage() {
         />
         <AiRow
           name="Codex·Claude Code"
-          detail={connected ? "로컬 수집기가 선택한 프로젝트에서 완료된 새 발화를 모아요" : "로컬 수집기를 실행하면 연결돼요"}
+          detail={
+            connected
+              ? "로컬 수집기가 선택한 프로젝트에서 완료된 새 발화를 모아요"
+              : link === "collector-off"
+                ? "로컬 수집기가 꺼져 있어요. 수집기를 실행해 주세요"
+                : "로컬 수집기를 실행하면 연결돼요"
+          }
           on={connected}
           action={connected ? <ConnectedChip /> : null}
         />
@@ -95,33 +113,14 @@ export default function CollectPage() {
       {/* 수집 기준 */}
       <section className="space-y-5 rounded-xl border bg-card p-6">
         <h2 className="font-semibold">수집 기준</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <span>대화</span>
-          <span className="flex items-center rounded-lg border">
-            <button
-              className="px-3 py-2 text-muted-foreground disabled:opacity-40"
-              disabled={!connected || st.turnsPerBatch <= 1}
-              onClick={() => st && collector.updateSettings({ turnsPerBatch: st.turnsPerBatch - 1 })}
-              aria-label="줄이기"
-            >
-              <Minus className="size-4" />
-            </button>
-            <b className="w-8 text-center text-lg text-brand">{st?.turnsPerBatch ?? TURNS_PER_BATCH}</b>
-            <button
-              className="px-3 py-2 text-muted-foreground disabled:opacity-40"
-              disabled={!connected || st.turnsPerBatch >= MAX_TURNS_PER_BATCH}
-              onClick={() => st && collector.updateSettings({ turnsPerBatch: st.turnsPerBatch + 1 })}
-              aria-label="늘리기"
-            >
-              <Plus className="size-4" />
-            </button>
-          </span>
-          <span>회마다 자동으로 수집해 승인함에 올려요</span>
-        </div>
+        {/* 묶음 크기는 팀 고정값 (shared/batch.ts). 수집기에 다른 값이 남아 있으면 확장이 기본값으로 되돌린다 */}
+        <p>
+          대화 <b className="text-lg text-brand">{TURNS_PER_BATCH}</b>회마다 자동으로 수집해 승인함에 올려요
+        </p>
         {connected && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
             <span>
-              다음 수집까지 대화 <b>{st.nextBatchTurns ?? st.bufferedTurns}</b>/{st.turnsPerBatch}회
+              다음 수집까지 대화 <b>{st.nextBatchTurns ?? st.bufferedTurns}</b>/{TURNS_PER_BATCH}회
             </span>
             <button
               className="ml-auto rounded-md border bg-background px-2.5 py-1 text-xs font-medium disabled:opacity-40"
@@ -133,9 +132,9 @@ export default function CollectPage() {
           </div>
         )}
         <div>
-          <p className="font-medium">이 팀 프로젝트와 관련된 대화만 수집</p>
+          <p className="font-medium">프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유</p>
           <p className="text-sm text-muted-foreground break-keep">
-            수집한 발화를 AI로 분류하고 팀 관련 후보만 검토함에 보여줍니다. 팀 공유는 승인 후에만 진행됩니다.
+            자동 수집은 켜 둔 동안의 새 대화를 읽어요. 프로젝트 대화를 할 때만 켜 두세요. 프로젝트와 관련된 내용만 내 검토함에 후보로 보여 주고, 팀에는 승인한 카드만 공유돼요.
           </p>
         </div>
         <ToggleRow
@@ -155,7 +154,7 @@ export default function CollectPage() {
       <RecentBatches
         batches={connected ? st.recent : null}
         pendingIds={pendingIds}
-        emptyText={connected ? `ChatGPT에서 대화를 ${st.turnsPerBatch}회 나누면 여기에 쌓여요.` : "브라우저 확장을 연결하면 수집 기록이 보여요."}
+        emptyText={connected ? `ChatGPT에서 대화를 ${TURNS_PER_BATCH}회 나누면 여기에 쌓여요.` : "브라우저 확장을 연결하면 수집 기록이 보여요."}
       />
 
       <p className="text-sm text-muted-foreground">

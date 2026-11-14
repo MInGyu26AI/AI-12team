@@ -45,6 +45,7 @@ class WatchPaths(unittest.TestCase):
                    side_effect=self.recorder('capture_scanned_jobs', capture_error)), \
              patch('collection_loop.batch_classification.classify_queued',
                    side_effect=self.recorder('classify_queued', classify_error)), \
+             patch('collection_loop.follow_team_topic', side_effect=self.recorder('follow_team_topic')), \
              patch('collection_loop.retention.sweep'), patch('collection_loop.time.sleep', side_effect=_StopLoop):
             with self.assertRaises(_StopLoop):
                 collection_loop.watch(self.db, None, pipeline=pipeline)
@@ -57,7 +58,8 @@ class WatchPaths(unittest.TestCase):
     def test_integrated_runs_standard_path_then_legacy_drain(self):
         pipeline = FakePipeline()
         process = self.run_once(pipeline)
-        self.assertEqual(self.calls, ['capture_scanned_jobs', 'classify_queued', 'process'])
+        # The team's shared topic is followed first, so this iteration already classifies by it.
+        self.assertEqual(self.calls, ['follow_team_topic', 'capture_scanned_jobs', 'classify_queued', 'process'])
         process.assert_called_once_with(self.db, drafts_only=True, gate=pipeline.privacy)
         self.assertEqual(self.status(), '')
 
@@ -71,7 +73,7 @@ class WatchPaths(unittest.TestCase):
         with self.assertLogs('syncup', level='WARNING') as logs:
             process = self.run_once(pipeline, capture_error=ValueError('PRIVATE_INPUT'))
         self.assertIn('local_intake', logs.output[0])
-        self.assertEqual(self.calls, ['capture_scanned_jobs', 'classify_queued', 'process'])
+        self.assertEqual(self.calls, ['follow_team_topic', 'capture_scanned_jobs', 'classify_queued', 'process'])
         process.assert_called_once_with(self.db, drafts_only=True, gate=pipeline.privacy)
         self.assertEqual(self.status(), '로컬 발췌 변환 실패 · 원본 작업 보존')
 

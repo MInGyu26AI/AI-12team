@@ -35,6 +35,11 @@ describe('settingsFromStatus', () => {
     expect(next).not.toHaveProperty('teams');
     expect(next).not.toHaveProperty('counts');
   });
+
+  it('설정 화면에서 적은 팀 목표·범위·규칙은 수집기 상태로 새로 고쳐도 남는다', () => {
+    const teamCriteria = { teamGoal: 'MVP 제출', teamRules: ['승인 후 공유'] };
+    expect(settingsFromStatus(stored({ teamCriteria }), status).teamCriteria).toEqual(teamCriteria);
+  });
 });
 
 describe('saveSetup (팝업 설정 저장)', () => {
@@ -73,10 +78,6 @@ describe('수동 보내기를 막는 이유 (수집기는 수집 중일 때만 �
 });
 
 describe('팝업 입력값', () => {
-  it('묶음 크기는 수집기가 받는 1~50 으로 자른다', () => {
-    expect([0, 1, 50, 51].map(clampTurns)).toEqual([1, 1, 50, 50]);
-  });
-
   it('종료 시각 입력을 비우면 보낼 값이 없다 (수집기는 종료 시각 지우기를 받지 않는다)', () => {
     expect(fromLocalInput('')).toBeNull();
     expect(fromLocalInput('2026-11-09T23:30')).toBe(new Date('2026-11-09T23:30').toISOString());

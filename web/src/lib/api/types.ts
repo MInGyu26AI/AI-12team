@@ -1,3 +1,4 @@
+import type { RepoStatus } from "@shared/repo";
 import type { Conflict, RelatedCard, Resolution } from "@shared/types";
 
 // 승인 결과. 실제 모드는 팀 서버가 전송을 받은 뒤 충돌을 검사하므로 늘 빈 목록이고(보드의 검사 진행·충돌 배너로 확인),
@@ -29,4 +30,5 @@ export interface TeamApi {
   setTodoDone(id: string, done: boolean): Promise<void>; // team.setDone
   retryCheck(id: string): Promise<void>; // team.retryCheck — 멈춘 충돌 검사의 남은 비교를 다시 시작
   getHistory(): Promise<DecisionHistory>; // team.history + team.conflictHistory
+  getRepo(): Promise<RepoStatus>; // team.repo — 팀 상태 파일 GitHub 저장 상태 (연결 안 된 팀은 linked:false)
 }

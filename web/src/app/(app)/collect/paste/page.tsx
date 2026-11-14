@@ -12,7 +12,7 @@ import { ExportUpload } from "@/components/review/export-upload";
 import { PasteInput } from "@/components/review/paste-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { boardTopicKeys, USE_MOCK } from "@/lib/api";
-import { appendToCollector } from "@/lib/collector-intake";
+import { appendToCollector, intakeNotice } from "@/lib/collector-intake";
 import { useMockCandidates } from "@/lib/mock-candidates";
 import { knownNamesOf, useTeam } from "@/lib/team";
 
@@ -42,8 +42,9 @@ export default function PastePage() {
         await classifyInBrowser(utterances, label);
         toast.success("분류했어요. 승인함에서 팀에 올릴 내용을 골라 주세요");
       } else {
-        await appendToCollector(utterances);
-        toast.success("분류 대기함에 저장했어요. 승인함에서 처리 결과를 확인하세요.");
+        // 수집기가 받은 것만 사실대로 알린다 (보관·중복·팀 기록 제외가 있으면 경고)
+        const { tone, text } = intakeNotice(await appendToCollector(utterances));
+        toast[tone](text);
       }
       router.push("/review");
     } catch (e) {

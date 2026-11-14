@@ -10,7 +10,7 @@ from psycopg.rows import dict_row
 DB_TIMEOUT_SECONDS = 5
 TOKEN_PATTERN = re.compile(r'[A-Za-z0-9_-]{43}')  # secrets.token_urlsafe(32), as team_admin.py issues them
 REQUIRED_TABLES = ('users', 'teams', 'memberships', 'shared_cards', 'record_states',
-                   'conflict_checks', 'conflicts', 'conflict_events', 'todo_states')
+                   'conflict_checks', 'conflicts', 'conflict_events', 'todo_states', 'team_settings')
 # conflict_checks columns that team_upgrades.sql adds, with what each one records
 UPGRADE_COLUMNS = {'diagnostics': '진단 기록', 'progress': '검사 진행'}
 

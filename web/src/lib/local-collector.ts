@@ -216,3 +216,15 @@ export function useLocalCollector() {
     ...ACTIONS,
   };
 }
+
+// 연결 상태 구분 (대화 수집 화면 · 빈 승인함 안내):
+// checking = 아직 확인 중, connected = 수집기 응답, extension-missing = 확장이 요청을 받지 않음(설치 안 됨 또는 팝업 주소가 이 페이지가 아님),
+// collector-off = 확장은 받았지만 로컬 수집기가 꺼져 있거나 연결 실패. 목업 모드는 수집기에 요청하지 않으므로 확장 설치 안내를 둔다
+export type CollectorLink = "checking" | "connected" | "extension-missing" | "collector-off";
+
+export function collectorLink(c: { checked: boolean; available: boolean; extensionMissing: boolean; status: ExtStatus | null }): CollectorLink {
+  if (USE_MOCK) return "extension-missing";
+  if (!c.checked) return "checking";
+  if (c.available && c.status) return "connected";
+  return c.extensionMissing ? "extension-missing" : "collector-off";
+}

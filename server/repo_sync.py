@@ -20,6 +20,7 @@ from diagnostics import failure
 from github_repo import GitHubError, last_commit, save
 from team_access import authorized
 from team_board import board, conflicts, done_todos
+from team_settings import state_team
 
 GITHUB_API = 'https://api.github.com'
 FILES = ('SYNCUP.md', 'syncup.json')
@@ -62,9 +63,10 @@ def state_files(c, target):
     team_id = target.team_id
     team = c.execute('SELECT name FROM syncup.teams WHERE id=%s', (team_id,)).fetchone()
     changed = c.execute('''SELECT greatest((SELECT max(at) FROM syncup.todo_states WHERE team_id=%s),
-        (SELECT max(at) FROM syncup.conflict_events WHERE team_id=%s)) AS at''', (team_id, team_id)).fetchone()['at']
+        (SELECT max(at) FROM syncup.conflict_events WHERE team_id=%s),
+        (SELECT at FROM syncup.team_settings WHERE team_id=%s)) AS at''', (team_id, team_id, team_id)).fetchone()['at']
     state = build_state(board(c, team_id, history=True), conflicts(c, team_id, history=True), done_todos(c, team_id),
-                        team=dict(name=team and team['name'], repo=target.repo),
+                        team=dict(name=team and team['name'], repo=target.repo, **state_team(c, team_id)),
                         changed_at=changed.timestamp() if changed else None)
     return state, {'SYNCUP.md': render_markdown(state), 'syncup.json': dumps(state)}
 

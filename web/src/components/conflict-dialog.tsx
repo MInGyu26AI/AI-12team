@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, parseSource } from "@shared/format";
+import { ALERT_LEVEL, alertLevel } from "@shared/labels";
 import type { Conflict, RelatedCard, Resolution } from "@shared/types";
 import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,8 @@ export function ConflictDialog({
   const x = left[position];
   if (!x) return null;
   const isChange = x.judgement === "변경";
+  const level = alertLevel(x);
+  const tone = ALERT_LEVEL[level];
 
   const resolve = async (choice: Resolution) => {
     setPending(choice);
@@ -67,7 +70,7 @@ export function ConflictDialog({
         </button>
 
         <div className="flex items-start gap-4 pr-6">
-          <span className={cn("flex size-12 shrink-0 items-center justify-center rounded-full", isChange ? "bg-change-soft text-change" : "bg-sensitive-soft text-sensitive")}>
+          <span className={cn("flex size-12 shrink-0 items-center justify-center rounded-full", tone.badge)}>
             <TriangleAlert className="size-6" />
           </span>
           <div className="space-y-1">
@@ -86,9 +89,10 @@ export function ConflictDialog({
           <Side label="새로 올라온 결정" card={x.cardB} tone="new" />
         </div>
 
-        <div className={cn("mt-4 rounded-lg p-4", isChange ? "bg-change-soft/60" : "bg-sensitive-soft")}>
-          <p className={cn("text-sm font-semibold", isChange ? "text-change" : "text-sensitive")}>
+        <div className={cn("mt-4 rounded-lg p-4", tone.badge)}>
+          <p className={cn("text-sm font-semibold", tone.text)}>
             {x.method === "rule" ? "규칙 참고" : "AI 판정"}: {x.judgement}
+            {level === "review" && <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-xs">확인 필요 · 확신도 낮음</span>}
             {x.resolution === "discuss" && <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-xs text-foreground">논의 요청됨</span>}
           </p>
           <p className="mt-1 text-sm break-keep">{x.reason}</p>

@@ -92,7 +92,7 @@ class DiagnosticPersistence(TeamIntegration):
         board = self.team_request('GET', 'board')[1]
         self.assertNotIn('diagnostics', json.dumps(board))
 
-    def test_diagnostic_partial_failure_is_unknown_and_not_retried(self):
+    def test_diagnostic_uncertain_pair_is_unknown_and_not_retried(self):
         self.ready(2)
         calls = []
         class Model:
@@ -104,10 +104,13 @@ class DiagnosticPersistence(TeamIntegration):
         with decisions_model(Model()):
             self.run_due_checks()
             self.run_due_checks()
-        d = self.saved()['diagnostics']
-        self.assertEqual((d['candidate_count'], d['outcome'], len(calls)), (1, 'needs-review', 2))
+        row = self.saved()
+        d = row['diagnostics']
+        # The uncertain last pair went to the team as an alert, so the check is complete and is not asked again.
+        self.assertEqual((row['state'], d['candidate_count'], d['outcome'], len(calls)), ('complete', 1, 'needs-review', 2))
         item = self.board_item('new')
-        self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=1, skipped=0))
+        self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=2, skipped=0))
+        self.assertEqual([x['judgement'] for x in self.team_request('GET', 'conflicts')[1]['conflicts']], ['확인 필요'])
         self.assertIsNone(d['checked_count'])
         self.assertNotIn(SECRET, json.dumps(d))
 

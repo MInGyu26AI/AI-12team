@@ -24,6 +24,7 @@ PY = sys.executable
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
     ('local', [PY, 'checks/check_sync_intake.py'], '계정 동기화 창·접수·화면 경로 중복 (docs/sync-contract.md 3장)'),
+    ('local', [PY, 'checks/check_team_topic.py'], '팀이 함께 쓰는 프로젝트 주제: 올리기·따라가기·팀 설정 중계'),
     ('local', [PY, 'checks/check_pipeline_schema.py'], '로컬 DB 마이그레이션·승인 계약·TS 공용 상수'),
     ('local', [PY, 'checks/check_retention.py'], '원문·백업 7일 보존 정책'),
     ('local', [PY, 'checks/check_local_privacy.py'], '로컬 개인정보 필터·외부 전송 차단'),

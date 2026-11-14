@@ -12,9 +12,14 @@ export interface Utterance {
   source: string; // 예: "ChatGPT, 2026-11-06 21:10" (format.ts formatSource)
 }
 
-// "나:", "You said:", "ChatGPT:" 같은 화자 표시
-const USER_PREFIX = /^(?:나|me|user|you said|you|사용자)\s*:?\s*$|^(?:나|me|user|you|사용자)\s*:\s*/i;
-const AI_PREFIX = /^(?:chatgpt|gpt|claude|gemini|ai|assistant)(?: said)?\s*:?\s*$|^(?:chatgpt|gpt|claude|gemini|ai|assistant)\s*:\s*/i;
+// 화자 표시: "나:" · "ChatGPT:", ChatGPT 영어 복사 "You said:" · "ChatGPT said:", 한국어 복사 "나의 말:" · "ChatGPT의 말:".
+// 표시만 있는 줄(콜론 생략 가능)이거나, 콜론 뒤에 본문이 이어지는 줄
+function speakerPrefix(names: string) {
+  const head = `(?:${names})(?:\\s*의\\s*말|\\s+said)?`;
+  return new RegExp(`^${head}\\s*:?\\s*$|^${head}\\s*:\\s*`, "i");
+}
+const USER_PREFIX = speakerPrefix("나|me|user|you|사용자");
+const AI_PREFIX = speakerPrefix("chatgpt|gpt|claude|gemini|ai|assistant");
 
 /** 붙여넣은 대화 → 발화. 화자 표시가 없는 줄은 앞 화자를 이어 받고, 처음엔 사용자로 추정한다 */
 export function parsePasted(text: string, source: string): Utterance[] {

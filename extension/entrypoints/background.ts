@@ -17,6 +17,7 @@ import {
 import { SYNC_ALARM } from '@/lib/chatgpt-sync/state';
 import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
+import { CONFLICT_ALARM, checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
 import { collectResultToast, type BgRequest, type BgResponse, type CollectResult, type TabToast, type TeamRecordRaw } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
 import { clearLegacyPendingCards, sendBlockedReason, settingsItem } from '@/lib/settings';
@@ -141,7 +142,10 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 
 export default defineBackground(() => {
   listenNoticeClick(); // 알림을 누르면 서비스 워커가 깨어나므로, 리스너는 비동기 작업 앞 동기 구간에서 붙인다
+  browser.notifications.onClicked.addListener((id) => void openBoardFromNotification(id)); // 충돌 알림만 처리 (id 로 구분)
   void refreshStatusOrRecordFailure();
+  void checkConflicts();
+  browser.alarms.create(CONFLICT_ALARM, { periodInMinutes: 1 }); // 새 미해결 팀 충돌을 시스템 알림·빨간 배지로 (lib/conflict-alerts.ts)
   browser.alarms.create(REFRESH_ALARM, { periodInMinutes: 0.5 });
   void startSyncScheduler();
   browser.alarms.onAlarm.addListener((alarm) => {
@@ -151,6 +155,7 @@ export default defineBackground(() => {
       void checkChatTabs(); // 채팅 탭의 화면 읽기가 이상하면 그 탭 배지에 `!` (lib/tab-health.ts)
     }
     if (alarm.name === SYNC_ALARM) void runSyncPass();
+    if (alarm.name === CONFLICT_ALARM) void checkConflicts();
   });
   browser.runtime.onStartup.addListener(() => void runSyncPass());
   // 리스너가 Promise 를 돌려주는 응답은 Chrome 148 부터라 그 전 버전에서는 보낸 쪽이 undefined 를 받는다.

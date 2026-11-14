@@ -27,8 +27,8 @@ export default function LandingPage() {
             <br />팀의 결정은 하나로
           </h1>
           <p className="mt-6 max-w-xl text-base text-muted-foreground break-keep sm:text-lg">
-            ChatGPT 대화 속 결정·조사·할 일을 자동으로 모으고,
-            <br className="hidden sm:block" /> 내가 승인한 것만 팀과 나누며, 결정이 어긋나면 먼저 알려드려요.
+            프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유해요.
+            <br className="hidden sm:block" /> 결정·조사·할 일을 한곳에 모으고, 결정이 어긋나면 먼저 알려드려요.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href={START.href} className={cn(buttonVariants({ size: "lg" }), "h-12 bg-brand px-7 text-base hover:bg-brand-hover")}>

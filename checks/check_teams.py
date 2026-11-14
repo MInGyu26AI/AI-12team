@@ -188,7 +188,7 @@ class TeamIsolation(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.state = Path(self.tmp.name).resolve()
         with psycopg.connect(self.admin_dsn) as c:
-            for table in ('conflict_events','conflicts','conflict_checks','record_states','todo_states'):
+            for table in ('conflict_events','conflicts','conflict_checks','record_states','todo_states','team_settings'):
                 c.execute('DELETE FROM syncup.'+table)
             c.execute('DELETE FROM syncup.shared_cards')
             c.execute('DELETE FROM syncup.tokens')
@@ -369,6 +369,49 @@ class TeamIsolation(unittest.TestCase):
             self.assertEqual(status,200)
             self.assertIn(expected,raw)
             self.assertNotIn(absent,raw)
+
+    def test_team_settings_are_shared_within_the_team_only(self):
+        """Every member reads and changes the team's settings; another team can do neither, even in SQL."""
+        def settings(user, team, data=None):
+            status, raw = request(self.api, 'POST' if data is not None else 'GET',
+                                  '/teams/'+self.teams[team]+'/settings', self.tokens[user], data)
+            return status, json.loads(raw)
+        status, body = settings('Alice', 'A')
+        self.assertEqual((status, body['settings']['topic'], body['settings']['updatedAt']), (200, '', None))
+        status, body = settings('Alice', 'A', {'topic': ' 팀 AI 메모리 ', 'rules': ['개인 일정 금지']})
+        self.assertEqual((status, body['settings']['topic'], body['settings']['rules']), (200, '팀 AI 메모리', ['개인 일정 금지']))
+        status, body = settings('Dana', 'A')
+        self.assertEqual((body['settings']['topic'], body['settings']['updatedBy']), ('팀 AI 메모리', self.users['Alice']))
+        self.assertEqual(settings('Dana', 'A', {'goal': '11/16 제출'})[1]['settings']['topic'], '팀 AI 메모리')  # others kept
+        for data in (None, {'topic': '남의 팀 주제'}):
+            status, body = settings('Bob', 'A', data)
+            self.assertEqual(status, 403)
+            self.assertNotIn('팀 AI 메모리', json.dumps(body, ensure_ascii=False))
+        self.assertEqual(settings('Bob', 'B')[1]['settings']['topic'], '')
+        for bad in ({}, {'topic': 'x'*1201}, {'name': '팀'}, {'rules': '규칙'}, {'rules': ['']}, {'topic': 3}):
+            with self.subTest(bad=bad):
+                self.assertEqual(settings('Alice', 'A', bad)[0], 400)
+        with authorized(self.api_dsn, self.tokens['Alice'], self.teams['A']) as (c, user):
+            for query, args in [('INSERT INTO syncup.team_settings(team_id,topic,actor) VALUES(%s,%s,%s)',
+                                 (self.teams['B'], 'evil', user)),
+                                ('UPDATE syncup.team_settings SET topic=%s, actor=%s', ('forged', self.users['Bob'])),
+                                ('DELETE FROM syncup.team_settings', ())]:
+                with self.subTest(query=query), self.assertRaises(psycopg.errors.InsufficientPrivilege), c.transaction():
+                    c.execute(query, args)
+        self.assertEqual(settings('Alice', 'A')[1]['settings']['topic'], '팀 AI 메모리')
+
+    def test_collectors_follow_the_team_topic(self):
+        """A topic one member's collector saves reaches another member's collector through the team server."""
+        from collection_settings import configure, read_options, sync_team_topic
+        from turn_pipeline import TurnPipeline
+        pipeline = TurnPipeline(self.db, self.client)
+        configure(pipeline, dict(projectTopic='팀 AI 메모리'))
+        status, raw = request(self.api, 'GET', '/teams/'+self.teams['A']+'/settings', self.tokens['Alice'])
+        self.assertEqual(json.loads(raw)['settings']['topic'], '팀 AI 메모리')
+        request(self.api, 'POST', '/teams/'+self.teams['A']+'/settings', self.tokens['Alice'], {'topic': '알림 서비스'})
+        self.assertEqual(sync_team_topic(pipeline), '알림 서비스')
+        with connect(self.db) as c:
+            self.assertEqual(read_options(c)['projectTopic'], '알림 서비스')
 
     def test_database_rls_even_without_application_filter(self):
         self.assertEqual(self.publish('Alice','A',text='A_ONLY')[0],200)

@@ -8,7 +8,7 @@ export type BgRequest =
   | { type: 'syncProjects' } // 팝업 프로젝트 고르기. result = SyncProject[] (대표 탭의 sync.projects). 실패 문구는 syncSet 표와 같다
   | { type: 'teamRecord' } // 채팅 화면 '팀 기록 불러오기'. result = TeamRecordRaw
   | { type: 'collect'; trigger: 'auto' | 'manual' | 'selection'; messages: CollectedMessage[] }
-  | { type: 'flush' } // 지금 쌓인 대화까지 분류 (팝업 "지금 분류하기")
+  | { type: 'flush' } // 지금 쌓인 대화까지 분류 (팝업 "싱크 맞추기")
   | { type: 'updateSettings'; patch: ExtSettingsPatch } // 로컬 수집기 collection.configure 로 그대로 보낸다
   | { type: 'refresh' } // 로컬 수집기 상태 다시 읽기 (팝업을 열 때)
   | { type: 'rpc'; method: string; params?: unknown }; // 개인 검토함 웹 → 로컬 수집기 (web-bridge 가 중계)

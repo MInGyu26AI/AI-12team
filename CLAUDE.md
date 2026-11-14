@@ -10,13 +10,13 @@
 ## 2. 팀 역할
 - 김단비: 프론트엔드 - 크롬 확장 프로그램 + 팀 웹 화면 + 배포 + 중간 보고서 총괄
 - 김하은: 백엔드 A(AI) - 분류 프롬프트, 카드 JSON 형식, 충돌 판정
-- 김동균: 백엔드 B(서버) - 팀 서버 API, DB, Mac 로컬 수집기(Native Messaging host), 배포
+- 김동균: 백엔드 B(서버) - 팀 서버 API, DB, 로컬 수집기(Mac·Windows, Native Messaging host), 배포
 - 김민규: 기획/디자인 - Figma 화면 디자인, 분류 기준표, 샘플 대화·정답표
 
 ## 3. 전체 구조 (데이터 흐름)
 1. 사용자가 확장 프로그램 팝업에서 로컬 수집기에 연결된 등록 팀을 확인하고, 프로젝트 주제·수집 종료 시각을 정한 뒤 자동 수집을 켬 (수집할 로컬 프로젝트는 수집기 실행 때 지정)
 2. Content Script가 ChatGPT 화면에서 설정 기간 중 새로 완료된 발화(사용자·AI)를 자동 추출
-3. Background Service Worker가 Native Messaging으로 발화를 동균님의 Mac 로컬 수집기에 전달
+3. Background Service Worker가 Native Messaging으로 발화를 동균님의 로컬 수집기(Mac·Windows)에 전달
 4. 로컬 수집기가 웹 발화 + 선택한 프로젝트의 Codex·Claude Code 발화를 전처리하고, 필요한 발췌만 외부 AI로 분류
 5. 분류된 후보 카드는 '개인 검토함'(웹 /review, 비공개)에 표시 → 사용자가 확인·수정·승인
 6. 승인한 카드와 근거 발췌만 로컬 전송 대기열을 거쳐 팀 서버로 전송 → 서버가 충돌 검사 (8장)
@@ -36,7 +36,7 @@
 - /shared : 두 프로젝트가 같이 쓰는 타입 정의(카드, 충돌 등)와 목업 데이터
 - /ai : 분류·충돌 판정 AI 모듈 (하은님)
 - /scanner : Codex·Claude Code 대화 기록을 읽는 Rust 스캐너
-- /collector : Mac 로컬 수집기·개인 검토함, /server : 팀 서버, /contract : 둘이 함께 쓰는 형식, /checks : 검사 (동균님, 실행·검사 방법은 README.md)
+- /collector : 로컬 수집기(Mac·Windows. Windows는 `syncup.exe`로 실행 — [README 빠른 시작의 Windows 안내](README.md#전체-macos))·개인 검토함, /server : 팀 서버, /contract : 둘이 함께 쓰는 형식, /checks : 검사 (동균님, 실행·검사 방법은 README.md)
 - /docs : 분류 기준, 구조·실행·팀 서버·개인정보 문서 (검증 기록은 팀 노션)
 
 ## 6. 데이터 형식 (코드는 /shared/types.ts)
@@ -78,26 +78,29 @@
 - confidence < 0.6이면 "확인 필요" 배지, masked=true면 "민감정보 가림" 배지, is_change=true인 결정은 "변경" 배지
 - 팀 결정 기록: 왼쪽 topic_key 필터 · 가운데 결정 타임라인(최신순, 충돌 카드 빨간 테두리) · 오른쪽 할 일 체크 + 조사·참고. 맨 위 충돌 배너 → 충돌 모달
 - 충돌 모달: '충돌'은 기존 유지 / 새 결정으로 변경 / 둘 다 유효 / 팀에 논의 요청(resolution "discuss", 경고 유지). '변경'은 예(새 결정 채택) / 아니오(기존 유지)와 '기존 안 확인하기'. 어느 쪽이든 처리 이유(선택)를 남길 수 있음
-- 색 (피그마, /shared/theme.css 토큰): 브랜드·결정=남색 #4F46E5, 조사=초록, 할 일=주황, 개인=회색, 충돌=빨강, 변경=주황빛
+- 색 (피그마, /shared/theme.css 토큰): 브랜드·결정=남색 #4F46E5, 조사=초록, 할 일=주황, 개인=회색, 충돌=빨강, 변경=주황빛(승인함 배지)
+- 팀 보드 충돌 알림 3단계 (shared/labels.ts alertLevel·ALERT_LEVEL, 토큰 alert-*): 충돌=빨강 / 확인 필요=노랑(Conflict.confidence < 0.6) / 변경=파랑
+- 확장은 1분마다 team.conflicts를 확인해 새 미해결 충돌을 시스템 알림 + 빨간 아이콘 배지로 알림(누르면 /board). 이미 알린 충돌은 다시 알리지 않음
 
 ## 7. 기능 목록과 우선순위
 ### [MVP 11/8 필수]
 A. 확장 프로그램 팝업
   - 로컬 수집기에 연결된 등록 팀·사용자 확인 (실제 모드는 관리자가 등록, 팀 코드 가입은 웹 목업 모드만)
-  - 프로젝트 주제·소주제, 분류 묶음 크기, 수집 종료 시각 설정 (로컬 프로젝트는 수집기 실행 때 지정)
-  - 이후 '자동 수집' 켜기/끄기 스위치, 다음 분류까지 쌓인 대화 수와 '지금 분류하기', 검토 대기 카드 수, 마지막 수집 시각, '개인 검토함 열기'
+  - 프로젝트 주제·소주제, 수집 종료 시각 설정 (로컬 프로젝트는 수집기 실행 때 지정). 소주제를 하나도 고르지 않으면 모두 켬(빈 목록 = 수집기 기본값). 분류 묶음 크기는 7장 C처럼 고정이라 고르지 않음
+  - 이후 '자동 수집' 켜기/끄기 스위치, 다음 분류까지 쌓인 대화 수와 '싱크 맞추기'(개인 검토함 상단에도 같은 버튼, 검토함에 들어올 때 자동 1회), 검토 대기 카드 수, 마지막 수집 시각, '개인 검토함 열기'
 B. ChatGPT 대화 자동 추출
   - 설정 기간 중 새로 완료된 발화 단위로 추출(대화마다 버튼 누를 필요 없음)
   - 사이트별 추출 코드는 파일을 분리(ChatGPT 화면 구조가 바뀌면 그 파일만 수정)
 C. 로컬 수집기 연동 (분류는 김하은님 ai/ — 확장 코드는 하은님 규칙에 맞춘다)
-  - Background에서 Native Messaging RPC(turns.append·candidates.list)로 발화 전달, 수집기 연결이 실패하면 팝업·화면에 오류를 알림(목업 분류로 대체하지 않음)
-  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(묶기는 ai/syncup_ai/batch.py, shared/batch.ts에는 기본값과 상한 1..50만). 수동 보내기(지금 분류하기·싱크업에 보내기·선택한 내용 보내기)는 수집 중일 때만 되고 남은 것까지 보냄. 일시중지·종료 때는 보내지 않고 로컬에 뒀다가 다시 수집하면 다음 묶음에 합침
+  - Background에서 Native Messaging RPC(turns.append)로 발화 전달, 상태·검토 대기 수는 collection.status(counts.reviewPending, 개수만. counts 없는 옛 수집기만 candidates.list), 수집기 연결이 실패하면 팝업·화면에 오류를 알림(목업 분류로 대체하지 않음)
+  - 대화 횟수 기준: 질문+답변 = 1턴, 10턴마다 분류(묶기는 ai/syncup_ai/batch.py, shared/batch.ts의 TURNS_PER_BATCH로 고정 — 화면에서 바꾸지 않고, 수집기에 다른 값이 남아 있으면 확장이 기본값으로 되돌림). 수동 보내기(싱크 맞추기·싱크업에 보내기·선택한 내용 보내기)는 수집 중일 때만 되고 남은 것까지 보냄. 일시중지·종료 때는 보내지 않고 로컬에 뒀다가 다시 수집하면 다음 묶음에 합침
   - 민감정보 가림 규칙(ai/syncup_ai/mask.py = shared/classify.ts mask, shared/mask-cases.json으로 함께 검사), 충돌 판정은 팀 서버의 ai/syncup_ai/conflict.py (shared/conflict.ts는 목업 모드용 근사)
-  - 분류 완료 시 팝업의 후보 수 갱신 (배지는 공유 후보만 셈)
+  - 분류 완료 시 팝업의 후보 수 갱신 (배지는 검토 대기 수, 미해결 충돌이 있으면 빨간 배지로 충돌 수)
 D. 승인함 (웹 /review — 확장이 모은 후보 + 붙여넣기 후보, 본인만 보는 비공개 화면)
   - 후보를 결정·할 일·조사(tag)로 표시, 출처와 원문(sentence) 확인·수정
   - 체크한 카드만 승인(로컬 RPC candidates.approve) → 팀 서버로 전송 (8장)
-  - 백업 입력 1: 대화 붙여넣기 입력창 (자동 추출 실패 시)
+  - 백업 입력 1: 대화 붙여넣기 입력창 (자동 추출 실패 시). ChatGPT 복사 머리말을 화자로 인식(한국어 '나의 말:'·'ChatGPT의 말:', 영어 'You said:'·'ChatGPT said:', shared/utterance.ts)
+  - 붙여넣기·내보내기 결과는 turns.append 응답대로 알림: 따로 보관·이미 보낸 것·팀 기록 제외가 있으면 그 개수를 경고로 (무조건 성공이라고 하지 않음)
   - 백업 입력 2: ChatGPT 내보내기 zip 또는 conversations.json 업로드
     → JSZip으로 브라우저 안에서 열고, 대화 목록(제목·날짜)에서 팀 관련 대화만 선택
     → 원본 파일은 서버에 보내지 않고, 붙여넣기와 같은 로컬 전처리·승인 절차를 거침
@@ -108,6 +111,8 @@ E. 팀 웹
   - 팀 기록 복사: 팀 결정 기록을 AI에 붙여넣기 좋은 텍스트로 변환해 클립보드 복사
 F. 상태·에러 처리
   - 로컬 수집기 연결 끊김, 분류 실패, 공유 실패, 충돌 검사 대기를 구분해서 표시
+  - 대화 수집·승인함은 '브라우저 확장 설치 필요'(확장이 응답하지 않음, /install 링크)와 '로컬 수집기 꺼짐'(확장은 응답, 수집기 연결 실패 → 실행 안내)을 나눔 (web/src/lib/local-collector.ts collectorLink)
+  - 팀 보드는 새로고침이 실패해도 마지막 화면과 열린 충돌 창을 두고 '연결이 잠시 끊겼어요'만 표시, 늦게 온 옛 응답은 버림 (요청 순번 비교)
 
 ### [11/9 ~ 11/15 확장]
 - Claude·Gemini 웹 채팅 지원 추가
@@ -118,10 +123,13 @@ F. 상태·에러 처리
 - 웹의 TeamApi(web/src/lib/api/types.ts)는 로컬 RPC를 부른다: 승인 candidates.approve, 조회 team.board·team.history·team.conflicts·team.conflictHistory·team.done, 처리 team.resolve·team.setDone·team.retryCheck
 - 로컬 수집기는 team.* 요청을 연결된 팀의 /teams/{id}/... 경로로 넘긴다 (collector/team_relay.py, 경로 목록은 server/team_server.py)
 - 충돌 처리 resolution: keep-existing | adopt-new | both-valid | discuss (+ resolutionNote)
-- 팀 상태 파일(SYNCUP.md·syncup.json) GitHub 저장: 팀 서버가 변경 뒤 자동 커밋(server/repo_sync.py). 웹은 로컬 RPC team.repo(= GET /teams/{id}/repo)로 저장 상태·마지막 커밋을 읽을 수 있다(웹 화면은 아직 없음). 형식은 docs/team-server.md 'GitHub 레포 저장'
+- 팀 상태 파일(SYNCUP.md·syncup.json) GitHub 저장: 팀 서버가 변경 뒤 자동 커밋(server/repo_sync.py). 웹은 로컬 RPC team.repo(= GET /teams/{id}/repo)로 저장 상태·마지막 커밋을 읽는다 (shared/repo.ts). 화면: 팀 보드 레포 상태 바·'팀 기록' 탭(레포의 SYNCUP.md, syncup.json 내려받기)·할 일 SU-n 배지와 'ID 복사'·결정 "레포 반영 ✓", 대화 수집 화면의 연결 상태, 확장 팝업 하단. 레포 연결은 서버 환경 변수로만 정하므로 입력 화면은 없다. 형식은 docs/team-server.md 'GitHub 레포 저장'. syncup.json 에 by_branch 가 있으면 팀 보드에 '브랜치' 필터(그 브랜치의 세부 주제 결정·SU-n 할 일만)
 - 웹은 별도 API 주소를 쓰지 않는다. 실제 모드는 로컬 수집기 RPC로 팀 서버에 접근한다: 기본은 확장 경유, `NEXT_PUBLIC_LOCAL_BRIDGE=true`면 웹 서버의 `/api/local` 경유(서버 쪽 `SYNCUP_CONNECTION_FILE`·`SYNCUP_LOCAL_*` 필요). 목업 여부는 `NEXT_PUBLIC_USE_MOCK`
 
+- 프로젝트 방향성 기준(팀 목표·범위·규칙, shared/criteria.ts): 확장 설정 화면과 목업 팀 만들기에서 선택 입력, 팀 보드 맨 위 고정(목업은 팀 값, 실제 모드는 syncup.json team). 수집기 collection.configure 가 아직 teamGoal·teamScope·teamRules 를 받지 않아 확장은 저장만 한다
+
 ## 9. 개인정보·보안 원칙 (반드시 지킬 것)
+- 안내 문구는 "프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유합니다" 중심. "개인 대화를 AI가 걸러 준다"처럼 들리는 표현은 쓰지 않는다 (기기 안 개인정보 검사는 보조 장치)
 - 최초 설정에서 자동 수집 범위와 외부 AI 전송을 사용자에게 안내
 - 설정한 종료 시각에는 새 발화 수집과 외부 전송을 중단
 - 팀 서버에는 본인이 승인한 카드와 확인한 근거 발췌만 전송, 원본 대화 전체는 보내지 않음

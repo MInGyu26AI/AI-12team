@@ -4,9 +4,11 @@ import json
 import math
 import re
 import time
+import urllib.error
 
 from ai.syncup_ai.schema import SUBTOPICS
-from collection_session import bind_sharing, set_paused
+from collection_session import bind_sharing, bound_team, set_paused
+from storage import connect
 
 CONFIGURABLE = {'teamId', 'projectTopic', 'enabledSubtopics', 'turnsPerBatch', 'endsAt', 'autoCollect', 'accountSync'}
 MAX_TOPIC = 1200
@@ -123,12 +125,79 @@ def _set_end(c, value):
     c.execute('UPDATE settings SET end=?', (end,))
 
 
+def _sharing_team(c):
+    """bound_team, or None before the collector has a sharing binding at all."""
+    return bound_team(c) if c.execute('SELECT 1 FROM sharing').fetchone() else None
+
+
+def _team_settings(pipeline, team_id, data=None):
+    """GET (data None) or POST teams/{id}/settings: the team's shared settings (server/team_settings.py).
+
+    None when the team server predates team settings and answers 404, so an older server keeps working."""
+    try:
+        result = pipeline.client.request(f'teams/{team_id}/settings', data)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    settings = result.get('settings')
+    if result.get('team_id') != team_id or not isinstance(settings, dict) or not isinstance(settings.get('topic'), str):
+        raise ValueError('팀 설정 응답 오류')
+    return settings
+
+
+def _share_topic(pipeline, patch):
+    """A changed projectTopic goes to the team first, so every member's collector follows it (sync_team_topic).
+
+    Nothing is saved locally when the team server refuses it, so the members never drift apart silently."""
+    topic = patch['projectTopic']
+    if not isinstance(topic, str) or len(topic) > MAX_TOPIC:
+        raise ValueError('프로젝트 주제 오류')
+    with connect(pipeline.db) as c:
+        team_id = patch['teamId'] if isinstance(patch.get('teamId'), str) else _sharing_team(c)
+        current = read_options(c).get('projectTopic', '')
+    if not team_id or topic.strip() == current.strip():
+        return
+    try:
+        _team_settings(pipeline, team_id, {'topic': topic.strip()})
+    except (OSError, ValueError):
+        raise ValueError('팀 서버에 프로젝트 주제를 저장하지 못했습니다. 팀 서버 연결을 확인하세요.') from None
+
+
+def sync_team_topic(pipeline):
+    """Follow the team's shared project topic; the collection loop calls it every few seconds.
+
+    A team where no member has saved settings yet takes this collector's topic, so a topic set before team
+    settings existed becomes the team's. A topic the team cleared on purpose stays cleared.
+    Returns the topic in use, or None with no team or a team server without team settings."""
+    with connect(pipeline.db) as c:
+        team_id = _sharing_team(c)
+        local = read_options(c).get('projectTopic', '')
+    if not team_id:
+        return None
+    settings = _team_settings(pipeline, team_id)
+    if settings is None:
+        return None
+    if settings.get('updatedAt') is None:
+        if local.strip():
+            _team_settings(pipeline, team_id, {'topic': local.strip()})
+        return local
+    if settings['topic'] != local:
+        with pipeline.write() as c:
+            options = read_options(c)
+            options['projectTopic'] = settings['topic']
+            write_options(c, options)
+    return settings['topic']
+
+
 def configure(pipeline, patch):
     """collection.configure; the caller reports collection_status afterwards."""
     if not isinstance(patch, dict) or set(patch) - CONFIGURABLE:
         raise ValueError('수집 설정 필드 오류')
-    # me() is a network call, so it runs before taking the lock.
+    # me() and the team topic are network calls, so they run before taking the lock.
     profile = pipeline.client.me() if 'teamId' in patch else None
+    if 'projectTopic' in patch:
+        _share_topic(pipeline, patch)
     with pipeline.write() as c:
         options = read_options(c)
         if 'teamId' in patch:

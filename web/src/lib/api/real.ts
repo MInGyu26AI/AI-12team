@@ -1,3 +1,4 @@
+import type { RepoStatus } from "@shared/repo";
 import type { Conflict, RelatedCard } from "@shared/types";
 import type { ConflictEvent, TeamApi } from "./types";
 import { rpc } from "../rpc";
@@ -28,5 +29,6 @@ export function createRealApi(): TeamApi {
       ]);
       return { records: history.items, events: log.events };
     },
+    getRepo: async () => (await rpc<{ repo: RepoStatus }>("team.repo")).repo,
   };
 }

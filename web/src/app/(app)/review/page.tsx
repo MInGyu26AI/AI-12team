@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PERSONAL_COLOR, TAG_COLOR } from "@shared/labels";
 import type { Conflict, RelatedCard } from "@shared/types";
@@ -13,8 +14,10 @@ import { ReviewNotices } from "@/components/review/review-notices";
 import { ShareBar } from "@/components/review/share-bar";
 import { LoadingState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, USE_MOCK } from "@/lib/api";
+import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
 import { useTeam } from "@/lib/team";
 import { useReviewCandidates, useReviewSelection, useSyncOnOpen } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
@@ -40,6 +43,21 @@ export default function ReviewPage() {
   const [showOthers, setShowOthers] = useState(false);
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
   const [tab, setTab] = useState<Tab>("review");
+  const [syncing, setSyncing] = useState(false);
+
+  // 상단 '싱크 맞추기' (들어올 때 자동 1회는 useSyncOnOpen). 대화 수집 화면과 같은 syncNow·결과 문구
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const { tone, text } = syncNowSummary(await collector.syncNow("button"));
+      toast[tone](text);
+    } catch (error) {
+      const { tone, text } = syncNowErrorNotice(error);
+      toast[tone](text);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // 팀을 바꾸면 이전 팀에서 고른 체크와 충돌 경고를 버린다 (개인정보 목록은 아래에서 팀 id 로 다시 그린다)
   const teamId = collector.status?.teamId;
@@ -81,7 +99,15 @@ export default function ReviewPage() {
   return (
     <div className="mx-auto max-w-content space-y-6 px-gutter pt-10 pb-32">
       <div className="space-y-3">
-        <h1 className="text-3xl font-bold">팀에 올릴 내용을 골라 주세요</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-3xl font-bold">팀에 올릴 내용을 골라 주세요</h1>
+          {!USE_MOCK && (
+            <Button variant="outline" onClick={syncNow} disabled={syncing || !collector.available}>
+              <RefreshCw className={cn(syncing && "animate-spin")} />
+              {syncing ? "맞추는 중…" : "싱크 맞추기"}
+            </Button>
+          )}
+        </div>
         <p className="text-muted-foreground break-keep">{subtitle}</p>
         <div className="flex flex-wrap gap-1.5">
           {LEGEND.map(({ label, color }) => (
