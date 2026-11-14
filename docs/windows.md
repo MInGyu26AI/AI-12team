@@ -5,7 +5,7 @@
 ## 1. 현재 상태
 
 - `collector/runtime.py`의 `ENABLED_PLATFORMS`와 `scanner/src/main.rs`의 `ENABLED_OS`에 Windows가 켜져 있다. Linux는 주석이다. `checks/check_portability.py`가 두 목록이 같은지 확인한다.
-- 자동 검사는 GitHub Actions `windows-collector`(windows-2022, 영어 Windows)에서 돈다([3절](#3-자동-검사-github-actions-windows-collector)). 폴더 재구성 전 구조에서 99개가 통과했다(2026-11-13). 이 구조에서는 아직 돌리지 않았다.
+- 자동 검사는 GitHub Actions `windows-collector`(windows-2022, 영어 Windows)에서 돈다([3절](#3-자동-검사-github-actions-windows-collector)). 이 구조에서는 2026-11-14 커밋 `b7860da`로 154개가 통과했다(링크 생성 권한이 필요한 1개는 건너뜀).
 - 실제 PC 검증: 2026-11-14 단비 님(Windows 11 Home 25H2, 한국어·코드 페이지 949, Chrome 157, 확장 0.2.2). 결과와 고친 것은 [5절](#5-검증-기록)에 있다. ChatGPT 프로젝트 동기화(확장 0.2.8 이후)는 Windows에서 아직 시험하지 않았다.
 
 ## 2. 설치와 실행
@@ -100,6 +100,23 @@ Chrome이 host를 시작하는 실제 명령줄(Chrome 157): `C:\Windows\system3
 
 ## 5. 검증 기록
 
+### 2026-11-14 CI (이 구조, `feat/windows-local` `b7860da`)
+
+windows-2022, Python 3.12, MSVC Rust, Chrome for Testing 157.0.8103.78. 6분 남짓 걸렸고 모든 단계가 첫 실행에 통과했다.
+
+| 단계 | 시험 수 |
+|---|---|
+| `check_windows_bundle.py` (묶음, 가짜 팀 서버) | 3 |
+| `check_windows_chrome.py` (실제 Chrome, 레지스트리, 명령줄) | 2 |
+| `check_windows_support.py` (실제 ACL, 키 파일 문구, 스캐너 오류 기록, 실행기) | 30 |
+| `check_pipeline.py` | 17 |
+| `check_portability.py` (스캐너 실패 종류 포함) | 9 (1개 건너뜀) |
+| `check_scanner_codex.py`, `check_scanner_claude.py` | 12, 18 |
+| `check_sync_intake.py` (동기화 접수) | 48 |
+| `check_integrity.py` | 15 |
+
+Chrome이 쓴 명령줄은 예전 기록과 같았다. 스캐너·묶음 아티팩트는 2027-02-12까지 보관된다.
+
 ### 2026-11-14 실제 PC (단비 님, 예전 구조 `claude/windows-local` `a9b79f3`, 확장 0.2.2)
 
 환경: Windows 11 Home 25H2(빌드 26200), 한국어, 코드 페이지 949, 영문 사용자 이름, Chrome 157.0.8103.51, Codex CLI 0.169.0, Claude Code 2.1.323, Python 3.13.2. OpenAI 키·Ollama 없음.
@@ -125,11 +142,10 @@ Chrome이 host를 시작하는 실제 명령줄(Chrome 157): `C:\Windows\system3
 
 ### 2026-11-12~13 CI (예전 구조)
 
-windows-2022에서 99개 통과. 그 과정에서 시험의 SQLite 연결 미종료(WinError 32), 스캐너의 `VCRUNTIME140.dll` 의존, Chrome 실제 명령줄의 `/s`를 고쳤다. 이 구조로 옮긴 뒤에는 아직 돌리지 않았다.
+windows-2022에서 99개 통과. 그 과정에서 시험의 SQLite 연결 미종료(WinError 32), 스캐너의 `VCRUNTIME140.dll` 의존, Chrome 실제 명령줄의 `/s`를 고쳤다.
 
 ## 6. 아직 확인하지 못한 것
 
-- 이 구조에서의 `windows-collector` 실행 전체.
 - 일반 Chrome과 확장 0.2.11의 연결, ChatGPT 프로젝트 동기화 전부(4절 8~13).
 - 실제 Codex·Claude Code가 쓰는 Windows 로그로 후보 만들기(키·모델이 있는 PC).
 - 한글 사용자 이름 계정, 서명 없는 묶음에 대한 SmartScreen, Windows on ARM, FAT32·exFAT 드라이브.
