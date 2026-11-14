@@ -191,7 +191,7 @@ def eval_judge(gold, pairs, llm, decider):
             ok = want in got or (want == "비교 안 함" and set(got) <= {"무관", "비교 안 함"})
             exact += ok
         rows.append({"pair": p["pair_id"], "want": want, "got": got, "ok": ok, "old": p["old_text"], "new": p["new_text"],
-                     "reason": [j["reason"] for j in judged]})
+                     "reason": [j["reason"] for j in judged], "method": [j.get("method") for j in judged]})
     return {**alert_rates(outcomes), "label_accuracy": round(exact / max(len(outcomes), 1), 3),
             "incomplete": len(pairs) - len(outcomes), "rows": rows}
 
