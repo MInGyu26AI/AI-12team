@@ -19,6 +19,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.parse
 from unittest.mock import patch
 
@@ -105,12 +106,30 @@ class Scripted:
 
 
 class Client:
-    """Team client stand-in: user 'user' in teams 'a' and 'b'."""
+    """Team client stand-in: user 'user' in teams 'a' and 'b'.
+
+    team_settings: {team id: settings} once a test turns team settings on; until then the stand-in answers like a
+    team server from before team settings (404), so the project topic stays local as it always was."""
     api_url = 'https://example.test/'
     user_id = 'user'
 
+    def __init__(self):
+        self.team_settings = None
+        self.settings_posts = []
+
     def me(self):
         return dict(user_id='user', name='테스트', teams=[dict(id='a', name='팀 A'), dict(id='b', name='팀 B')])
+
+    def request(self, path, data=None):
+        parts = path.split('/')
+        if self.team_settings is None or len(parts) != 3 or parts[0] != 'teams' or parts[2] != 'settings':
+            raise urllib.error.HTTPError(self.api_url + path, 404, 'Not Found', None, None)
+        team = parts[1]
+        current = self.team_settings.setdefault(team, dict(topic='', goal='', scope='', rules=[], updatedAt=None))
+        if data is not None:
+            self.settings_posts.append((team, data))
+            current.update(data, updatedBy=self.user_id, updatedAt=datetime.now(timezone.utc).isoformat())
+        return dict(team_id=team, settings=dict(current))
 
 
 class AI:
