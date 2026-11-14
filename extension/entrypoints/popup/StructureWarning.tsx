@@ -24,7 +24,7 @@ export function StructureWarning({ warning }: { warning: StructureWarningInfo | 
     <div className="space-y-1.5 rounded-lg bg-sensitive-soft px-3 py-2 text-xs text-sensitive">
       <p>{warning.message}</p>
       {warning.diagnostics && (
-        <button type="button" className="rounded-md border bg-white px-2 py-0.5 text-gray-700" onClick={() => void copy()}>
+        <button type="button" className="rounded-md border bg-white px-2 py-0.5 text-foreground" onClick={() => void copy()}>
           {copied ? '복사했어요' : '진단 복사'}
         </button>
       )}

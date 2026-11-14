@@ -17,7 +17,7 @@ export function AutoCollectSwitch({ autoCollect }: { autoCollect: boolean }) {
     <label className="flex cursor-pointer items-center justify-between rounded-lg border p-3">
       <span>
         <span className="block font-medium">자동 수집</span>
-        <span className="text-xs text-gray-500">켜 둔 동안 ChatGPT의 새 대화를 가져와요. 프로젝트 대화를 할 때만 켜 주세요</span>
+        <span className="text-xs text-muted-foreground">켜 둔 동안 ChatGPT의 새 대화를 가져와요. 프로젝트 대화를 할 때만 켜 주세요</span>
       </span>
       <input type="checkbox" role="switch" checked={autoCollect} onChange={() => void save({ autoCollect: !autoCollect })} className="peer sr-only" />
       <SwitchTrack />
@@ -39,7 +39,7 @@ export function CollectionLimits({ settings }: { settings: Settings }) {
   return (
     <section className="space-y-2 rounded-lg border p-3">
       <label className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-gray-600">수집 종료 시각</span>
+        <span className="text-muted-foreground">수집 종료 시각</span>
         <input
           type="datetime-local"
           value={draft ?? (end ? toLocalInput(end) : '')}
@@ -50,7 +50,7 @@ export function CollectionLimits({ settings }: { settings: Settings }) {
         />
       </label>
       {end && (
-        <p className={`text-xs ${isEnded(settings) ? 'text-sensitive' : 'text-gray-500'}`}>
+        <p className={`text-xs ${isEnded(settings) ? 'text-sensitive' : 'text-muted-foreground'}`}>
           {isEnded(settings) ? '수집이 종료됐어요. 종료 시각을 갱신한 뒤 다시 켜세요.' : `${end.toLocaleString('ko-KR')}에 수집과 AI 요청을 멈춰요`}
         </p>
       )}

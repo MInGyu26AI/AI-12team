@@ -3,6 +3,7 @@ import { isConfigured } from '@/lib/settings';
 import { MainScreen } from './MainScreen';
 import { SetupForm } from './SetupForm';
 import { useCollectorStatus } from './useCollectorStatus';
+import { useRepoStatus } from './useRepoStatus';
 import { useStructureWarning } from './useStructureWarning';
 import { useSyncState } from './useSyncState';
 
@@ -11,6 +12,7 @@ export default function App() {
   const { settings, collectState, pendingCount } = useCollectorStatus();
   const syncState = useSyncState();
   const structureWarning = useStructureWarning();
+  const repoStatus = useRepoStatus();
   const [editing, setEditing] = useState(false);
   if (!settings || !collectState || !syncState) return null;
 
@@ -32,7 +34,7 @@ export default function App() {
       lastError={collectState.lastError}
       pendingCount={pendingCount}
       structureWarning={structureWarning} // 지금 탭의 화면 읽기 점검 결과 (lib/extract-health.ts)
-      repoStatus={null} // GitHub 연동 데이터가 정해지면 여기에 연결 (docs/sync-contract.md 8장)
+      repoStatus={repoStatus} // 로컬 수집기 team.repo 로 읽은 레포 저장 상태 (useRepoStatus.ts)
       onEdit={() => setEditing(true)}
     />
   );

@@ -14,7 +14,7 @@ export function TextField({ label, value, placeholder, onChange }: TextFieldProp
         value={value}
         onChange={onChange && ((e) => onChange(e.target.value))}
         placeholder={placeholder}
-        className="w-full rounded-md border px-2.5 py-1.5 outline-none focus:border-tag-decision"
+        className="w-full rounded-md border px-2.5 py-1.5 outline-none focus:border-brand"
       />
     </label>
   );

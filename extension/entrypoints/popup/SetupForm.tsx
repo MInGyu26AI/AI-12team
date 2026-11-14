@@ -39,7 +39,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
 
   return (
     <form
-      className="w-[340px] space-y-3 p-4 font-sans text-sm text-gray-900"
+      className="w-[340px] space-y-3 p-4 font-sans text-sm text-foreground"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -66,17 +66,17 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
             onChange={(e) => setRules(e.target.value)}
             rows={2}
             placeholder={'예: 결정은 팀장 승인 후 확정\n개인 일정은 올리지 않기'}
-            className="w-full resize-none rounded-md border px-2.5 py-1.5 outline-none focus:border-tag-decision"
+            className="w-full resize-none rounded-md border px-2.5 py-1.5 outline-none focus:border-brand"
           />
         </label>
-        <p className="text-xs text-gray-500">AI가 프로젝트 대화를 고르는 기준이 돼요. 지금은 이 확장에 저장돼요.</p>
+        <p className="text-xs text-muted-foreground">AI가 프로젝트 대화를 고르는 기준이 돼요. 지금은 이 확장에 저장돼요.</p>
       </fieldset>
 
       <WebUrlField value={webUrlInput} normalized={webUrl} onChange={setWebUrlInput} />
 
       {/* 최초 설정에서 자동 수집 범위와 외부 AI 전송을 알려야 한다 (CLAUDE.md 9장 개인정보·보안 원칙) */}
-      <div className="space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
-        <p className="font-medium text-gray-800">프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유합니다</p>
+      <div className="space-y-1 rounded-lg bg-surface-soft p-3 text-xs text-muted-foreground">
+        <p className="font-medium text-foreground">프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유합니다</p>
         <p>· 자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화(내 말·AI 답변)를 읽어요. 프로젝트 대화를 할 때만 켜 주세요.</p>
         <p>· 프로젝트 주제와 관련된 내용만 후보로 골라 내 검토함에 보여 줘요. 고르기 위해 민감정보를 가린 발췌를 외부 AI로 보냅니다.</p>
         <p>· 팀에는 내가 승인한 카드만 공유하고, 원본 대화 전체는 보내지 않아요.</p>
@@ -91,7 +91,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
         <button
           type="submit"
           disabled={!canSave}
-          className="flex-1 rounded-lg bg-gray-900 px-3 py-2 font-medium text-white disabled:opacity-40"
+          className="flex-1 rounded-lg bg-brand px-3 py-2 font-medium text-white disabled:opacity-40"
         >
           저장
         </button>

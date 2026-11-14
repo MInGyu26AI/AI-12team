@@ -14,7 +14,7 @@ export function TopicField({ value, saved, onChange }: TopicFieldProps) {
   return (
     <div className="space-y-1">
       <label htmlFor="project-topic" className="font-medium">
-        프로젝트 주제 <span className="text-xs font-normal text-gray-500">팀 공유</span>
+        프로젝트 주제 <span className="text-xs font-normal text-muted-foreground">팀 공유</span>
       </label>
       <div className="flex gap-1.5">
         <input
@@ -23,7 +23,7 @@ export function TopicField({ value, saved, onChange }: TopicFieldProps) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="예: 팀 AI 메모리 서비스"
-          className="min-w-0 flex-1 rounded-md border px-2.5 py-1.5 outline-none read-only:bg-gray-50 focus:border-tag-decision"
+          className="min-w-0 flex-1 rounded-md border px-2.5 py-1.5 outline-none read-only:bg-surface-soft focus:border-brand"
         />
         {!editing && (
           <button type="button" className="shrink-0 rounded-md border px-2.5 py-1.5 text-xs" onClick={() => setAsking(true)}>
@@ -41,7 +41,7 @@ export function TopicField({ value, saved, onChange }: TopicFieldProps) {
             <button
               type="button"
               autoFocus
-              className="rounded bg-gray-900 px-2.5 py-1 text-white"
+              className="rounded bg-brand px-2.5 py-1 text-white"
               onClick={() => {
                 setAsking(false);
                 setEditing(true);
@@ -52,7 +52,7 @@ export function TopicField({ value, saved, onChange }: TopicFieldProps) {
           </div>
         </div>
       )}
-      <p className="text-xs text-gray-500">{TOPIC_SHARED_NOTE}</p>
+      <p className="text-xs text-muted-foreground">{TOPIC_SHARED_NOTE}</p>
     </div>
   );
 }
