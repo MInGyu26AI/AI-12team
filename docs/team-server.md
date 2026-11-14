@@ -118,6 +118,7 @@ docker build -f Dockerfile.cloud .
 | `POST …/items/{카드}/done` | 할 일 완료 표시 (`done`) |
 | `POST …/items/{카드}/retry-check` | 실패한 충돌 검사 다시 시작. 시도 횟수와 진단을 비운다. 409 실패 상태가 아님 |
 | `GET …/repo` | 팀 상태 파일의 GitHub 저장 상태 ([아래](#github-레포-저장)). 연결 안 된 팀은 `{"linked": false}` |
+| `GET …/settings` · `POST …/settings` | 팀이 함께 쓰는 설정 ([아래](#팀-설정)). POST는 보낸 칸만 바꾸고 나머지는 둔다 |
 | 공통 | 401 키 없음·틀림·만료·폐기, 사용자 비활성 · 403 그 팀 소속 아님 · 503 DB에 닿지 못함 |
 
 ## GitHub 레포 저장
@@ -140,6 +141,22 @@ docker build -f Dockerfile.cloud .
 - GitHub 오류는 팀 API 응답에 영향을 주지 않는다. 진단 로그에는 단계·오류 종류·HTTP 상태만 남고, 다음 변경 때 다시 저장한다. GitHub가 다른 곳으로 리다이렉트하면 토큰은 따라가지 않는다.
 - `GET …/repo` 응답의 `repo`: `linked`, `repo`, `branch`, `files`, `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `commit`(`sha`, `url`, `at`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC `team.repo`가 같은 응답을 준다.
 - 상태는 메모리에만 있다. 서버를 다시 켜면 `unknown`이고, 그 팀의 첫 요청(보드 조회 등 무엇이든)이 바로 한 번 저장해 연결을 확인한다. 재시작 때문에 기다리던 저장이 끊겼어도 그때 다시 맞춰진다.
+
+## 팀 설정
+
+팀원 누구나 읽고 바꾸는 팀 단위 설정이다. 표는 `syncup.team_settings`(팀당 한 행, `team_upgrades.sql`), 코드는 `server/team_settings.py`.
+
+| 칸 | 내용 |
+|---|---|
+| `topic` | 프로젝트 주제 (1200자 이하). 모든 팀원의 로컬 수집기가 분류 기준으로 쓴다 |
+| `goal` · `scope` | 팀 목표 · 범위 (각 500자 이하). `syncup.json`의 `team`에 들어간다 |
+| `rules` | 규칙 목록 (20개 이하, 각 200자 이하) |
+| `updatedBy` · `updatedAt` | 마지막으로 바꾼 팀원 ID와 시각. 아무도 저장한 적 없으면 `null` |
+
+- 다른 팀의 설정은 읽지도 바꾸지도 못한다(RLS). 바꾼 사람은 요청한 본인으로만 기록된다.
+- 로컬 수집기는 `collection.configure`로 바뀐 주제를 받으면 이 API에 먼저 올리고, 올리지 못하면 저장하지 않는다. 30초마다 팀 주제를 읽어 따라간다. 아무도 저장하지 않은 팀이면 그 수집기의 주제를 팀 주제로 올린다. 이 API가 없는 예전 서버(404)에서는 주제가 예전처럼 각자 PC에만 남는다.
+- 로컬 수집기 RPC `team.settings`(읽기)와 `team.updateSettings`(`topic`·`goal`·`scope`·`rules` 중 일부)가 같은 요청을 중계한다.
+- 이 표를 쓰는 서버는 표가 없으면 시작하지 않는다. 배포 전에 [아래](#기존-db-업그레이드) `migrate-integration`을 먼저 실행한다. 표가 생겨도 예전 서버는 그대로 동작한다.
 
 ## 기존 DB 업그레이드
 
