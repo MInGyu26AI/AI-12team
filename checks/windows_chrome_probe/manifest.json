@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "SyncUp native messaging probe",
+  "description": "Test only (checks/check_windows_chrome.py): sends one request to the SyncUp native host and reports the answer.",
+  "version": "1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAl3meC+LbSTMxT3IThoEnIS/9JLBt6Zq4satg4eRTDiwCuCdoLq2LO1zNJBGEbhD+hn66TRGSvBOxurBxk2LQ2XXjSTQGTQMjphCz8UA/vMOknUKTBOKJ+4H/gmdSy3JBerEp9ZGaZSslMm+lwBTTOKZgm6VzfezxMwf/rgKLPApIk1es7gcUp7grkOOwiOJghh7fCgrRwz4FBSqZPThY0EwwLCB5ZyUgW8l7a2iW4IomdCtuI3092YHO7c/IJf0o6PNdepAfWm2vhA4QV9awFrxzsO0p7YwiYVNZs455rEHO8/xaGqWVfLObpE5sLLjYJYZHUx8O58hHLHMguqc05wIDAQAB",
+  "permissions": [
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

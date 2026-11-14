@@ -61,6 +61,8 @@ async function main() {
   server.setTimeout(30000, socket => socket.destroy());
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   console.log(`로컬 연결 (5분 내 1회): ${origin}/local-session#${bootstrap}`);
+  // The link is one-time by design; a second open says it expired, which reads like a failure.
+  console.log('이 링크는 한 번만 열 수 있습니다. 브라우저 세션이 끝났거나 다시 열어야 하면 이 실행기를 다시 시작해 새 링크를 받으세요.');
 }
 
 main().catch(() => { console.error('로컬 웹 실행 실패: 연결 파일·포트·설치 상태를 확인하세요.'); process.exit(1); });

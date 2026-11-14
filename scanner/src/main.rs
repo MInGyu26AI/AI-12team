@@ -14,18 +14,28 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 /// How long a SQLite call waits for another process's lock before it fails.
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Must match `ENABLED_PLATFORMS` in collector/runtime.py; docs/windows.md records what Windows was checked on.
 const ENABLED_OS: &[&str] = &[
     "macos",
-    // Windows 네이티브·Linux x64·WSL·Intel Mac 미검증. Linux ARM64는 컨테이너 검사 통과.
-    // 실제 계정/외부 AI 흐름·전체 로그 버전 호환은 미검증이다. 지원 범위는 docs/running.md에 적는다.
-    // User-requested rollout: keep these connections disabled after compatibility checks.
-    // "windows",
+    "windows",
+    // Linux stays off until it is checked on a real install.
     // "linux",
 ];
 
+/// A failure's kind without its message, which may hold private paths or log text.
+fn failure_kind(error: &(dyn Error + 'static)) -> String {
+    if review_db::is_database_error(error) {
+        "database".into()
+    } else if let Some(io) = error.downcast_ref::<std::io::Error>() {
+        format!("io {:?}", io.kind())
+    } else {
+        "log format".into()
+    }
+}
+
 fn main() {
     if !ENABLED_OS.contains(&std::env::consts::OS) {
-        eprintln!("SyncUp connections are currently enabled on macOS only.");
+        eprintln!("SyncUp connections are currently enabled on macOS and Windows only.");
         std::process::exit(2);
     }
     let args: Vec<_> = std::env::args_os().collect();
@@ -43,12 +53,19 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| codex.clone());
     let project_name = optional(5).map(|v| v.to_string_lossy().into_owned());
-    let codex_failed = codex::scan(&db, &codex, &index).is_err();
-    let claude_failed = optional(3).is_some_and(|root| {
-        claude::scan(&db, &PathBuf::from(root), project_name.as_deref()).is_err()
-    });
-    if codex_failed || claude_failed {
-        // Errors may contain private paths; keep logs free of input data.
+    // Errors may contain private paths; only which part failed and the kind of failure is printed.
+    let mut failed = false;
+    if let Err(error) = codex::scan(&db, &codex, &index) {
+        eprintln!("codex: {}", failure_kind(&*error));
+        failed = true;
+    }
+    if let Some(root) = optional(3) {
+        if let Err(error) = claude::scan(&db, &PathBuf::from(root), project_name.as_deref()) {
+            eprintln!("claude: {}", failure_kind(&*error));
+            failed = true;
+        }
+    }
+    if failed {
         eprintln!(
             "Collector failed; check index schema, log format, permissions and database availability."
         );

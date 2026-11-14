@@ -9,15 +9,15 @@ import tomllib
 # 지원 범위: docs/running.md
 ENABLED_PLATFORMS = {
     "darwin",
-    # User-requested rollout: keep these connections disabled after compatibility checks.
-    # "win32",
+    "win32",
+    # Linux stays off until it is checked on a real install.
     # "linux",
 }
 
 
 def require_platform():
     if sys.platform not in ENABLED_PLATFORMS:
-        raise SystemExit("현재 SyncUp 연결은 macOS에서만 활성화되어 있습니다.")
+        raise SystemExit("현재 SyncUp 연결은 macOS와 Windows에서만 활성화되어 있습니다.")
 
 
 def child_environment():
@@ -27,7 +27,21 @@ def child_environment():
 
 
 def scanner_binary():
-    return Path(__file__).resolve().parents[1] / "bin" / ("syncup-scanner.exe" if sys.platform == "win32" else "syncup-scanner")
+    # The packaged Windows app (windows_bundle.py) carries bin/ in its own folder.
+    root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1]
+    return root / "bin" / ("syncup-scanner.exe" if sys.platform == "win32" else "syncup-scanner")
+
+
+# The packaged Windows app (syncup_entry.py) runs each script as a subcommand of one executable; app.py's own
+# mode, run, is already its first argument.
+BUNDLED_SUBCOMMANDS = {"app.py": [], "native_host.py": ["native-host"], "prepare_native.py": ["native-setup"]}
+
+
+def script_command(script, *args):
+    """The command that runs one of this folder's scripts with args, from source or in the packaged app."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *BUNDLED_SUBCOMMANDS[script], *args]
+    return [sys.executable, str(Path(__file__).resolve().with_name(script)), *args]
 
 
 def storage_paths(args):

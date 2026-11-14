@@ -56,8 +56,8 @@ def _collect_once(db, sources, pipeline):
     try:
         scan(db, *sources)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
-        failure('collection_scan', error)
-        scan_status = "대화 기록 확인 실패 · " + type(error).__name__
+        failure('collection_scan', error, detail=getattr(error, 'detail', None))
+        scan_status = "대화 기록 확인 실패 · " + getattr(error, 'summary', type(error).__name__)
     if pipeline:
         scan_status = run_integrated(db, pipeline) or scan_status
     else:

@@ -1,11 +1,11 @@
 # 실행 방법
 
-Mac 로컬 수집기를 띄우고 웹이나 Chrome 확장을 연결하는 순서다. 명령은 모두 저장소 루트에서 실행한다.
+로컬 수집기를 띄우고 웹이나 Chrome 확장을 연결하는 순서다. 명령은 모두 저장소 루트에서 실행한다. Windows에서 다른 점(Python 없는 `syncup.exe` 묶음, 파일 권한, 레지스트리 등록)은 [windows.md](windows.md)에 있다.
 구조는 [architecture.md](architecture.md), 팀 서버는 [team-server.md](team-server.md), 개인정보 처리는 [privacy.md](privacy.md)에 있다.
 
 ## 준비물
 
-- macOS ([지원 OS](#지원-os)), Python 3.11 이상, Rust 2024 edition을 빌드할 수 있는 `cargo`, Node.js와 npm
+- macOS 또는 Windows ([지원 OS](#지원-os)), Python 3.11 이상, Rust 2024 edition을 빌드할 수 있는 `cargo`, Node.js와 npm. Windows에서 묶음(`syncup.exe`)을 쓰면 Python·Rust는 필요 없다
 - Ollama와 기본 개인정보 모델 ([개인정보 모델 준비](#개인정보-모델-준비))
 - `OPENAI_API_KEY`. 키와 다른 공급자 설정은 [ai/README.md 설정](../ai/README.md#설정)
 - 팀 서버 주소와 관리자가 발급한 개인 연결 키 파일 ([team-server.md](team-server.md)). 이 Mac에서 직접 띄우려면 [한 기기에서 써 보기](team-server.md#한-기기에서-써-보기)
@@ -21,7 +21,7 @@ mkdir -p bin
 cp scanner/target/release/syncup-scanner bin/
 ```
 
-수집기는 스캐너 실행 파일 `bin/syncup-scanner`를 실행한다. 스캐너 코드가 바뀌면 다시 빌드해서 복사한다.
+수집기는 스캐너 실행 파일 `bin/syncup-scanner`(Windows는 `bin\syncup-scanner.exe`, 빌드 명령은 [windows.md](windows.md#원본에서))를 실행한다. 스캐너 코드가 바뀌면 다시 빌드해서 복사한다.
 
 ## 개인정보 모델 준비
 
@@ -93,7 +93,7 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
      --connection /절대/경로/개인-상태/connection.json \
      --output /절대/경로/새-native-폴더
    ```
-3. `com.syncup.collector.json`을 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`에 복사한다. `syncup-native`는 출력 폴더에 그대로 둔다. 매니페스트의 `path`가 이 파일을 가리킨다.
+3. `com.syncup.collector.json`을 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`에 복사한다. `syncup-native`는 출력 폴더에 그대로 둔다. 매니페스트의 `path`가 이 파일을 가리킨다. Windows에서는 복사하지 않고, 2단계가 출력한 `reg add` 명령으로 현재 사용자 레지스트리에 등록한다([windows.md](windows.md#windows에서-알아-둘-것)).
 4. 확장 팝업에서 프로젝트 주제와 개인 검토함 주소를 저장한다. 이 주소는 승인함 웹의 주소(배포 주소나 `npm run dev`의 `http://localhost:3000`)이고, 수집기가 출력하는 8876 주소가 아니다. 그 주소의 페이지는 개인 후보를 읽고 승인을 보낼 수 있으니 믿는 주소만 넣는다.
 
 `syncup-native`에는 Python 실행 파일, `collector/native_host.py`, `connection.json`의 절대 경로가 들어 있다. 이 가운데 하나나 확장 ID가 바뀌면 새 빈 폴더로 2~3단계를 다시 하고 `chrome://extensions`에서 확장을 새로고침한다. 수집기 파일이 `collector/`로 옮겨지기 전에 등록했다면 이 경우다(예전 실행기는 저장소 루트의 `native_host.py`를 찾는다).
@@ -177,4 +177,4 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 
 ## 지원 OS
 
-로컬 수집기는 macOS에서만 돈다. `collector/runtime.py`의 `ENABLED_PLATFORMS`와 `scanner/src/main.rs`의 `ENABLED_OS`에서 Windows·Linux 줄은 주석이고, 옵션이나 환경 변수로 켜는 방법은 없다. 팀 서버에는 이 제한이 없지만, `rust`·`team` 검사는 수집기도 띄우므로 macOS에서 돌린다.
+로컬 수집기는 macOS와 Windows에서 돈다. `collector/runtime.py`의 `ENABLED_PLATFORMS`와 `scanner/src/main.rs`의 `ENABLED_OS`에서 Linux 줄은 주석이고, 옵션이나 환경 변수로 켜는 방법은 없다. Windows의 설치·검사·검증 기록은 [windows.md](windows.md)에 있다. 팀 서버에는 이 제한이 없다. `run_checks.py`의 묶음은 macOS용이고, Windows에서는 `.github/workflows/windows.yml`이 수집기 검사를 돌린다.
