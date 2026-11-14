@@ -4,7 +4,7 @@ import { useLocal } from "./local-store";
 import { USE_MOCK } from "./api";
 import { useCollectorStatus } from "./local-collector";
 
-const TEAM_KEY = "syncup:team:v1";
+const TEAM_KEY = "syncup:team:v2"; // v2: 목업 팀을 '온길'로 바꿈
 const EMPTY: Team = { code: "", name: "팀 연결 확인 중", topic: "", deadline: "", kind: "", members: [], me: "" };
 
 /** 지금 팀. 목업 모드는 이 브라우저에 저장한 예시 팀, 실제 모드는 로컬 수집기가 알려 준 등록된 팀 */

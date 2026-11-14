@@ -6,7 +6,7 @@ import { MOCK_DONE_TODOS, mockCards } from "@shared/mock";
 import type { Conflict, RelatedCard, Resolution } from "@shared/types";
 import type { TeamApi } from "./types";
 
-const KEY = "syncup:mock-board:v2";
+const KEY = "syncup:mock-board:v3"; // v3: 목업을 합성 대화 H01 '온길'로 바꿈 (옛 저장값은 읽지 않음)
 
 interface State {
   board: RelatedCard[]; // approved + dismissed(충돌 처리로 밀려난 결정), 승인 순서대로

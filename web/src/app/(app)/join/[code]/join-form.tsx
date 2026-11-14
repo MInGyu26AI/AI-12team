@@ -52,7 +52,7 @@ function DemoJoin({ code }: { code: string }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && join()}
-            placeholder="예: 정하린"
+            placeholder="예: 윤채원"
             className="h-11 w-full rounded-lg border bg-background px-3.5 outline-none focus:border-brand"
           />
         </label>
