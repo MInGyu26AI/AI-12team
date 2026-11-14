@@ -17,11 +17,21 @@ async function keepDefaultBatch(status: ExtStatus) {
   await rpc('collection.configure', { turnsPerBatch: TURNS_PER_BATCH }).catch(() => {});
 }
 
-export async function refreshStatus() {
+// 확장은 검토 대기 "개수"만 쓴다. 후보 본문까지 받는 candidates.list 대신 collection.status 의 counts.reviewPending 을 읽는다
+// (수집기 후보는 공유 후보만 만들어진다: batch_classification). counts 가 없는 옛 수집기만 candidates.list 로 센다
+async function readStatus(): Promise<{ status: ExtStatus; pending: number }> {
+  const status = await rpc<ExtStatus>('collection.status');
+  const pending = status?.counts?.reviewPending;
+  if (typeof pending === 'number') return { status, pending };
   const result = await rpc<{ cards: RelatedCard[]; status: ExtStatus }>('candidates.list');
+  return { status: result.status, pending: shareableCount(result.cards) };
+}
+
+export async function refreshStatus() {
+  const result = await readStatus();
   await keepDefaultBatch(result.status);
   await settingsItem.setValue(settingsFromStatus(await settingsItem.getValue(), result.status));
-  const shareable = shareableCount(result.cards);
+  const shareable = result.pending;
   await pendingCountItem.setValue(shareable); // 개수만 저장한다: 카드 본문은 확장 저장소에 남기지 않는다
   const state = await collectStateItem.getValue();
   if (state.lastError && clearedByRefresh(state)) await collectStateItem.setValue({ lastError: null });
