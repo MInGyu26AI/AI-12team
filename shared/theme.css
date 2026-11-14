@@ -1,40 +1,54 @@
-/* 싱크업 디자인 토큰: 색·간격을 여기 모아둔다. 값은 김민규 님 피그마 시안 기준.
+/* 싱크업 디자인 토큰: 색·간격을 여기 모아둔다. 값은 새 피그마 디자인(파일 rgGJQ6npGTJwStUZy9GiOn) 기준: 크림 바탕 + 남색.
    Tailwind v4 @theme → bg-brand, bg-tag-decision-soft, text-tag-todo, px-gutter, max-w-content 같은 클래스가 생김.
-   표시 색 (피그마): 결정 = 남색, 조사 = 초록, 할 일 = 주황, 개인 = 회색, 충돌 = 빨강 */
+   표시 칩(결정·조사·할 일·개인)·ok 칩·카드 테두리는 피그마에서 읽은 실제 값이고 출처 노드를 각 줄에 적었다.
+   표시 색: 결정 = 하늘색, 조사 = 초록, 할 일 = 노랑, 개인 = 옅은 남색 회색. 빨강은 충돌·실패에만 쓴다 */
 @theme {
-  /* 브랜드 (로고·주요 버튼·선택된 메뉴) */
-  --color-brand: #4f46e5;
-  --color-brand-hover: #4338ca;
-  --color-brand-soft: #eef0ff;
-  --color-canvas: #f5f6f8; /* 앱 화면 바탕 (피그마 2~6번) */
+  /* 브랜드 (로고·주요 버튼·선택된 메뉴) — 새 디자인의 남색 */
+  --color-brand: #18173a;
+  --color-brand-hover: #2d2c5a; /* 주요 버튼 hover: 남색을 한 단계 밝게 (피그마에 값 없음) */
+  --color-brand-soft: #efe5d6; /* 주제 칩 · 선택된 메뉴 항목 */
+  --color-canvas: #f5efe6; /* 페이지·헤더 바탕 (크림) */
+  --color-surface-soft: #f7f1ea; /* 배너 · 아이콘 원 같은 옅은 베이지 면 */
+  --color-text-tertiary: #7b7266; /* 3단계 글자색 (1단계 남색 foreground, 2단계 muted-foreground #57534e) */
 
-  /* 표시(tag) */
-  --color-tag-decision: #4f46e5;
-  --color-tag-decision-soft: #eef0ff;
-  --color-tag-research: #2e7d32;
-  --color-tag-research-soft: #e8f5e9;
-  --color-tag-todo: #d9670b;
-  --color-tag-todo-soft: #fff1e6;
-  --color-tag-personal: #6b7280;
-  --color-tag-personal-soft: #f3f4f6;
+  /* 표시(tag) 칩: 배경(-soft) / 글자. 피그마 4번 범례 노드 152:255 (Chip / 결정·조사·할 일·개인) */
+  --color-tag-decision: #2f7fa3;
+  --color-tag-decision-soft: #e3f2f9;
+  --color-tag-research: #1e8e3e;
+  --color-tag-research-soft: #e6f4ea;
+  --color-tag-todo: #8a6d00;
+  --color-tag-todo-soft: #fff6c7;
+  --color-tag-personal: #57534e;
+  --color-tag-personal-soft: rgb(24 23 58 / 0.06);
+
+  /* 카드 테두리 (화면 쪽 작업에서 쓸 이름만 먼저 만들어 둔다. 이 파일은 값만 정하고 클래스는 아직 쓰지 않는다)
+     기본 = #e2d6c3. 승인함에서 체크된 카드 = 표시 색이 아니라 #57534e 1.5px (노드 152:281). 개인 카드 = 점선 rgba(24,23,58,0.18) */
+  --color-card-border: #e2d6c3;
+  --color-card-border-selected: #57534e;
+  --color-card-border-personal: rgb(24 23 58 / 0.18);
 
   /* 경고 */
-  --color-sensitive: #c62828; /* 민감정보 · 충돌 */
-  --color-sensitive-soft: #fbecec;
-  --color-warn: #a16207; /* 확인 필요 */
-  --color-warn-soft: #fef9c3;
-  --color-change: #c2410c; /* 변경 */
-  --color-change-soft: #ffedd5;
-  --color-ok: #2e7d32; /* 연결됨 · 참여함 · 승인 완료 */
-  --color-ok-soft: #e8f5e9;
+  --color-sensitive: #d93025; /* 민감정보 · 충돌 */
+  --color-sensitive-soft: #f7f1ea;
+  --color-warn: #8a6d00; /* 확인 필요 */
+  --color-warn-soft: #f7f1ea;
+  --color-change: #2f7fa3; /* 변경 */
+  --color-change-soft: #e3f2f9;
+  --color-ok: #1e8e3e; /* 연결됨 · 참여함 · 승인 완료 (피그마 3번 노드 152:154: 배경 #e6f4ea / 글자 #1e8e3e) */
+  --color-ok-soft: #e6f4ea;
 
-  /* 팀 보드 충돌 알림 3단계 (labels.ts ALERT_LEVEL): 충돌 = 빨강, 확인 필요(확신도 0.6 미만) = 노랑, 변경 = 파랑 */
-  --color-alert-conflict: #c62828;
-  --color-alert-conflict-soft: #fbecec;
-  --color-alert-review: #a16207;
-  --color-alert-review-soft: #fef3c7;
-  --color-alert-change: #1d4ed8;
-  --color-alert-change-soft: #dbeafe;
+  /* 팀 보드 충돌 알림 3단계 (labels.ts ALERT_LEVEL): 충돌 = 빨강, 확인 필요(확신도 0.6 미만) = 노랑, 변경 = 파랑
+     피그마 규칙(충돌 알림 3단계): 빨강은 충돌·실패에만. 노랑·파랑은 작은 점 + 글자색으로만 쓰고 면은 베이지/옅은 하늘색 */
+  --color-alert-conflict: #d93025;
+  --color-alert-conflict-soft: #f7f1ea;
+  --color-alert-review: #8a6d00;
+  --color-alert-review-soft: #f7f1ea;
+  --color-alert-review-dot: #e0b400; /* 확인 필요의 점 · 테두리(50% 투명)에 쓰는 노랑 */
+  --color-alert-change: #2f7fa3;
+  --color-alert-change-soft: #e3f2f9;
+
+  /* 카드 그림자 (피그마: 0 4px 16px rgba(0,0,0,0.05)) → shadow-card */
+  --shadow-card: 0 4px 16px rgb(0 0 0 / 0.05);
 
   /* 간격·폭
      주의: --spacing-X 와 --container-X 이름을 겹치지 말 것. Tailwind v4 의 max-w-X 는 --spacing-X 를 먼저 쓴다.

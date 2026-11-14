@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { USE_MOCK } from "@/lib/api";
 import { useDemoTeam } from "@/lib/team";
 
-const COLORS = ["#4F46E5", "#3B9AE1", "#C2407A", "#3F9D52", "#D9670B", "#7E22CE"];
+const COLORS = ["#cde9f4", "#eadfcf", "#e3dcf2", "#fff3a6"]; // 새 디자인 아바타 파스텔 4색 (돌려가며 배정)
 
 export function JoinForm({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
