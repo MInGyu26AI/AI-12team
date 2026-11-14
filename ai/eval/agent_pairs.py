@@ -7,7 +7,7 @@
 
 1) 쌍마다 기존 결정 카드 1장과 새 결정 카드 1장을 만든다. 필드는 서버가 판정에 쓰는 것만 (content, sentence, owner, source, is_change).
 2) 판정: 서버와 같은 conflict.check_new_decision (Decisions → 확신도가 낮으면 chat 모델과 Decisions 의 독립 검토). 규칙 대체는 끈다.
-   독립 검토 뒤에도 확신도가 낮으면 서버처럼 '확인 필요'로 센다.
+   독립 검토 뒤에도 확신도가 낮으면 서버처럼 '확인 필요'로 센다 (판정 '확인 필요', 예전 코드는 LowConfidenceError).
 3) 채점: eval.agent_cases 와 같다 (화면 알림 없음·변경·충돌·확인 필요 기준).
    이 데이터는 최종 측정(11/14) 뒤에 만든 추가 검증용이라 프롬프트를 고치는 데 쓰지 않는다.
 """
@@ -27,7 +27,7 @@ from .agent_cases import EXPECTED_ALERT, _summary
 from .scoring import save_result
 
 PAIRS = Path(__file__).resolve().parent / "syntitan" / "pairs_v2.csv"
-ALERT = {"충돌": "충돌", "변경": "변경"}
+ALERT = {"충돌": "충돌", "변경": "변경", "확인 필요": "확인 필요"}
 
 
 def _card(row: dict, side: str, card_id: str) -> dict:

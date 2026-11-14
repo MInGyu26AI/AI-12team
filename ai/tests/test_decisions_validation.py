@@ -194,11 +194,11 @@ class DecisionsValidationTest(unittest.TestCase):
                        'existing': [dec('old', 'UI', '화면 = React')]}
             decisions_only, with_review = ['/v1/decisions'], ['/v1/decisions', '/v1/chat/completions']
             # (Decisions 답, 성공 여부, 서버가 받은 경로). 낮은 확신도는 chat 독립 검토를 한 번 부른다.
-            # 이 서버는 chat 경로에도 Decisions 응답을 돌려주므로 검토는 형식 오류로 끝나고 확인 필요로 남는다.
+            # 이 서버는 chat 경로에도 Decisions 응답을 돌려주므로 검토는 형식 오류로 끝나고 확인 필요 판정으로 돌아온다.
             for answer, expected, paths in (
                     (dict(type='refusal', name='e1'), False, decisions_only),
                     (dict(type='choice', name='e1', choice='충돌', confidence=.6), True, decisions_only),
-                    (dict(type='choice', name='e1', choice='충돌', confidence=.5999), False, with_review)):
+                    (dict(type='choice', name='e1', choice='충돌', confidence=.5999), True, with_review)):
                 reply.body = json.dumps({'answers': [answer]}).encode()
                 before = len(reply.requests)
                 process = subprocess.run([sys.executable, '-m', 'syncup_ai', 'conflicts'],
@@ -210,6 +210,8 @@ class DecisionsValidationTest(unittest.TestCase):
                 if not expected:
                     self.assertEqual(result['checkStatus'], 'failed')
                     self.assertFalse(result['retryable'])
+                elif answer['confidence'] < .6:
+                    self.assertEqual([c['judgement'] for c in result['conflicts']], ['확인 필요'])
 
 
 if __name__ == '__main__':

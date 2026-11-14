@@ -1,4 +1,6 @@
-"""Low confidence needs independent agreement; review failures never become automatic retries."""
+"""Low confidence needs independent agreement; review failures never become automatic retries.
+
+A pair that stays uncertain comes back as a '확인 필요' judgement and alert, so the check goes on with the next pair."""
 import contextlib
 import io
 import unittest
@@ -25,30 +27,39 @@ class RecheckTest(unittest.TestCase):
                                              kwargs.pop('llm', None), decider=client, **kwargs)
         return result, client
 
+    def assert_uncertain(self, result, chosen):
+        """The check completes and the one pair comes back as a '확인 필요' alert that keeps the AI's relation."""
+        self.assertEqual((result['ok'], result['checkStatus']), (True, 'complete'))
+        judged = result['results'][0]['judgements']
+        self.assertEqual([(j['judgement'], j['aiJudgement']) for j in judged], [('확인 필요', chosen)])
+        self.assertEqual([(c['id'], c['judgement'], c['aiJudgement']) for c in result['conflicts']],
+                         [(conflict.conflict_id(self.old[0], self.new), '확인 필요', chosen)])
+
     @patch.object(config, 'CONFLICT_TOP_K', 3)  # 운영값(1)이 아닌 여러 쌍 묶음 설정
-    def test_top_k_3_uncertain_batch_stops_without_partial_success_or_more_calls(self):
+    def test_top_k_3_uncertain_pairs_become_review_alerts_without_more_calls(self):
         self.old += [dec('two', 'UI', '아이콘 = 원형'), dec('three', 'UI', '폰트 = 고딕')]
         first = {f'e{i}': dict(choice=j, confidence=c) for i, (j, c) in
                  enumerate([('같음', .2), ('무관', .59), ('무관', .9)], 1)}
         result, client = self.run_check([first], allow_rules=False)
-        self.assertEqual(result['checkStatus'], 'failed')
-        self.assertEqual(result['failureReason'], 'low-confidence')
-        self.assertFalse(result['retryable'])
+        self.assertEqual((result['ok'], result['checkStatus']), (True, 'complete'))
+        judged = result['results'][0]['judgements']
+        self.assertEqual([(j['judgement'], j.get('aiJudgement')) for j in judged],
+                         [('확인 필요', '같음'), ('확인 필요', '무관'), ('무관', None)])
         self.assertEqual([len(c.args[1]) for c in client.decide.call_args_list], [3])
-        self.assertNotIn('conflicts', result)
+        self.assertEqual([c['judgement'] for c in result['conflicts']], ['확인 필요', '확인 필요'])
 
-    def test_uncertain_any_label_blocks_unvalidated_review_and_partial_success(self):
+    def test_uncertain_any_label_becomes_review_alert_after_one_review(self):
         for label in conflict.JUDGEMENTS:
             for confidence in (0, .5999, None, float('nan'), 1.1, True):
                 with self.subTest(label=label, confidence=confidence):
                     chat = Mock()
                     result, client = self.run_check([
                         {'e1': dict(choice=label, confidence=confidence)}], llm=chat, allow_rules=True)
-                    self.assertEqual((result['ok'], result['checkStatus']), (False, 'failed'))
-                    self.assertNotIn('results', result)
-                    self.assertNotIn('conflicts', result)
+                    self.assert_uncertain(result, label)
+                    # 없는 확신도는 decide.judge_pairs 가 0.0 으로, 범위 밖·NaN 은 알림에 남기지 않는다
+                    expected = {0: 0, .5999: .5999, None: 0.0, True: 0.0}.get(confidence)
+                    self.assertEqual(result['conflicts'][0]['confidence'], expected)
                     self.assertEqual(client.decide.call_count, 1)
-                    self.assertFalse(result['retryable'])
                     chat.chat_json.assert_called_once()
 
     def test_independent_agreement_preserves_both_thresholds_and_does_not_send_verdict(self):
@@ -65,16 +76,14 @@ class RecheckTest(unittest.TestCase):
         self.assertNotIn('REVIEW_ONLY', client.decide.call_args_list[1].args[0])
         chat.chat_json.assert_called_once()
 
-    def test_review_disagreement_or_low_confidence_still_stops_once(self):
+    def test_review_disagreement_or_low_confidence_stays_uncertain_after_one_review(self):
         for review_label, review_conf, confirm_label, confirm_conf in [
                 ('변경', .9, '충돌', .9), ('변경', .59, '변경', .9), ('변경', .9, '변경', .59)]:
             chat = Mock()
             chat.chat_json.return_value = {'results': [dict(id='old', judgement=review_label, confidence=review_conf)]}
             result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)},
                                             {'e1': dict(choice=confirm_label, confidence=confirm_conf)}], llm=chat, allow_rules=False)
-            self.assertEqual(result['failureReason'], 'low-confidence')
-            self.assertFalse(result['retryable'])
-            self.assertNotIn('results', result)
+            self.assert_uncertain(result, '충돌')
             self.assertEqual(client.decide.call_count, 1 if review_conf < .6 else 2)
             chat.chat_json.assert_called_once()
 
@@ -84,8 +93,7 @@ class RecheckTest(unittest.TestCase):
             chat = Mock()
             chat.chat_json.side_effect = [reply]
             result, client = self.run_check([{'e1': dict(choice='충돌', confidence=.21)}], llm=chat, allow_rules=False)
-            self.assertEqual(result['failureReason'], 'low-confidence')
-            self.assertFalse(result['retryable'])
+            self.assert_uncertain(result, '충돌')
             self.assertEqual(client.decide.call_count, 1)
             failure = 'RetryableLLMError' if isinstance(reply, Exception) else 'ValueError'
             self.assertEqual(self.log.getvalue(), f'[syncup_ai] 독립 검토 실패, 확인 필요로 남김: {failure}\n')
@@ -94,7 +102,7 @@ class RecheckTest(unittest.TestCase):
         chat = Mock()
         chat.chat_json.side_effect = [LLMError('synthetic', code=401)]
         result, _ = self.run_check([{'e1': dict(choice='충돌', confidence=.21)}], llm=chat, allow_rules=False)
-        self.assertEqual(result['failureReason'], 'low-confidence')
+        self.assert_uncertain(result, '충돌')
         self.assertEqual(self.log.getvalue(), '[syncup_ai] 독립 검토 실패, 확인 필요로 남김: LLMError HTTP 401\n')
         # 해시할 수 없는 id 는 코드 오류(TypeError)라 '확신도 부족'으로 덮지 않고 검사 실패로 올린다
         chat.chat_json.side_effect = [{'results': [dict(id=['old'], judgement='변경', confidence=.9)]}]
@@ -137,11 +145,11 @@ class RecheckTest(unittest.TestCase):
             self.assertEqual(client.decide.call_count, 1)
             chat.chat_json.assert_not_called()
 
-    def test_missing_zero_and_unrounded_confidence_stop_once(self):
+    def test_missing_zero_and_unrounded_confidence_become_review_alerts_once(self):
         for value in (None, 0, .5999):
             first = {'e1': dict(choice='같음', confidence=value)}
             result, client = self.run_check([first], allow_rules=False)
-            self.assertEqual(result['checkStatus'], 'failed')
+            self.assert_uncertain(result, '같음')
             self.assertEqual(client.decide.call_count, 1)
         client = Mock()
         client.decide.return_value = {'e1': dict(choice='같음', confidence=0)}
@@ -157,9 +165,7 @@ class RecheckTest(unittest.TestCase):
         for label in ('충돌', '변경'):
             result, client = self.run_check([{'e1': dict(choice=label, confidence=.12)}], allow_rules=False)
             self.assertEqual(client.decide.call_count, 1)
-            self.assertEqual(result['failureReason'], 'low-confidence')
-            self.assertFalse(result['retryable'])
-            self.assertNotIn('conflicts', result)
+            self.assert_uncertain(result, label)  # 검토 없이 충돌·변경 알림이 되지 않는다
 
     def test_deadline_before_or_after_request_fails(self):
         for ticks, expected in [([0, 91], 0), ([0, 0, 91], 1)]:
@@ -169,12 +175,13 @@ class RecheckTest(unittest.TestCase):
             self.assertEqual(client.decide.call_count, expected)
             self.assertFalse(result['retryable'])
 
-    def test_transport_fallback_also_stops_on_low_or_missing_confidence(self):
-        for confidence, expected in [(.9, 'complete'), (None, 'failed')]:
+    def test_transport_fallback_also_marks_low_or_missing_confidence(self):
+        for confidence, expected in [(.9, '충돌'), (None, '확인 필요')]:
             chat = Mock()
             chat.chat_json.side_effect = [{'results': [dict(id='old', judgement='충돌', confidence=confidence)]}]
             result, _ = self.run_check([RetryableLLMError('synthetic outage')], llm=chat, allow_rules=False)
-            self.assertEqual(result['checkStatus'], expected)
+            self.assertEqual(result['checkStatus'], 'complete')
+            self.assertEqual(result['results'][0]['judgements'][0]['judgement'], expected)
             self.assertEqual(chat.chat_json.call_count, 1)
 
     def test_only_transport_failure_is_retryable(self):
