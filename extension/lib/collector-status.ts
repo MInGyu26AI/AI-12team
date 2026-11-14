@@ -5,6 +5,7 @@ import type { RelatedCard } from '@shared/types';
 import { announceCandidates } from './candidate-notice';
 import { CollectorUnreachable, errorText, rpc } from './collector-rpc';
 import { updateBadge } from './conflict-alerts';
+import { announcePreAlerts } from './pre-alert-notice';
 import { collectStateItem, pendingCountItem, settingsFromStatus, settingsItem, shareableCount, type CollectState } from './settings';
 
 // 새로 고침이 성공하면 지우는 오류: 새로 고침 자신의 실패와 수집기에 닿지 못한 실패(unreachable 이 false 로 적히지 않은 것).
@@ -37,6 +38,7 @@ export async function refreshStatus() {
   if (state.lastError && clearedByRefresh(state)) await collectStateItem.setValue({ lastError: null });
   await updateBadge(); // 미해결 충돌이 있으면 빨간 배지로 그 수, 없으면 검토 대기 수 (lib/conflict-alerts.ts)
   await announceCandidates(shareable); // 검토할 카드가 늘었으면 시스템 알림 (던지지 않는다. lib/candidate-notice.ts)
+  await announcePreAlerts(result.status.preAlerts); // 팀 결정과 어긋나는 후보를 본인에게만 (던지지 않는다. lib/pre-alert-notice.ts)
   return result;
 }
 

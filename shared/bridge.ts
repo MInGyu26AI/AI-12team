@@ -1,6 +1,7 @@
 // 웹 ↔ 확장 window.postMessage 식별자와 로컬 수집기 RPC 결과 타입.
 // 메시지는 type:'rpc' / 'rpc-ack'(받자마자) / 'rpc-result' 다 (web/src/lib/rpc.ts ↔ extension/entrypoints/web-bridge.content.ts)
 import type { CollectedMessage } from "./collector";
+import type { PreAlertSummary } from "./pre-alert";
 import type { Subtopic } from "./types";
 
 export const BRIDGE_FROM_WEB = "syncup-web";
@@ -44,6 +45,7 @@ export interface ExtStatus {
   // 계정 동기화 (docs/sync-contract.md 3장). 옛 수집기는 없음 → 확장은 동기화를 켜지 못하게 한다
   syncWindows?: SyncWindow[]; // 동기화 창: [max(세션 시작, 켠 시각), 수집 종료) − 일시정지 구간 (시작 순, 꺼져 있으면 [])
   accountSync?: AccountSyncState | null; // null = 한 번도 켠 적 없음
+  preAlerts?: PreAlertSummary[]; // 승인 전 미리 알림 (검토 중 후보만, 같은 결정은 한 줄). 옛 수집기는 없음
 }
 
 // 동기화 창 한 조각 [start, end). end 는 늘 있음 (수집 중이면 마지막 조각의 끝 = 수집 종료 시각)

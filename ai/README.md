@@ -120,7 +120,7 @@ python3 -m eval.sheet_eval e2e                  # 분류 결과로 충돌까지 
 | 필드 | 왜 | 현재 사용 |
 |---|---|---|
 | `context.knownNames` | "유나가 하자" → 담당자 최유나 | 로컬 수집기는 아직 채우지 않음 (평가 스크립트만 씀) |
-| `context.existingDecisions` | 기존 결정과 다른 값이면 `is_change` 판단 | 로컬 수집기는 아직 채우지 않음 (평가 스크립트만 씀) |
+| `context.existingDecisions` | 기존 결정과 다른 값이면 `is_change` 판단 | 로컬 수집기가 팀 보드의 현재 결정을 최근 승인 순으로 최대 30개 넣음. 팀 서버에 닿지 못하면 빈 목록 (`collector/team_decisions.py`) |
 | `contextMessages` | "그걸로 하자" 같은 지시어 해석 | 사용 중: 로컬 수집기가 직전 묶음의 마지막 턴(`batch.context_tail`)을 넣음 |
 
 ## 평가

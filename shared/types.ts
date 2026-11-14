@@ -1,4 +1,5 @@
 // CLAUDE.md §6 / docs/classification.md 4장 출력 형식(JSON)
+import type { PreAlert } from "./pre-alert";
 
 export const SUBTOPICS = [
   "주제·목표",
@@ -55,6 +56,7 @@ interface CandidateFields {
   classificationMethod?: "chat" | "decisions" | "manual";
   evidence?: { messageId: string; role: "user" | "assistant"; roleGuessed: boolean; quote: string };
   deliveryState?: "pending" | "sent" | "blocked";
+  preAlert?: PreAlert | null; // 승인 전 미리 알림: 같은 세부 주제의 팀 결정과 어긋남 (shared/pre-alert.ts)
 }
 
 // 팀 서버가 보드 카드에 붙이는 필드 (team_board.py board)

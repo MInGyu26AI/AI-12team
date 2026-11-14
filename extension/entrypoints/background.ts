@@ -19,6 +19,7 @@ import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
 import { CONFLICT_ALARM, checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
 import { collectResultToast, type BgRequest, type BgResponse, type CollectResult, type TabToast, type TeamRecordRaw } from '@/lib/messages';
+import { listenPreAlertClick } from '@/lib/pre-alert-notice';
 import { selectionMessage } from '@/lib/selection';
 import { clearLegacyPendingCards, sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
@@ -142,6 +143,7 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 
 export default defineBackground(() => {
   listenNoticeClick(); // 알림을 누르면 서비스 워커가 깨어나므로, 리스너는 비동기 작업 앞 동기 구간에서 붙인다
+  listenPreAlertClick(); // 미리 알림도 개인 검토함으로 (id 로 구분)
   browser.notifications.onClicked.addListener((id) => void openBoardFromNotification(id)); // 충돌 알림만 처리 (id 로 구분)
   void refreshStatusOrRecordFailure();
   void checkConflicts();

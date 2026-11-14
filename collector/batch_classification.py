@@ -11,6 +11,7 @@ from local_privacy import ALLOW, EXCLUDE, HOLD
 from outbound_guard import OutboundGuard, blocked_reason
 from stable_ids import digest
 from storage import connect
+import team_decisions
 
 QUEUED_BATCHES = '''SELECT j.id,x.team_id,x.context,x.messages FROM jobs j JOIN job_context x ON x.job=j.id
     WHERE j.state='new' ORDER BY j.rowid'''
@@ -32,11 +33,14 @@ def classify_queued(pipeline):
     try:
         with connect(pipeline.db) as c:
             jobs = c.execute(QUEUED_BATCHES).fetchall()
+        decisions = {}  # team id -> its current decisions, read from the team server once per run
         for job in jobs:
             context = json.loads(job['context'])
             # Outside _classify_batch's error handling: a database error here aborts the whole run.
             if _runnable(pipeline, job, context):
-                _classify_batch(pipeline, job, context)
+                if job['team_id'] not in decisions:
+                    decisions[job['team_id']] = team_decisions.current_decisions(pipeline, job['team_id'])
+                _classify_batch(pipeline, job, context, decisions[job['team_id']])
     finally:
         pipeline.process_lock.release()
 
@@ -51,7 +55,7 @@ def _runnable(pipeline, job, context):
         return not pipeline.privacy.waiting(c, job['id'])
 
 
-def _classify_batch(pipeline, job, context):
+def _classify_batch(pipeline, job, context, decisions):
     try:
         messages = json.loads(job['messages'])
         earlier_job, earlier = previous_batch_tail(pipeline.db, job, context, messages)
@@ -63,7 +67,9 @@ def _classify_batch(pipeline, job, context):
             _exclude_locally(pipeline, job, context)
             return
         llm, decider = _guarded_clients(pipeline, job, context, review)
-        request = dict(context=review.context, messages=review.messages, contextMessages=review.context_messages)
+        decisions = _sendable(decisions, review.fragments)
+        request = dict(context=_with_team_decisions(review.context, decisions), messages=review.messages,
+                       contextMessages=review.context_messages)
         result = classify(request, llm, decider)
         blocked = llm.blocked or (decider.blocked if decider else None)
         if blocked:
@@ -71,9 +77,25 @@ def _classify_batch(pipeline, job, context):
             return
         if not result['ok']:
             raise ValueError(result['error'])
-        _store_cards(pipeline, job, context, result)
+        _store_cards(pipeline, job, context, result, decisions)
     except Exception as error:
         _mark_failed(pipeline, job, context, error)
+
+
+def _sendable(decisions, fragments):
+    """Team decisions that may go out with this batch: one carrying a secret or a piece the local gate blocked is
+    left out, so it can never make the outbound check hold the user's batch."""
+    return [d for d in decisions if not blocked_reason(f"[{d['topic_key']}] {d['content']}", fragments)]
+
+
+def _with_team_decisions(context, decisions):
+    """The classifier context with the team's current decisions (existingDecisions) and their topics.
+
+    The classifier marks a decision that gives one of these topics another value as is_change; the topic names
+    let it reuse the team's topic_key, which the pre-approval alert matches on."""
+    topics = list(dict.fromkeys([*(context.get('existingTopicKeys') or []), *(d['topic_key'] for d in decisions)]))
+    return dict(context, existingTopicKeys=topics,
+                existingDecisions=[dict(topic_key=d['topic_key'], content=d['content']) for d in decisions])
 
 
 def _exclude_locally(pipeline, job, context):
@@ -107,7 +129,7 @@ def _hold_blocked(pipeline, job, review, reason):
     pipeline.privacy.record(pipeline.db, job['id'], HOLD, reason, review.model, detail)
 
 
-def _store_cards(pipeline, job, context, result):
+def _store_cards(pipeline, job, context, result, decisions):
     # On failure the transaction rolls back: no card is stored and the job stays 'new' for _mark_failed.
     with connect(pipeline.db) as c:
         c.execute('BEGIN IMMEDIATE')
@@ -115,6 +137,9 @@ def _store_cards(pipeline, job, context, result):
         # Ids use the position in the unfiltered result; filtering first would change them and break dedup.
         for index, card in enumerate(result['cards']):
             if card['relevance'] == 'related' and card['tag'] != 'none':
+                alert = team_decisions.stored_alert(card, decisions)
+                if alert:  # kept with the private candidate only (team_decisions.pre_alert)
+                    card = dict(card, **{team_decisions.STORED_KEY: alert})
                 _store_card(c, job, digest([job['id'], index]), card)
         c.execute("UPDATE jobs SET state='done',detail='' WHERE id=?", (job['id'],))
 

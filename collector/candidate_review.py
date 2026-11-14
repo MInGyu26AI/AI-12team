@@ -7,6 +7,7 @@ from card_contract import PUBLIC_FIELDS, validate_card
 from collection_session import bound_team
 from delivery import approve, reset_blocked
 from storage import connect
+import team_decisions
 
 EDITABLE = {'content', 'sentence', 'owner', 'due', 'reason', 'topic_key', 'subtopic', 'confirmedRole'}
 MAX_APPROVE = 100
@@ -20,14 +21,17 @@ APPROVABLE = '''SELECT c.* FROM cards c JOIN candidate_details d ON d.id=c.id
 
 
 def _candidate(row):
-    return dict(json.loads(row['body']),
+    card = json.loads(row['body'])
+    stored = card.pop(team_decisions.STORED_KEY, None)
+    return dict(card,
                 id=row['id'],
                 status='candidate',
                 deliveryState=row['delivery'],
                 reviewState='review' if row['status'] == 'ready' else 'delivery',
                 deliveryDetail=row['detail'],
                 deliveryAttempts=row['attempts'],
-                nextDeliveryAttemptAt=row['next_attempt'])
+                nextDeliveryAttemptAt=row['next_attempt'],
+                preAlert=team_decisions.pre_alert(card, stored) if row['status'] == 'ready' else None)
 
 
 def list_candidates(pipeline):
