@@ -17,7 +17,8 @@ interface SetupFormProps {
 
 // 처음 설정 · 설정 수정. 팀과 사용자는 로컬 수집기 연결에서 오므로 여기서는 보여 주기만 한다
 export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormProps) {
-  const [{ teamName, userName }] = useState(initial);
+  // 팀·사용자는 수집기 상태에서 늦게 올 수 있어 상태로 얼리지 않고 매번 props 에서 읽는다 (팝업을 연 뒤 도착해도 보이고 저장 가능)
+  const { teamName, userName } = initial;
   const [projectTopic, setProjectTopic] = useState(initial.projectTopic);
   const [subtopics, setSubtopics] = useState(initial.enabledSubtopics);
   const [webUrlInput, setWebUrlInput] = useState(webUrlOf(initial));

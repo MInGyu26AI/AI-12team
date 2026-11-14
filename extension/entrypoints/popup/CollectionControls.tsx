@@ -1,4 +1,5 @@
 // 자동 수집 켜기 · 종료 시각. 바꿀 때마다 로컬 수집기에 바로 저장한다
+import { useState } from 'react';
 import type { ExtSettingsPatch } from '@shared/bridge';
 import { sendToBackground } from '@/lib/messages';
 import { endsAtOf, isEnded, type Settings } from '@/lib/settings';
@@ -27,17 +28,24 @@ export function AutoCollectSwitch({ autoCollect }: { autoCollect: boolean }) {
 // 수집 종료 시각. 몇 회마다 분류할지는 팀 고정값이라 고르지 않는다 (회의록 3장 ①)
 export function CollectionLimits({ settings }: { settings: Settings }) {
   const end = endsAtOf(settings);
+  // 입력하는 동안은 화면 값만 바꾸고, 칸을 벗어나거나 Enter 를 누를 때 한 번 저장한다
+  // (예전에는 저장된 값에 묶여 있어 입력 중 덜 찬 값이 되돌아가고, 숫자마다 저장했다)
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    const endsAt = draft ? fromLocalInput(draft) : null;
+    if (endsAt && endsAt !== end?.toISOString()) void save({ endsAt });
+    setDraft(null);
+  };
   return (
     <section className="space-y-2 rounded-lg border p-3">
       <label className="flex items-center justify-between gap-2 text-xs">
         <span className="text-gray-600">수집 종료 시각</span>
         <input
           type="datetime-local"
-          value={end ? toLocalInput(end) : ''}
-          onChange={(e) => {
-            const endsAt = fromLocalInput(e.target.value);
-            if (endsAt) void save({ endsAt });
-          }}
+          value={draft ?? (end ? toLocalInput(end) : '')}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && commit()}
           className="rounded-md border px-1.5 py-1"
         />
       </label>
