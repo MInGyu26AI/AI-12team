@@ -1,8 +1,9 @@
 """Local review service entry point.
 
-`app.py run --team-api … --team-token-file …`: the private review page (review_page) and the collection and delivery
+`app.py run [--team-api … --team-token-file …]`: the private review page (review_page) and the collection and delivery
 workers (collection_loop) of one state folder connected to a team server, and with --integrated the extension's /rpc
-over the turn pipeline. It does not start without a team server connection.
+over the turn pipeline. It does not start without a team server connection: the two options, or the team.json and
+team.key a web GitHub login saved in the state folder (key_setup.py).
 """
 import sys
 from pathlib import Path
@@ -23,16 +24,18 @@ import time
 from collection_loop import send_approved, watch
 from collection_session import bind_sharing
 from diagnostics import failure
+from key_setup import KEY_FILE, saved_connection
 from private_files import make_private_directory
 from review_page import Review
 from runtime import require_platform, storage_paths
 from secure_http import LoopbackServer
 from storage import connect, initialize, runtime_lock
-from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, KeyFileError, TeamClient
+from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, KeyFileError, TeamClient, team_api_url
 from turn_pipeline import TurnPipeline
 
 MAX_MINUTES = 1440
-NEEDS_TEAM = '팀 서버 연결이 필요합니다. --team-api와 --team-token-file을 지정하세요 (docs/team-server.md 참고).'
+NEEDS_TEAM = ('팀 서버 연결이 필요합니다. 배포 웹 /connect에서 GitHub로 로그인해 이 PC의 연결 키를 받거나, '
+              '--team-api와 --team-token-file을 지정하세요 (docs/team-server.md 참고).')
 
 
 def parse_args():
@@ -46,15 +49,28 @@ def parse_args():
     parser.add_argument("--codex-sqlite-dir", type=Path)
     parser.add_argument("--claude-dir", type=Path)
     parser.add_argument("--claude-project-name")
-    parser.add_argument('--team-api', help='HTTPS 팀 API 주소 (로컬 검사는 http://127.0.0.1 허용)')
-    parser.add_argument('--team-token-file', type=Path, help='현재 사용자만 읽을 수 있는 연결 키 파일')
+    parser.add_argument('--team-api', help='HTTPS 팀 API 주소 (로컬 검사는 http://127.0.0.1 허용). 웹에서 받은 키면 빼도 된다')
+    parser.add_argument('--team-token-file', type=Path, help='현재 사용자만 읽을 수 있는 연결 키 파일. 웹에서 받은 키면 빼도 된다')
     parser.add_argument('--team-id', help='최초 또는 시작 시 선택할 팀 ID')
     parser.add_argument('--integrated', action='store_true', help='통합 분류와 확장 프로그램 연결 활성화')
     args = parser.parse_args()
+    try:
+        saved = saved_connection(args.state)  # team.json the native host wrote after a web login (key_setup.py)
+    except ValueError as error:
+        parser.error(str(error))
+    if not args.team_api and not args.team_token_file and saved:
+        args.team_api, args.team_token_file = saved['api_url'], args.state / KEY_FILE
     if not args.team_api:
         raise SystemExit(NEEDS_TEAM)
     if not args.team_token_file:
         parser.error('--team-api와 --team-token-file을 함께 지정하세요.')
+    if saved and Path(args.team_token_file).resolve() == (args.state / KEY_FILE).resolve():
+        try:
+            same_server = team_api_url(args.team_api) == saved['api_url']
+        except ValueError:
+            same_server = False
+        if not same_server:
+            parser.error('상태 폴더의 연결 키는 team.json의 팀 서버용입니다. --team-api를 빼거나 같은 주소를 쓰세요.')
     try:
         args.codex_dir, args.codex_sqlite_dir, args.claude_dir, args.claude_project_name = storage_paths(args)
     except (ValueError, OSError):
