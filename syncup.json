@@ -4,9 +4,9 @@
     "name": "10게 2기조",
     "repo": "MInGyu26AI/AI-12team"
   },
-  "updated_at": "2026-11-14T21:50+09:00",
+  "updated_at": "2026-11-14T22:39+09:00",
   "summary": {
-    "decisions": 3,
+    "decisions": 5,
     "open_conflicts": 1,
     "todos": 1,
     "todos_done": 0,
@@ -37,6 +37,14 @@
       "subtopic": "주제·목표",
       "current": [
         {
+          "card_id": "3d7a16963bac65e439a17115438bd2e7cb5836780c742936ca8db79eb0e52d96",
+          "content": "MVP 범위 = 브라우저 확장 포함",
+          "reason": null,
+          "owner": "김단비",
+          "decided_at": "2026-11-14T22:39+09:00",
+          "state": "active"
+        },
+        {
           "card_id": "fd430b61b82b5fc35b8b9b85d53d60e9aaf3bc229631f67e94bfa1d62e8ed8e4",
           "content": "MVP 범위 = 웹 승인함, 팀 보드, 브라우저 확장",
           "reason": null,
@@ -55,6 +63,22 @@
       ],
       "history": [],
       "status": "review"
+    },
+    {
+      "topic_key": "지원 브라우저",
+      "subtopic": "주제·목표",
+      "current": [
+        {
+          "card_id": "dfdf54cf97d9ce8aa57b4354f7e8d9134d10ff0b10caca8035bb82114abd1727",
+          "content": "지원 브라우저 = 크롬 우선",
+          "reason": null,
+          "owner": "김단비",
+          "decided_at": "2026-11-14T22:39+09:00",
+          "state": "active"
+        }
+      ],
+      "history": [],
+      "status": "settled"
     },
     {
       "topic_key": "확장 지원",
