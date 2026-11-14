@@ -28,8 +28,11 @@ def valid_token(token):
     return bool(TOKEN_PATTERN.fullmatch(token))
 
 
-def verify_database(dsn):
-    """Refuse to serve unless the API role is restricted, RLS is forced and the upgrades are applied."""
+def verify_database(dsn, web_keys=False):
+    """Refuse to serve unless the API role is restricted, RLS is forced and the upgrades are applied.
+
+    web_keys: the server issues keys to web logins (key_issue.py), so its tables and functions must be in place too.
+    Without it a database that predates them still serves."""
     with psycopg.connect(dsn, row_factory=dict_row, connect_timeout=DB_TIMEOUT_SECONDS) as c:
         role = c.execute('SELECT * FROM pg_roles WHERE rolname=current_user').fetchone()
         if not _restricted(c, role):
@@ -45,6 +48,38 @@ def verify_database(dsn):
                 WHERE attrelid='syncup.conflict_checks'::regclass AND attname=%s
                   AND atttypid='jsonb'::regtype AND attnotnull AND NOT attisdropped""", (column,)).fetchone():
                 raise DatabaseSetupError(f'server/team_admin.py migrate-integration으로 {purpose} 스키마를 적용하세요.')
+        if web_keys and not _web_keys_ready(c, role):
+            raise DatabaseSetupError('server/team_admin.py migrate-integration으로 웹 연결 키 스키마를 적용하세요.')
+
+
+# team_upgrades.sql: the tables the API must not touch directly, and the functions it uses instead.
+WEB_KEY_TABLES = ('tokens', 'identities', 'key_events')
+WEB_KEY_FUNCTIONS = ('syncup.issue_web_key(jsonb,text,text,text,text)', 'syncup.replay_web_key(text)')
+
+
+def _web_keys_ready(c, role):
+    """The web key tables enforce row security, the API role can neither read nor change them or the key table, and
+    the two functions are SECURITY DEFINER with a fixed search_path, owned by a role that bypasses row security."""
+    tables = c.execute("""SELECT relname FROM pg_class WHERE relnamespace='syncup'::regnamespace AND relkind='r'
+        AND relname IN ('identities','key_events') AND relrowsecurity AND relforcerowsecurity AND relowner<>%s""",
+        (role['oid'],)).fetchall()
+    columns = c.execute("""SELECT count(*) AS n FROM pg_attribute WHERE attrelid='syncup.tokens'::regclass
+        AND attname IN ('issued_via','issued_at') AND attnotnull AND NOT attisdropped""").fetchone()['n']
+    if len(tables) != 2 or columns != 2:
+        return False
+    for table in WEB_KEY_TABLES:
+        if c.execute("SELECT has_table_privilege(current_user, %s, 'SELECT,INSERT,UPDATE,DELETE') AS p",
+                     ('syncup.' + table,)).fetchone()['p']:
+            return False
+    for signature in WEB_KEY_FUNCTIONS:
+        function = c.execute("""SELECT p.prosecdef, p.proconfig, o.rolsuper OR o.rolbypassrls AS owner_bypasses,
+                has_function_privilege(current_user, p.oid, 'EXECUTE') AS callable
+            FROM pg_proc p JOIN pg_roles o ON o.oid=p.proowner WHERE p.oid=to_regprocedure(%s)""",
+            (signature,)).fetchone()
+        if not (function and function['prosecdef'] and function['owner_bypasses'] and function['callable']
+                and 'search_path=pg_catalog, pg_temp' in (function['proconfig'] or [])):
+            return False
+    return True
 
 
 def _restricted(c, role):
