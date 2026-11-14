@@ -1,6 +1,7 @@
 // chrome.storage.local 에 저장하는 값들 (WXT storage 래퍼)
 import { storage } from '#imports';
 import type { ExtStatus } from '@shared/bridge';
+import type { TeamCriteria } from '@shared/criteria';
 import { MAX_TURNS_PER_BATCH, TURNS_PER_BATCH } from '@shared/batch';
 import { isShareable } from '@shared/labels';
 import { SUBTOPICS, type RelatedCard, type Subtopic } from '@shared/types';
@@ -23,6 +24,8 @@ export interface Settings {
   bufferedTurns?: number;
   nextBatchTurns?: number; // 다음 자동 분류까지 센 턴 (대화별, 답을 받은 턴만)
   lastCollectedAt?: string | null;
+  // 팀 목표·범위·규칙 (설정 화면, 선택). 수집기 collection.configure 가 아직 받지 않아 확장에만 둔다 (shared/criteria.ts)
+  teamCriteria?: TeamCriteria;
 }
 
 export const settingsItem = storage.defineItem<Settings>('local:settings', {
@@ -33,6 +36,7 @@ export const settingsItem = storage.defineItem<Settings>('local:settings', {
 export const settingsFromStatus = (previous: Settings, status: ExtStatus): Settings => ({
   webUrl: previous.webUrl,
   enabledSubtopics: previous.enabledSubtopics,
+  teamCriteria: previous.teamCriteria,
   configured: status.configured,
   teamName: status.teamName,
   projectTopic: status.projectTopic ?? previous.projectTopic,

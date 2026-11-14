@@ -17,6 +17,7 @@ interface PairJudgement {
 const isDecision = (c: RelatedCard) => c.relevance === "related" && c.tag === "decision";
 const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
 const TEAM_AGREED = /팀에서|다들|모두|합의|회의에서/;
+const RULE_CONFIDENCE = 0.8;
 
 /** 같은 세부 주제의 기존 결정 (최근 것부터 상위 CONFLICT_TOP_K 개). 유사도 후보는 AI 쪽에서 */
 function findCandidates(next: RelatedCard, existing: RelatedCard[]): RelatedCard[] {
@@ -38,7 +39,8 @@ function ruleJudge(next: RelatedCard, old: RelatedCard): PairJudgement {
     judgement === "변경"
       ? `같은 세부 주제(${old.topic_key})의 기존 결정 '${old.content}'을(를) 바꾸는 표현: '${next.content}'`
       : `같은 세부 주제(${old.topic_key})의 기존 결정 '${old.content}'과(와) 다른 내용: '${next.content}'`;
-  return { id: old.id, judgement, reason, confidence: 0.5 };
+  // 목업 근사: 두 카드 중 분류 확신이 낮은 쪽만큼만 판정도 확신한다 (0.6 미만이면 보드에 '확인 필요'). 규칙 판정이라 0.8 을 넘지 않음
+  return { id: old.id, judgement, reason, confidence: Math.min(RULE_CONFIDENCE, next.confidence, old.confidence) };
 }
 
 /** 새 결정 하나 → 경고할 Conflict 목록 (cardA = 기존, cardB = 새 결정) */

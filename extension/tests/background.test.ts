@@ -5,6 +5,7 @@ import type { ExtStatus } from '@shared/bridge';
 import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
 import { NOTICE_ID, noticeBaselineItem } from '@/lib/candidate-notice';
+import { checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
 import { collectStateItem, pendingCountItem, settingsItem } from '@/lib/settings';
 import { DEFAULT_WEB_URL, LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
 
@@ -39,6 +40,7 @@ async function fakeCollector(_host: string, request: NativeRequest) {
   if (override === 'unreachable') throw new Error('Specified native messaging host not found.');
   if (override) return override;
   if (request.method === 'candidates.list') return { ok: true, result: { cards: [], status: STATUS } };
+  if (request.method === 'team.conflicts') return { ok: true, result: { conflicts: [] } };
   if (request.method === 'turns.append') {
     return { ok: true, result: { newMessages: request.params.messages!.length, queued: true, intakeIssues: appendIssues } };
   }
@@ -133,6 +135,62 @@ describe('대화 보내기', () => {
   it('채팅 화면이 아닌 페이지의 collect 는 거절한다', async () => {
     const result = await send({ type: 'collect', trigger: 'manual', messages: messages(1) }, fromPage('https://example.com/'));
     expect(result).toEqual({ ok: false, error: '허용되지 않은 연결 화면' });
+  });
+});
+
+describe('충돌 시스템 알림', () => {
+  const card = (id: string, content: string) => ({ id, content, topic_key: 'MVP 범위' });
+  const conflict = (id: string, extra: object = {}) => ({
+    id, topic_key: 'MVP 범위', judgement: '충돌', reason: '', cardA: card(`${id}-a`, '확장 제외'), cardB: card(`${id}-b`, '확장 포함'), ...extra,
+  });
+  const notify = () => vi.spyOn(fakeBrowser.notifications, 'create').mockClear().mockResolvedValue('syncup-conflicts' as never);
+
+  it('새 미해결 충돌만 한 번 알리고, 같은 충돌은 다시 알리지 않는다', async () => {
+    const create = notify();
+    overrides['team.conflicts'] = { ok: true, result: { conflicts: [conflict('c1'), conflict('c2', { resolution: 'keep-existing' })] } };
+    await checkConflicts();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]![1]).toMatchObject({ title: '싱크업 충돌: MVP 범위' });
+    await checkConflicts();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(fakeBrowser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '1' });
+  });
+
+  it('확신도 0.6 미만은 확인 필요로 알린다', async () => {
+    const create = notify();
+    overrides['team.conflicts'] = { ok: true, result: { conflicts: [conflict('c3', { confidence: 0.4 })] } };
+    await checkConflicts();
+    expect(create.mock.calls[0]![1]).toMatchObject({ title: '싱크업 확인 필요: MVP 범위' });
+  });
+
+  it('수집기에 닿지 못하면 알림도 팝업 오류도 없이 건너뛴다', async () => {
+    const create = notify();
+    overrides['team.conflicts'] = 'unreachable';
+    await checkConflicts();
+    expect(create).not.toHaveBeenCalled();
+    expect(await lastError()).toBeNull();
+  });
+
+  it('알림을 누르면 팀 보드를 연다', async () => {
+    const open = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as never);
+    vi.spyOn(fakeBrowser.notifications, 'clear').mockResolvedValue(true as never);
+    await useWebUrl(PRODUCTION_WEB_URL);
+    await openBoardFromNotification('syncup-conflicts');
+    expect(open).toHaveBeenCalledWith({ url: `${PRODUCTION_WEB_URL}/board` });
+  });
+});
+
+describe('묶음 크기 고정', () => {
+  it('수집기에 예전에 바꾼 묶음 크기가 남아 있으면 기본값(10)으로 되돌린다', async () => {
+    overrides['candidates.list'] = { ok: true, result: { cards: [], status: { ...STATUS, turnsPerBatch: 12 } } };
+    await send({ type: 'refresh' }, fromPopup());
+    const configure = nativeCalls.find((c) => c.method === 'collection.configure');
+    expect(configure?.params).toEqual({ turnsPerBatch: 10 });
+  });
+
+  it('이미 기본값이면 설정을 다시 보내지 않는다', async () => {
+    await send({ type: 'refresh' }, fromPopup());
+    expect(calledMethods()).not.toContain('collection.configure');
   });
 });
 
