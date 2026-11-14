@@ -1,0 +1,20 @@
+{
+  "syncup_version": 1,
+  "team": {
+    "name": "10게 2기조",
+    "repo": "MInGyu26AI/AI-12team"
+  },
+  "updated_at": null,
+  "summary": {
+    "decisions": 0,
+    "open_conflicts": 0,
+    "todos": 0,
+    "todos_done": 0,
+    "research": 0
+  },
+  "open_conflicts": [],
+  "decisions": [],
+  "todos": [],
+  "research": [],
+  "resolved_conflicts": []
+}
