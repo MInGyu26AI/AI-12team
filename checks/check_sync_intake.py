@@ -37,6 +37,12 @@ def seconds(text):
     return datetime.fromisoformat(text).timestamp()
 
 
+def now_to_microseconds():
+    """time.time() cut to microseconds: stored times keep six digits, and the Windows clock gives finer ones,
+    so a time stored in the same microsecond would compare as earlier."""
+    return math.floor(time.time() * 1_000_000) / 1_000_000
+
+
 class SyncFixture(PipelineFixture):
     """The pipeline fixture with the session started an hour ago at a whole second (self.base)."""
     def setUp(self):
@@ -152,7 +158,7 @@ class AccountSyncSettings(SyncFixture):
         self.assertIsNone(self.configure_sync(enabled=False)['accountSync'], 'turning off stays never turned on')
 
     def test_turn_on_again_off_and_on(self):
-        before = time.time()
+        before = now_to_microseconds()
         status = self.configure_sync(enabled=True, account=ACCOUNT)
         state = status['accountSync']
         self.assertEqual((state['enabled'], state['account']), (True, ACCOUNT))
@@ -169,7 +175,7 @@ class AccountSyncSettings(SyncFixture):
         self.assertEqual(off['accountSync'], dict(enabled=False, account=OTHER_ACCOUNT, since=None))
         self.assertEqual(off['syncWindows'], [])
 
-        before_again = time.time()
+        before_again = now_to_microseconds()
         on_again = self.configure_sync(enabled=True, account=ACCOUNT)['accountSync']
         self.assertGreaterEqual(seconds(on_again['since']), before_again, 'turned on again: a new consent time')
 
