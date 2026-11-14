@@ -8,7 +8,7 @@
 - macOS 또는 Windows ([지원 OS](#지원-os)), Python 3.11 이상, Rust 2024 edition을 빌드할 수 있는 `cargo`, Node.js와 npm. Windows에서 묶음(`syncup.exe`)을 쓰면 Python·Rust는 필요 없다
 - Ollama와 기본 개인정보 모델 ([개인정보 모델 준비](#개인정보-모델-준비))
 - `OPENAI_API_KEY`. 키와 다른 공급자 설정은 [ai/README.md 설정](../ai/README.md#설정)
-- 팀 서버 주소와 관리자가 발급한 개인 연결 키 파일 ([team-server.md](team-server.md)). 이 Mac에서 직접 띄우려면 [한 기기에서 써 보기](team-server.md#한-기기에서-써-보기)
+- 팀 서버 주소와 개인 연결 키. 키는 배포 웹에서 GitHub로 로그인해 받거나([GitHub로 연결 키 받기](#github로-연결-키-받기)), 관리자가 발급한 파일을 쓴다([team-server.md](team-server.md)). 이 Mac에서 직접 띄우려면 [한 기기에서 써 보기](team-server.md#한-기기에서-써-보기)
 - Chrome (확장을 쓸 때)
 
 ## 스캐너 빌드
@@ -51,6 +51,8 @@ python3 collector/app.py run --integrated \
 
 팀·주제·묶음 크기·종료 시각 같은 수집 설정은 확장 팝업이나 웹 `/collect`에서 한다.
 
+웹에서 GitHub로 키를 받았으면 `--team-api`와 `--team-token-file`을 뺀다. 수집기가 상태 폴더의 `team.json`(팀 서버 주소)과 `team.key`를 쓴다. `--team-api`를 따로 주면서 `team.key`를 쓰면 `team.json`과 같은 주소여야 한다.
+
 ### 팀 연결 단독 모드
 
 위 명령에서 `--integrated`를 뺀다. 확장·웹 없이 Python 검토함만 쓴다.
@@ -91,12 +93,28 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
    ```sh
    python3 collector/prepare_native.py --extension-id 32자리확장ID \
      --connection /절대/경로/개인-상태/connection.json \
-     --output /절대/경로/새-native-폴더
+     --output /절대/경로/새-native-폴더 \
+     --team-api https://팀서버주소
    ```
+   `--team-api`는 웹에서 연결 키를 받을 팀 서버다. 웹이 보낸 주소는 쓰지 않으므로 여기서 정한다. 없으면 키를 받을 수 없다.
 3. `com.syncup.collector.json`을 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`에 복사한다. `syncup-native`는 출력 폴더에 그대로 둔다. 매니페스트의 `path`가 이 파일을 가리킨다. Windows에서는 복사하지 않고, 2단계가 출력한 `reg add` 명령으로 현재 사용자 레지스트리에 등록한다([windows.md](windows.md#windows에서-알아-둘-것)).
 4. 확장 팝업에서 프로젝트 주제와 개인 검토함 주소를 저장한다. 이 주소는 승인함 웹의 주소(배포 주소나 `npm run dev`의 `http://localhost:3000`)이고, 수집기가 출력하는 8876 주소가 아니다. 그 주소의 페이지는 개인 후보를 읽고 승인을 보낼 수 있으니 믿는 주소만 넣는다.
 
 `syncup-native`에는 Python 실행 파일, `collector/native_host.py`, `connection.json`의 절대 경로가 들어 있다. 이 가운데 하나나 확장 ID가 바뀌면 새 빈 폴더로 2~3단계를 다시 하고 `chrome://extensions`에서 확장을 새로고침한다. 수집기 파일이 `collector/`로 옮겨지기 전에 등록했다면 이 경우다(예전 실행기는 저장소 루트의 `native_host.py`를 찾는다).
+
+## GitHub로 연결 키 받기
+
+터미널 없이 이 PC의 개인 연결 키를 받는다. [확장 연결](#확장-연결)을 `--team-api`와 함께 마친 뒤에 한다. 수집기는 꺼져 있어도 된다.
+
+1. 팀 관리자가 내 GitHub 계정을 SyncUp 사용자에 등록해 둔다([team-server.md](team-server.md#웹-로그인으로-연결-키-받기)).
+2. 확장 팝업의 개인 검토함 주소가 배포 웹인지 확인하고, 배포 웹 `/connect`에서 **GitHub로 계속하기**를 누른다.
+3. GitHub 로그인이 끝나면 `/auth/callback`에 "연결됐어요: 이름 · 팀 · 만료일"이 나온다. 상태 폴더에 `team.key`와 `team.json`이 생긴다.
+4. 수집기를 `--team-api`·`--team-token-file` 없이 켠다. 이미 켜져 있었으면 다시 켠다.
+
+- 키는 이 PC의 연결 프로그램(native host, `collector/key_setup.py`)이 만들고, 팀 서버에는 SHA-256 값만 보낸다. 웹 페이지는 키도, Supabase 토큰도 보지 않는다. 웹이 받는 것은 Supabase가 돌려준 일회용 code뿐이고, 이 code는 연결 프로그램이 상태 폴더에 둔 PKCE 비밀값 없이는 쓸 수 없다.
+- 유효 기간은 30일이다. 다시 받으면 이 PC의 이전 키만 폐기된다. 한 사람이 쓸 수 있는 웹 키는 3개(PC 3대)까지다.
+- 상태 폴더가 다른 사용자나 다른 팀 서버에 이미 묶여 있으면 받지 않는다. 사용자를 바꾸려면 새 빈 상태 폴더로 [확장 연결](#확장-연결)을 다시 한다.
+- 로컬 웹(`local_web.cjs`) 모드에서는 받을 수 없다. 확장을 쓰는 배포 웹에서 받는다.
 
 ## ChatGPT 프로젝트 동기화 (확장 0.2.8)
 
@@ -134,6 +152,9 @@ SYNCUP_CONNECTION_FILE=/절대/경로/개인-상태/connection.json node collect
 | `private.sqlite.*.bak.sqlite` | [업그레이드](#업그레이드와-백업) 전 사본 |
 | `run.lock` | 중복 실행 막기. 두 번 켜면 `같은 상태 폴더의 프로그램이 이미 실행 중입니다.`로 멈춘다 |
 | `connection.json` | `--integrated`일 때만. 로컬 RPC 주소와 비밀값 |
+| `team.key` · `team.json` | 웹 GitHub 로그인으로 받은 연결 키와 그 팀 서버 주소·사용자·만료일 ([GitHub로 연결 키 받기](#github로-연결-키-받기)). 현재 사용자만 읽을 수 있어야 쓴다 |
+| `login.pending` | 진행 중인 GitHub 로그인의 PKCE 비밀값. 키를 받으면 지운다 |
+| `.gitignore` | 키를 받을 때 `*` 한 줄로 만든다. 상태 폴더가 Git 저장소 안에 있어도 키가 커밋되지 않게 한다 |
 
 - 대화 원문과 승인 내용이 들어 있으니 공유하지 않는다.
 - 프로젝트마다 다른 폴더를 쓴다. 처음 팀 서버에 연결하면 서버 주소와 사용자가 폴더에 고정된다. 다른 사용자나 서버로 연결하려면 새 폴더를 쓴다.
