@@ -1036,9 +1036,11 @@ describe('동기화로 고른 프로젝트에서는 화면 수집을 하지 않�
 describe('알람과 시작', () => {
   it('refresh 알람은 상태만 새로 고치고 패스를 돌지 않는다', async () => {
     await enabled();
+    // 수집기가 개수(counts)를 주면 후보 본문(candidates.list) 없이 collection.status 하나로 끝난다
+    nativeOverrides['collection.status'] = { ok: true, result: { ...collectorStatus(), counts: { reviewPending: 0 } } };
     await fakeBrowser.alarms.onAlarm.trigger({ name: 'refresh', scheduledTime: clock, persistAcrossSessions: false });
     await settle();
-    expect(calledMethods()).toEqual(['candidates.list']);
+    expect(calledMethods()).toEqual(['collection.status']);
     // 탭에는 화면 읽기 점검 ping 만 간다 (lib/tab-health.ts). sync.* 요청은 없다
     expect(tabCalls.map((c) => c.request.type as string)).toEqual(['ping']);
   });

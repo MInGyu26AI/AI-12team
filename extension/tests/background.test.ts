@@ -343,6 +343,13 @@ describe('검토 대기 카드는 개수만 확장 저장소에 둔다', () => {
     expect(await storedText()).not.toContain('"c1"');
   });
 
+  it('수집기가 개수(counts.reviewPending)를 주면 후보 본문을 받지 않고 그 수를 쓴다', async () => {
+    overrides['collection.status'] = { ok: true, result: { ...STATUS, counts: { reviewPending: 3 } } };
+    await send({ type: 'refresh' }, fromPopup());
+    expect(calledMethods()).not.toContain('candidates.list');
+    expect(await pendingCountItem.getValue()).toBe(3);
+  });
+
   it('배지는 같은 수를 보여 준다', async () => {
     overrides['candidates.list'] = status([]);
     await send({ type: 'refresh' }, fromPopup());

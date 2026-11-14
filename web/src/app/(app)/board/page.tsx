@@ -103,6 +103,11 @@ export default function BoardPage() {
           팀 기록 복사
         </Button>
       </div>
+      {load.stale && (
+        <p role="status" className="rounded-lg border border-alert-review/40 bg-alert-review-soft px-4 py-2 text-sm text-alert-review">
+          연결이 잠시 끊겼어요. 마지막으로 받은 기록을 보여 주고 있고, 다시 연결되면 자동으로 새로 고쳐요.
+        </p>
+      )}
       <TeamCriteriaCard criteria={criteria} />
       <DecisionHistoryList />
       <ConflictChecks cards={cards} onRetry={retryCheck} />

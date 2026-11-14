@@ -10,7 +10,7 @@ import { CollectionSettings } from "@/components/collect/collection-settings";
 import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
-import { canSyncNow, useLocalCollector } from "@/lib/local-collector";
+import { canSyncNow, collectorLink, useLocalCollector } from "@/lib/local-collector";
 import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
 import { useRepo } from "@/lib/use-repo";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ export default function CollectPage() {
   const repo = useRepo();
   const st = collector.status;
   const connected = collector.available && !!st;
+  const link = collectorLink(collector); // 확장 없음과 로컬 수집기 꺼짐을 나눠 안내한다
   const pendingIds = new Set(collector.cards.map((c) => c.id));
   const [syncing, setSyncing] = useState(false);
 
@@ -59,12 +60,14 @@ export default function CollectPage() {
       <section className="rounded-xl border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4">
           <h2 className="font-semibold">연결된 AI</h2>
-          {connected ? (
+          {link === "connected" ? (
             <span className="rounded-full bg-ok-soft px-3 py-1 text-xs font-semibold text-ok">로컬 수집기 연결됨</span>
-          ) : collector.checked ? (
+          ) : link === "extension-missing" ? (
             <Link href="/install" className="rounded-full bg-warn-soft px-3 py-1 text-xs font-semibold text-warn">
               브라우저 확장 설치 필요 →
             </Link>
+          ) : link === "collector-off" ? (
+            <span className="rounded-full bg-warn-soft px-3 py-1 text-xs font-semibold text-warn">로컬 수집기 꺼짐 · 수집기를 실행해 주세요</span>
           ) : (
             <span className="text-xs text-muted-foreground">확장 확인 중…</span>
           )}
@@ -76,13 +79,15 @@ export default function CollectPage() {
               ? st.lastCollectedAt
                 ? `마지막 수집 ${fmtMDHM(new Date(st.lastCollectedAt))}`
                 : "아직 수집한 대화가 없어요"
-              : "브라우저 확장을 설치하면 연결돼요"
+              : link === "collector-off"
+                ? "확장은 연결됐어요. 로컬 수집기를 실행하면 수집을 시작해요"
+                : "브라우저 확장을 설치하면 연결돼요"
           }
           on={connected}
           action={
             connected ? (
               <ConnectedChip />
-            ) : (
+            ) : link === "collector-off" ? null : (
               <Link href="/install" className="rounded-lg bg-brand-soft px-4 py-2 text-sm font-semibold text-brand">
                 연결하기
               </Link>
@@ -91,7 +96,13 @@ export default function CollectPage() {
         />
         <AiRow
           name="Codex·Claude Code"
-          detail={connected ? "로컬 수집기가 선택한 프로젝트에서 완료된 새 발화를 모아요" : "로컬 수집기를 실행하면 연결돼요"}
+          detail={
+            connected
+              ? "로컬 수집기가 선택한 프로젝트에서 완료된 새 발화를 모아요"
+              : link === "collector-off"
+                ? "로컬 수집기가 꺼져 있어요. 수집기를 실행해 주세요"
+                : "로컬 수집기를 실행하면 연결돼요"
+          }
           on={connected}
           action={connected ? <ConnectedChip /> : null}
         />
