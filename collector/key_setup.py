@@ -4,6 +4,7 @@ Chrome starts the native host for every message, so this works while the collect
 
     setup.status   whether this PC has a key and until when
     setup.begin    keep a new PKCE verifier in the state folder; the web gets only its S256 challenge
+    setup.invite   {code} of an invite link → the team name and expiry the join page shows (server/team_invites.py)
     setup.connect  with the one-time code Supabase returned to the web: generate the key here, register its SHA-256 at
                    the team server's POST /keys together with the code and verifier (server/key_issue.py), check it
                    with GET /me, and save team.key and team.json
@@ -40,6 +41,8 @@ FILE_LIMIT = 4096
 RESPONSE_LIMIT = 64 * 1024
 CODE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 VERIFIER = re.compile(r'[A-Za-z0-9_-]{43,128}')
+INVITE = re.compile(r'[A-Za-z0-9_-]{24}')  # server/team_invites.py CODE
+INVITE_NAME = re.compile(r'[^\x00-\x1f\x7f]{1,40}')
 
 START_AGAIN = '로그인을 처음부터 다시 시작하세요. 시작한 지 10분이 지났거나 다른 창에서 다시 시작했습니다.'
 NO_TEAM_API = ('이 PC의 연결 프로그램에 팀 서버 주소가 없습니다. '
@@ -56,6 +59,13 @@ ANSWERS = {
     409: '연결된 PC가 너무 많습니다. 팀 관리자에게 이전 PC의 키 폐기를 요청하세요.',
     429: '잠시 뒤 다시 시도하세요.',
 }
+# The server's reason for an invite login it refused (server/team_invites.py REFUSED); the status message otherwise.
+INVITE_ANSWERS = {
+    'link': '초대 링크가 만료됐거나 회수됐어요. 팀원에게 새 링크를 받으세요.',
+    'team_full': '팀 인원이 가득 찼어요. 팀원에게 확인하세요.',
+    'removed': '이 팀에서 빠진 계정이에요. 다시 참여하려면 팀 관리자에게 문의하세요.',
+}
+BAD_INVITE = '초대 링크 형식이 맞지 않아요. 받은 링크 전체를 다시 열어 주세요.'
 SERVER_FAILED = '팀 서버가 연결 키를 등록하지 못했습니다. 잠시 뒤 다시 시도하세요.'
 UNREACHABLE = '팀 서버에 닿지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요.'
 NOT_SAVED = '연결 키를 이 PC에 저장하지 못했습니다. 상태 폴더를 확인하고 다시 시도하세요.'
@@ -76,7 +86,9 @@ def handle(connection, team_api, payload):
         if method == 'setup.status':
             result = status(state)
         elif method == 'setup.begin':
-            result = begin(state)
+            result = begin(state, params.get('invite'))
+        elif method == 'setup.invite':
+            result = invite_preview(team_api, params.get('code'))
         elif method == 'setup.connect':
             result = connect(state, team_api, params.get('code'))
         else:
@@ -98,11 +110,16 @@ def status(state):
     return dict(hostReady=True, keyPresent=present, expiresAt=saved['expires_at'] if present else None)
 
 
-def begin(state):
-    """A new login: its verifier replaces any earlier one, so only the latest login of this PC can finish."""
+def begin(state, invite=None):
+    """A new login: its verifier replaces any earlier one, so only the latest login of this PC can finish.
+    invite: {code, name} of an invite link the login joins; kept next to the verifier, never in the redirect."""
+    invite = checked_invite(invite)
     prepare_state(state)
     verifier = secrets.token_urlsafe(64)
-    write_private(state / PENDING_FILE, json.dumps(dict(verifier=verifier, at=time.time())))
+    pending = dict(verifier=verifier, at=time.time())
+    if invite:
+        pending['invite'] = invite
+    write_private(state / PENDING_FILE, json.dumps(pending))
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
     return dict(challenge=challenge)
 
@@ -115,7 +132,7 @@ def connect(state, team_api, code):
     except ValueError:
         raise SetupError(NO_TEAM_API) from None
     prepare_state(state)
-    verifier = take_pending(state)
+    verifier, invite = take_pending(state)
     expected_user, replaces = None, None
     try:
         saved = saved_connection(state)
@@ -136,6 +153,8 @@ def connect(state, team_api, code):
                 device='Windows' if sys.platform == 'win32' else 'macOS')
     if replaces:
         body['replaces'] = replaces
+    if invite:
+        body.update(invite=invite['code'], name=invite['name'])
     new_key = new_private_file(state, KEY_FILE, key + '\n')
     try:
         issued = register(team_api, body)
@@ -151,7 +170,10 @@ def connect(state, team_api, code):
         raise
     write_private(state / SAVED_FILE, json.dumps(dict(api_url=team_api, user_id=issued['user_id'],
                                                       expires_at=issued['expires_at'])))
-    return dict(name=profile['name'], teams=[team['name'] for team in profile['teams']], expiresAt=issued['expires_at'])
+    result = dict(name=profile['name'], teams=[team['name'] for team in profile['teams']], expiresAt=issued['expires_at'])
+    if invite and isinstance(issued.get('team'), str):
+        result['invite'] = dict(team=issued['team'], added=issued.get('added') is True)
+    return result
 
 
 def register(team_api, body):
@@ -166,8 +188,8 @@ def register(team_api, body):
                 raw = response.read(RESPONSE_LIMIT + 1)
                 answered = response.status
         except urllib.error.HTTPError as error:
-            error.close()
-            raise SetupError(ANSWERS.get(error.code, SERVER_FAILED)) from None
+            reason = refused_reason(error)
+            raise SetupError(INVITE_ANSWERS.get(reason) or ANSWERS.get(error.code, SERVER_FAILED)) from None
         except (urllib.error.URLError, http.client.HTTPException, OSError):
             if attempt == 2:
                 raise SetupError(UNREACHABLE) from None
@@ -180,6 +202,60 @@ def register(team_api, body):
         except (ValueError, KeyError, TypeError):
             pass
         raise SetupError(SERVER_FAILED)
+
+
+# ── 초대 링크 (server/team_invites.py) ──
+def checked_invite(invite):
+    """{code, name} of an invite link, or None; SetupError for anything else. Never echoed back."""
+    if invite is None:
+        return None
+    if (not isinstance(invite, dict) or set(invite) != {'code', 'name'} or not isinstance(invite['code'], str)
+            or not INVITE.fullmatch(invite['code']) or not isinstance(invite['name'], str)
+            or not INVITE_NAME.fullmatch(invite['name'].strip())):
+        raise SetupError(BAD_INVITE)
+    return dict(code=invite['code'], name=invite['name'].strip())
+
+
+def invite_preview(team_api, code):
+    """The team server's {status, team, expiresAt, members, memberLimit} for an invite code, before any login."""
+    if not isinstance(code, str) or not INVITE.fullmatch(code):
+        raise SetupError(BAD_INVITE)
+    try:
+        team_api = team_api_url(team_api or '')
+    except ValueError:
+        raise SetupError(NO_TEAM_API) from None
+    call = urllib.request.Request(team_api + 'invites/preview', json.dumps(dict(code=code)).encode(),
+                                  {'Content-Type': 'application/json'}, method='POST')
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    try:
+        with opener.open(call, timeout=POST_SECONDS) as response:
+            raw = response.read(RESPONSE_LIMIT + 1)
+    except urllib.error.HTTPError as error:
+        error.close()
+        raise SetupError(ANSWERS.get(error.code, SERVER_FAILED)) from None
+    except (urllib.error.URLError, http.client.HTTPException, OSError):
+        raise SetupError(UNREACHABLE) from None
+    try:
+        found = json.loads(raw) if len(raw) <= RESPONSE_LIMIT else None
+        status = found['status']
+        if status != 'valid':
+            return dict(status=status if isinstance(status, str) else 'unknown_link')
+        return dict(status='valid', team=str(found['team']), expiresAt=str(found['expires_at']),
+                    members=int(found['members']), memberLimit=int(found['member_limit']))
+    except (ValueError, KeyError, TypeError):
+        raise SetupError(SERVER_FAILED) from None
+
+
+def refused_reason(error):
+    """The fixed `reason` word of a refused POST /keys answer, or None."""
+    try:
+        raw = error.read(RESPONSE_LIMIT + 1)
+        value = json.loads(raw).get('reason') if len(raw) <= RESPONSE_LIMIT else None
+        return value if isinstance(value, str) else None
+    except (ValueError, AttributeError, OSError, http.client.HTTPException):
+        return None
+    finally:
+        error.close()
 
 
 def saved_connection(state):
@@ -249,8 +325,8 @@ def take_pending(state):
         verifier, started = pending['verifier'], pending['at']
         fresh = isinstance(started, (int, float)) and 0 <= time.time() - started <= PENDING_SECONDS
         if isinstance(verifier, str) and VERIFIER.fullmatch(verifier) and fresh:
-            return verifier
-    except (ValueError, KeyError, TypeError):
+            return verifier, checked_invite(pending.get('invite'))
+    except (ValueError, KeyError, TypeError, SetupError):
         pass
     raise SetupError(START_AGAIN)
 
