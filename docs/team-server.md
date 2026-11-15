@@ -201,6 +201,18 @@ docker build -f Dockerfile.cloud .
 - 로컬 수집기 RPC `team.settings`(읽기)와 `team.updateSettings`(`topic`·`goal`·`scope`·`rules` 중 일부)가 같은 요청을 중계한다.
 - 이 표를 쓰는 서버는 표가 없으면 시작하지 않는다. 배포 전에 [아래](#기존-db-업그레이드) `migrate-integration`을 먼저 실행한다. 표가 생겨도 예전 서버는 그대로 동작한다.
 
+## 초대 링크로 팀에 참여
+
+활성 팀원 누구나 자기 팀의 초대 링크를 만든다(`server/team_invites.py`, DB 함수는 `team_upgrades.sql` 끝). 관리자가 사용자·소속을 미리 만들지 않아도 된다. 팀 만들기는 여전히 관리자(`team_admin.py team`)만 한다.
+
+- 만들기: 실제 모드 웹 `/team/new` '초대 링크 만들기' → 수집기 RPC `team.createInvite` → `POST /teams/{팀}/invites`. 응답의 코드로 `/join/<코드>` 주소를 만든다. 코드는 144비트 무작위(`secrets.token_urlsafe(18)`)이고 DB에는 SHA-256만 남는다. 주소는 만든 직후 한 번만 보인다.
+- 규칙(DB 함수에 고정): 7일 뒤 만료, 링크 하나를 여러 명이 쓴다, 활성 팀원 8명까지, 열린 링크는 팀마다 5개까지, 팀원 누구나 회수(`team.revokeInvite` → `POST …/invites/{링크}/revoke`). 목록 `team.invites`(`GET …/invites`)는 만든 사람·시각·참여 수만 보이고 코드는 없다. 역할 열은 없다.
+- 참여: 받은 사람이 `/join/<코드>`를 열면 웹이 확장 → 연결 프로그램 `setup.status`로 설치를 확인하고(없으면 `/install`로 보냄), `setup.invite`(→ `POST /invites/preview`, 키 없이 서버 전체 1분 30번)로 팀 이름·만료를 보여 준다. 'GitHub로 참여'를 누르면 `setup.begin`이 PKCE 비밀값 옆에 코드와 이름을 둔다. 코드는 로그인 주소에 싣지 않는다. 로그인 뒤 `/auth/callback`의 `setup.connect`가 `POST /keys`에 `invite`·`name`을 더해 보낸다.
+- 서버(`join_with_invite`): 팀 잠금을 잡고 만료·회수·인원을 다시 본다. GitHub 신원이 처음이면 사용자·신원·소속을 만들고, 아는 사용자면 소속만 더하고, 이미 팀원이면 소속은 그대로 둔다. 그다음 `issue_web_key`로 키를 등록한다. 키를 못 받으면(1시간 5회, PC 3대 등) 사용자·소속도 만들지 않는다. 팀에서 뺀 사람(소속 `active=false`)은 링크로 돌아오지 못한다.
+- 기록: `invite_events`에 결과만 남는다(코드·해시·GitHub ID·IP 없음). 로그·진단·다른 응답에도 코드는 없다. API 계정은 두 표를 직접 읽거나 쓰지 못한다(RLS, 권한 없음).
+- 켜기: 웹 연결 키(`SYNCUP_SUPABASE_*`)와 같이 켜진다. 켜진 서버는 초대 표·함수가 없으면 시작하지 않으므로 배포 전에 [`migrate-integration`](#기존-db-업그레이드)을 먼저 한다.
+- 알려진 한계: `/join/<코드>` 주소는 웹 호스팅(Vercel) 요청 기록과 브라우저 방문 기록에 남는다. 미리보기 횟수 제한은 서버 전체 단위라 누군가 계속 두드리면 다른 사람의 미리보기도 잠시 막힌다.
+
 ## 기존 DB 업그레이드
 
 예전 코드로 만든 DB는 새 코드를 배포하기 전에 API 쓰기를 멈추고 [백업](#백업과-복구)을 확인한 뒤 관리 계정으로 한 번 실행한다.
@@ -243,7 +255,7 @@ FROM syncup.conflict_checks WHERE state <> 'complete';
 - 팀 범위: 서버가 소속을 확인하고, DB도 RLS로 요청한 팀의 행만 보여 준다. 앱 코드에 조건이 빠져도 다른 팀 행은 읽히지 않는다.
 - `syncup_api`는 키 테이블을 읽지 못하고, 소속을 바꾸거나 승인 카드·충돌 처리 기록을 고치거나 지울 수 없다.
 - DB에는 연결 키의 SHA-256 값만 둔다. 무엇이 팀 서버와 외부 AI로 가는지는 [privacy.md](privacy.md)에 있다.
-- 활성 팀원은 모두 같은 권한이다. 읽기 전용 역할, 초대·관리 웹 화면은 없다. 웹 GitHub 로그인은 관리자가 이어 둔 사람의 키 발급에만 쓴다.
+- 활성 팀원은 모두 같은 권한이다. 읽기 전용 역할과 관리 웹 화면은 없다. 웹 GitHub 로그인은 관리자가 이어 둔 사람의 키 발급과 [초대 링크](#초대-링크로-팀에-참여) 참여에만 쓴다. 팀 만들기는 관리자만 한다.
 - 다루지 않는 것: 같은 OS 계정의 악성 프로그램, 연결 키 탈취, DB 관리자 계정 침해. 팀 검색·첨부파일은 기능이 없다.
 
 검사: `python3 checks/run_checks.py team` ([README 검사](../README.md#검사))
