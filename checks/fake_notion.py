@@ -22,7 +22,11 @@ EDITED = '2026-11-14T13:00:00.000Z'
 class FakeNotion:
     def __init__(self, token):
         self.token, self.blocks, self.requests, self.lock = token, {}, [], threading.RLock()
-        self.page = self.new_block('page', None, {})  # the page shared with the integration
+        self.tokens = {token}  # integrations Notion knows; any other token is a 401
+        self.shared = {}  # page id -> the tokens (integrations) it is shared with; anything else is a 404
+        self.read_only = set()  # tokens without the insert/update content capabilities: writes are a 403
+        self.databases = set()  # ids of databases: the pages endpoint refuses them with a 400
+        self.page = self.new_page('팀 기록', token)  # the page shared with the integration
         self.page_size = 100  # most a GET of children returns; smaller to check paging
         self.fail_next = None  # (method, path fragment, status): answered once instead of the real reply
         self.fail_from = None  # (method, n, status): that method's n-th request and every later one get `status`
@@ -37,6 +41,19 @@ class FakeNotion:
         if parent:
             self.blocks[parent]['children'].append(identifier)
         return identifier
+
+    def new_page(self, title, *tokens):
+        """A top-level page shared with `tokens` (each one becomes a token Notion knows)."""
+        with self.lock:
+            page = self.new_block('page', None, dict(title=title))
+            self.shared[page] = set(tokens)
+            self.tokens |= set(tokens)
+            return page
+
+    def root(self, block_id):
+        while self.blocks[block_id]['parent']:
+            block_id = self.blocks[block_id]['parent']
+        return block_id
 
     def add_by_hand(self, kind, text=''):
         """A block a person put on the page; a child_page stands for a sub-page."""
@@ -73,7 +90,9 @@ class FakeNotion:
             return 302, {'location': location}, {}
         if headers.get('Notion-Version') != VERSION:
             return _error(400, 'missing_version')
-        if headers.get('Authorization') != 'Bearer ' + self.token:
+        given = headers.get('Authorization') or ''
+        token = given[7:] if given.startswith('Bearer ') else None
+        if token not in self.tokens:
             return _error(401, 'unauthorized')
         if self.rate_limited:
             self.rate_limited -= 1
@@ -89,8 +108,13 @@ class FakeNotion:
         body = json.loads(raw) if raw else None
         url = urllib.parse.urlsplit(path)
         parts = url.path.split('/')[2:]  # after /v1
-        if len(parts) < 2 or parts[0] != 'blocks' or parts[1] not in self.blocks or self.blocks[parts[1]]['in_trash']:
+        if method == 'GET' and len(parts) == 2 and parts[0] == 'pages':
+            return self.page_object(parts[1], token)
+        if len(parts) < 2 or parts[0] != 'blocks' or parts[1] not in self.blocks or self.blocks[parts[1]]['in_trash'] \
+                or token not in self.shared.get(self.root(parts[1]), ()):
             return _error(404, 'object_not_found')
+        if method in ('PATCH', 'DELETE') and token in self.read_only:
+            return _error(403, 'restricted_resource')
         if method == 'GET' and parts[2:] == ['children']:
             return self.list_children(parts[1], urllib.parse.parse_qs(url.query))
         if method == 'PATCH' and parts[2:] == ['children']:
@@ -99,6 +123,17 @@ class FakeNotion:
             self.blocks[parts[1]]['in_trash'] = True
             return 200, self.block_object(parts[1]), {}
         return _error(400, 'invalid_request_url')
+
+    def page_object(self, page_id, token):
+        """GET /v1/pages/{id}: a database id is a 400; a page not shared with this token is a 404."""
+        if page_id in self.databases:
+            return _error(400, 'validation_error')
+        block = self.blocks.get(page_id)
+        if not block or block['type'] != 'page' or token not in self.shared.get(page_id, ()):
+            return _error(404, 'object_not_found')
+        title = block['body'].get('title') or ''
+        return 200, {'object': 'page', 'id': page_id, 'in_trash': block['in_trash'], 'archived': block['in_trash'],
+                     'properties': {'title': {'id': 'title', 'type': 'title', 'title': _rich(title)}}}, {}
 
     def list_children(self, parent, query):
         size = min(int(query.get('page_size', ['100'])[0]), self.page_size)

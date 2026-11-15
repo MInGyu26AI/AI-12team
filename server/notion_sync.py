@@ -1,16 +1,19 @@
-"""Saving the team state to one Notion page, at the same moments as the GitHub save (repo_sync.py).
+"""Saving the team state to a Notion page, at the same moments as the GitHub save (repo_sync.py).
 
-The server's environment links one team to one page; no request can choose the page:
-SYNCUP_NOTION_TEAM (team id), SYNCUP_NOTION_PAGE (page id) and SYNCUP_NOTION_TOKEN, an internal integration's
-secret, with the page shared to that integration. It is set apart from the GitHub settings: either can be on alone.
+A team links its page from the web (link_request: POST /teams/{id}/notion, …/notion/verify, …/notion/unlink): any
+active member gives the page (its id or address) and an internal integration's secret, with the page shared to that
+integration. The server checks that the secret can write there and keeps the link in syncup.team_notion_links.
+The server's environment can still link one team: SYNCUP_NOTION_TEAM (team id), SYNCUP_NOTION_PAGE (page id) and
+SYNCUP_NOTION_TOKEN. A team's own web link wins over it. Notion is set apart from GitHub: either can be on alone.
 The page shows what SYNCUP.md shows (ai/syncup_ai/team_state.py render_markdown) as Notion blocks. Only top-level
 blocks that differ from the last save are replaced, and nothing is written when the page already shows the same.
-The token is sent only to the Notion API (notion_page.py); it is never stored, logged or returned.
+The token is sent only to the Notion API (notion_page.py); it is never logged or returned to any client.
 """
 import os
 import re
 import threading
 import time
+import urllib.parse
 import uuid
 import weakref
 from dataclasses import dataclass, field
@@ -18,8 +21,8 @@ from dataclasses import dataclass, field
 import repo_sync
 from ai.syncup_ai.team_state import RESOLUTION_NAMES, by_whom, short_date
 from diagnostics import failure
-from notion_page import MAX_RICH_TEXT, MAX_TEXT, NOTION_API, NotionError, fingerprint, save
-from team_access import authorized
+from notion_page import MAX_RICH_TEXT, MAX_TEXT, NOTION_API, NotionError, fingerprint, save, verify
+from team_access import AccessError, authorized, team_lock
 
 PAGE_ID = re.compile(r'[0-9a-fA-F]{32}')
 SECRET = re.compile(r'[!-~]{20,500}')  # visible ASCII only: it goes into an HTTP header
@@ -205,7 +208,11 @@ def _saves(server):
 
 
 def linked(server, team_id):
-    """The page linked to this team (an id as uuid or text), or None."""
+    """The page linked to this team (an id as uuid or text), or None. The team's web link comes first, then the
+    server's environment link."""
+    link = _cached_link(server, team_id)
+    if link is not None and link.target is not None:
+        return link.target
     target = getattr(server, 'notion_target', None)
     return target if target is not None and str(target.team_id) == str(team_id) else None
 
@@ -242,6 +249,8 @@ def schedule_save(server, token, team_id, delay=None):
 
 
 def _wait_then_save(server, target, job):
+    """Wait for the batch to settle, then save to the page linked at that moment (the team may have linked another
+    one meanwhile, or unlinked)."""
     team_id = target.team_id
     while True:
         with _lock:
@@ -254,8 +263,9 @@ def _wait_then_save(server, target, job):
             job.wake.clear()
         job.wake.wait(wait)
     try:
-        if not server.checks_stop.is_set():
-            _save_and_record(server, target, job)
+        current = linked(server, team_id)
+        if current is not None and not server.checks_stop.is_set():
+            _save_and_record(server, current, job)
     finally:
         with _lock:
             running = _saves(server).running
@@ -287,12 +297,176 @@ def _save_and_record(server, target, job):
 
 
 def notion_status(server, team_id):
-    """What GET …/notion shows about the linked page; {'linked': False} for every other team."""
+    """What GET …/notion shows about the linked page; {'linked': False} for every other team.
+
+    source is 'team' for the team's web link and 'env' for the server's environment link. tokenSet only says that a
+    token is kept; the token itself is never part of any answer."""
     target = linked(server, team_id)
     if target is None:
         return dict(linked=False)
+    link = _cached_link(server, team_id)
+    if link is not None and link.target == target:
+        about = dict(source='team', **link.meta)
+    else:
+        about = dict(source='env', title='', linkedBy=None, linkedByName=None, linkedAt=None)
     with _lock:
         saves = _saves(server)
         busy = target.team_id in saves.waiting or target.team_id in saves.running
         status = dict(saves.status.get(target.team_id) or dict(state='unknown'), pending=busy)
-    return dict(linked=True, page=target.page_id, **status)
+    return dict(linked=True, page=target.page_id, tokenSet=True, **about, **status)
+
+
+# --- a team's own link from the web (syncup.team_notion_links, team_upgrades.sql) ---------------------------------
+
+LINK_CACHE_SECONDS = 60  # another server instance's link change is seen within this time
+# POST /teams/{id}/notion<tail>: the action and the fields its JSON body may have.
+LINK_ACTIONS = {(): ('link', ('page', 'token')), ('verify',): ('verify', ('page', 'token')), ('unlink',): ('unlink', ())}
+PAGE_TEXT = re.compile(r'[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}')
+PAGE_IN_ADDRESS = re.compile(r'(?:^|-)([0-9a-fA-F]{32})$')  # …/Title-<id> or …/<id>, as Notion's share links end
+NOTION_HOSTS = ('notion.so', 'notion.site', 'notion.com')
+
+
+@dataclass(frozen=True)
+class _Link:
+    """A team's web link as last read from the database; target None when it has none."""
+    target: NotionTarget | None
+    meta: dict
+    loaded: float
+
+
+_links = weakref.WeakKeyDictionary()  # server -> {team id text: _Link}; guarded by _lock
+
+
+def _cached_link(server, team_id):
+    if server is None:
+        return None
+    with _lock:
+        return _links.get(server, {}).get(str(team_id))
+
+
+def load_link(c, server, team_id):
+    """Read the team's web link inside the request's transaction when it is not known or older than
+    LINK_CACHE_SECONDS. Saves and status reads, which have no transaction, use what this keeps."""
+    link = _cached_link(server, team_id)
+    if server is not None and (link is None or time.monotonic() - link.loaded >= LINK_CACHE_SECONDS):
+        _remember(server, team_id, read_link(c, team_id))
+
+
+def _remember(server, team_id, row):
+    """Keep the team's link (a read_link row, or None). A changed link forgets the last save's outcome and what it
+    knew of the page, so the status reads 'unknown' until the first save to the new page."""
+    target = None if row is None else NotionTarget(uuid.UUID(str(team_id)), row['page'], row['token'],
+                                                   api=getattr(server, 'notion_api', NOTION_API))
+    meta = {} if row is None else {k: row[k] for k in ('title', 'linkedBy', 'linkedByName', 'linkedAt')}
+    with _lock:
+        links = _links.setdefault(server, {})
+        before = links.get(str(team_id))
+        links[str(team_id)] = _Link(target, meta, time.monotonic())
+        if before is None or before.target != target:
+            saves = _saves(server)
+            saves.status.pop(uuid.UUID(str(team_id)), None)
+            saves.known.pop(uuid.UUID(str(team_id)), None)
+
+
+def read_link(c, team_id):
+    """The team's active link as {page, token, title, linkedBy, linkedByName, linkedAt}, or None."""
+    row = c.execute('''SELECT page_id,token,title,actor,actor_name,at FROM syncup.team_notion_links
+        WHERE team_id=%s AND active''', (team_id,)).fetchone()
+    if not row:
+        return None
+    return dict(page=str(row['page_id']), token=row['token'], title=row['title'], linkedBy=str(row['actor']),
+                linkedByName=row['actor_name'], linkedAt=row['at'].isoformat())
+
+
+def _save_link(c, team_id, user_id, page, token, title):
+    """Link (or relink) the team; the caller holds the team write lock and has checked the page."""
+    name = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
+    c.execute('''INSERT INTO syncup.team_notion_links(team_id,page_id,token,title,active,actor,actor_name)
+        VALUES(%s,%s,%s,%s,true,%s,%s)
+        ON CONFLICT(team_id) DO UPDATE SET page_id=excluded.page_id,token=excluded.token,title=excluded.title,
+            active=true,actor=excluded.actor,actor_name=excluded.actor_name,at=clock_timestamp()''',
+        (team_id, page, token, title, user_id, name[:200]))
+    return read_link(c, team_id)
+
+
+def _clear_link(c, team_id, user_id):
+    """Unlink the team and drop its token; the caller holds the team write lock."""
+    name = c.execute('SELECT name FROM syncup.users').fetchone()['name']
+    c.execute('''UPDATE syncup.team_notion_links SET active=false,token='',actor=%s,actor_name=%s,at=clock_timestamp()
+        WHERE team_id=%s AND active''', (user_id, name[:200], team_id))
+
+
+def link_request(server, token, team_id, tail, data):
+    """POST /teams/{id}/notion (link), …/notion/verify (check only) and …/notion/unlink, for any active member.
+
+    Notion is called between two database transactions, never inside one. A refusal answers HTTP 200 with
+    {ok: False, reason}, because the collector turns every 4xx into a 503 and the web could not say why.
+    reason: bad-format, token-needed and notion_page.verify's (bad-token, not-found, not-a-page, no-write,
+    rate-limited, unreachable). A new link saves the page once at once."""
+    action, fields = LINK_ACTIONS.get(tuple(tail), (None, ()))
+    if action is None:
+        raise AccessError(404)
+    if not isinstance(data, dict) or set(data) - set(fields):
+        raise ValueError('노션 연결 필드 오류')
+    answer = dict(team_id=str(team_id))
+    if action == 'unlink':
+        with authorized(server.dsn, token, team_id) as (c, user_id):
+            team_lock(c, team_id)
+            _clear_link(c, team_id, user_id)
+        _remember(server, team_id, None)
+        return dict(answer, ok=True, notion=notion_status(server, team_id))
+    with authorized(server.dsn, token, team_id) as (c, _user):
+        stored = read_link(c, team_id)
+    wanted = _link_input(data, stored)
+    if isinstance(wanted, str):
+        return dict(answer, ok=False, reason=wanted)
+    page, secret = wanted
+    reason, title = verify(NotionTarget(uuid.UUID(str(team_id)), page, secret,
+                                        api=getattr(server, 'notion_api', NOTION_API)))
+    answer['check'] = dict(page=page, title=title, canWrite=reason is None)
+    if reason is not None or action == 'verify':
+        return dict(answer, ok=reason is None, **({'reason': reason} if reason else {}))
+    with authorized(server.dsn, token, team_id) as (c, user_id):
+        team_lock(c, team_id)
+        row = _save_link(c, team_id, user_id, page, secret, title)
+    _remember(server, team_id, row)
+    schedule_save(server, token, team_id, delay=0)
+    return dict(answer, ok=True, notion=notion_status(server, team_id))
+
+
+def _link_input(data, stored):
+    """(page id, token) from a link or verify body, or the refusal reason. A missing token reuses the stored one
+    only for the same page, so nobody can point the team's token at another page."""
+    page, secret = data.get('page', ''), data.get('token')
+    if not isinstance(page, str) or not (secret is None or isinstance(secret, str)):
+        raise ValueError('노션 연결 필드 형식 오류')
+    page = page_from(page)
+    if page is None:
+        return 'bad-format'
+    secret = (secret or '').strip()
+    if not secret:
+        if stored is None or stored['page'] != page:
+            return 'token-needed'
+        secret = stored['token']
+    elif not SECRET.fullmatch(secret):
+        return 'bad-format'
+    return page, secret
+
+
+def page_from(text):
+    """The page id (uuid text) in a page id or a Notion page address (notion.so, notion.site), or None.
+    Only the id is kept: requests always go to the Notion API host, never to the address given."""
+    text = text.strip()
+    if '://' in text:
+        try:
+            address = urllib.parse.urlsplit(text)
+            host = (address.hostname or '').lower()
+        except ValueError:  # e.g. a broken [IPv6] host
+            return None
+        if address.scheme != 'https' or not any(host == name or host.endswith('.' + name) for name in NOTION_HOSTS):
+            return None
+        found = PAGE_IN_ADDRESS.search(address.path.rstrip('/').rsplit('/', 1)[-1])
+        text = found.group(1) if found else ''
+    if not PAGE_TEXT.fullmatch(text):
+        return None
+    return str(uuid.UUID(text.replace('-', '')))

@@ -161,6 +161,7 @@ docker build -f Dockerfile.cloud .
 | `POST …/items/{카드}/retry-check` | 실패한 충돌 검사 다시 시작. 시도 횟수와 진단을 비운다. 409 실패 상태가 아님 |
 | `GET …/repo` | 팀 상태 파일의 GitHub 저장 상태 ([아래](#github-레포-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | `GET …/notion` | 팀 기록의 노션 페이지 저장 상태 ([아래](#노션-페이지-저장)). 연결 안 된 팀은 `{"linked": false}` |
+| `POST …/notion/verify` · `POST …/notion` · `POST …/notion/unlink` | 팀이 웹에서 노션 페이지를 확인 · 연결 · 해제 ([아래](#팀별-연결-웹)). 거절도 200 + `{"ok": false, "reason"}` |
 | `GET …/settings` · `POST …/settings` | 팀이 함께 쓰는 설정 ([아래](#팀-설정)). POST는 보낸 칸만 바꾸고 나머지는 둔다 |
 | `POST /keys` | 웹 GitHub 로그인으로 이 PC의 키 등록. 연결 키 대신 로그인으로 인증한다([아래](#웹-로그인으로-연결-키-받기)) |
 | 공통 | 401 키 없음·틀림·만료·폐기, 사용자 비활성 · 403 그 팀 소속 아님 · 503 DB에 닿지 못함 |
@@ -188,8 +189,8 @@ docker build -f Dockerfile.cloud .
 
 ## 노션 페이지 저장
 
-팀 하나의 기록을 노션 페이지 하나에 SYNCUP.md와 같은 구성으로 쓴다. 코드는 `server/notion_sync.py`(언제·무엇을), `server/notion_page.py`(노션 API 호출).
-어느 팀을 어느 페이지에 쓸지는 서버 환경 변수로만 정한다. GitHub 저장과 따로 켜고 끈다.
+팀의 기록을 노션 페이지 하나에 SYNCUP.md와 같은 구성으로 쓴다. 코드는 `server/notion_sync.py`(언제·무엇을, 팀별 연결), `server/notion_page.py`(노션 API 호출).
+어느 페이지에 쓸지는 팀이 웹에서 직접 연결하거나([팀별 연결](#팀별-연결-웹)), 서버 환경 변수로 팀 하나를 정한다. 둘 다 있으면 팀의 웹 연결이 이긴다. GitHub 저장과 따로 켜고 끈다.
 페이지에 들어가는 내용은 SYNCUP.md와 같다(원문 발췌·출처·승인자 ID·AI가 쓴 충돌 이유 없음). 페이지를 누가 볼 수 있는지는 노션 워크스페이스의 공유 설정을 따른다.
 
 | 환경 변수 | 내용 |
@@ -207,8 +208,26 @@ docker build -f Dockerfile.cloud .
 - 요청 제한: 요청 사이를 1/3초 띄운다(Business·Enterprise가 아닌 요금제의 분당 180회). 429·529면 `Retry-After` 초만큼 기다렸다가 4번까지 다시 보낸다. 60초보다 오래 기다리라고 하면 그 저장은 실패로 두고 다음 변경 때 다시 쓴다. 500·502·503·504는 읽기·지우기만 2번까지 다시 보낸다. 쓰기는 이미 반영됐을 수 있어 다시 보내지 않는다.
 - 한 요청에 블록 100개·블록 요소 1000개·500KB, 글 한 조각 2000자까지라서 나눠 보낸다. 글자 수는 더 엄격한 UTF-16 단위(이모지 2자)로 센다. 노션 API 버전은 `2026-03-11`이다 ([버전](https://developers.notion.com/reference/versioning), [요청 제한](https://developers.notion.com/reference/request-limits), [블록 추가](https://developers.notion.com/reference/patch-block-children)).
 - 노션 오류는 팀 API 응답에 영향을 주지 않는다. 진단 로그에는 단계(`notion_read`·`notion_append`·`notion_delete`, DB 등 그 밖은 `notion_save`)·오류 종류·HTTP 상태만 남는다. 중간에 실패해도 서버가 그때까지 넣고 지운 블록을 기억하므로, 다음 저장이 남은 블록은 지우고 빠진 블록만 다시 넣는다. 토큰은 노션 API 호스트에만 보낸다. 노션 API는 리다이렉트하지 않으므로 리다이렉트 응답은 따라가지 않고 실패로 둔다.
-- `GET …/notion` 응답의 `notion`: `linked`, `page`(페이지 ID), `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `savedAt`(이 서버가 마지막으로 페이지를 쓴 epoch 초, 모르면 `null`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC와 웹 화면에는 아직 없다.
+- `GET …/notion` 응답의 `notion`: `linked`, `page`(페이지 ID), `title`(웹 연결 때 노션이 보여 준 페이지 제목), `source`(`team` 팀의 웹 연결 / `env` 서버 환경 변수), `tokenSet`(항상 `true`, 토큰 자체는 어느 응답에도 없음), `linkedBy`·`linkedByName`·`linkedAt`(마지막으로 연결한 팀원 ID·이름·시각, `env`면 `null`), `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `savedAt`(이 서버가 마지막으로 페이지를 쓴 epoch 초, 모르면 `null`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC `team.notion`이 같은 응답을 준다.
 - 상태는 메모리에만 있다. 서버를 다시 켜면 `unknown`이고, 그 팀의 첫 요청이 바로 한 번 페이지를 확인한다.
+
+### 팀별 연결 (웹)
+
+팀원 누구나 웹에서 노션 통합 시크릿과 페이지를 연결한다. 관리자 역할은 없고, 마지막으로 바꾼 팀원과 시각을 남긴다. 표는 `syncup.team_notion_links`(팀당 한 행, `team_upgrades.sql`, RLS로 그 팀 팀원만 읽고 쓰며 바꾼 사람은 요청한 본인으로만 기록된다).
+
+| 요청 (로컬 수집기 RPC) | 본문 | 응답 |
+|---|---|---|
+| `POST …/notion/verify` (`team.verifyNotion`) | `page`, `token`(생략 가능) | `ok`, `reason`(거절 때), `check`(`page`, `title`, `canWrite`). 저장하지 않는다 |
+| `POST …/notion` (`team.linkNotion`) | `page`, `token`(생략 가능) | 확인을 통과하면 저장하고 페이지를 바로 한 번 쓴다. `ok`, `reason`, `check`, `notion`(위 상태) |
+| `POST …/notion/unlink` (`team.unlinkNotion`) | `{}` | `ok`, `notion`. 행을 끄고(`active=false`) 토큰을 지운다. 환경 변수 연결이 있는 팀이면 그 페이지로 돌아간다 |
+
+- `page`는 페이지 ID(16진수 32자리, 하이픈 있어도 됨) 또는 `https://` 노션 페이지 주소(`notion.so`·`notion.site`·`notion.com`)다. 주소에서는 끝의 ID만 쓰고, 요청은 늘 노션 API 호스트로만 간다.
+- `token`을 빼면 같은 페이지일 때만 저장된 토큰을 다시 쓴다. 다른 페이지면 `token-needed`다. 팀의 토큰을 다른 페이지로 돌릴 수 없게 하려는 것이다.
+- 거절도 HTTP 200이다(수집기가 4xx를 모두 503으로 바꾸기 때문). `reason`: `bad-format`(페이지·토큰 형식) · `token-needed` · `bad-token`(401) · `not-found`(페이지가 없거나 통합에 공유 안 됨, 휴지통) · `not-a-page`(데이터베이스 등) · `no-write`(통합에 콘텐츠 삽입·업데이트 권한 없음) · `rate-limited` · `unreachable`.
+- 확인은 노션에 세 번 묻는다: 페이지 조회, 페이지 끝에 문단 하나 넣기, 그 문단 지우기(휴지통). 저장이 쓰는 두 쓰기 권한을 그대로 확인한다. 사람이 기다리므로 요청마다 2초 제한, 다시 보내지 않는다. 노션 호출은 DB 트랜잭션 밖에서 한다(읽기 → 노션 → 쓰기, 트랜잭션 둘).
+- 서버는 팀의 연결을 메모리에 60초 기억한다. 서버 인스턴스가 여럿이면 다른 인스턴스는 최대 60초 동안 예전 연결로 쓴다.
+- 토큰은 평문 열에 RLS로 보관한다(7-1 GitHub 연결과 같은 결정). 응답·로그·진단·예외 메시지에는 넣지 않고 `tokenSet`만 돌려준다. 해제하면 토큰을 지운다. DB 백업과 Supabase 대시보드 접근자는 토큰을 볼 수 있으니, 통합은 SyncUp 전용으로 만들고 그 페이지 하나만 공유한다.
+- 이 표를 쓰는 서버는 표가 없으면 시작하지 않는다. 배포 전에 [아래](#기존-db-업그레이드) `migrate-integration`을 먼저 실행한다.
 
 ### 켜는 법 (동균)
 

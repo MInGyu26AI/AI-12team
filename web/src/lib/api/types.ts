@@ -31,4 +31,42 @@ export interface TeamApi {
   retryCheck(id: string): Promise<void>; // team.retryCheck — 멈춘 충돌 검사의 남은 비교를 다시 시작
   getHistory(): Promise<DecisionHistory>; // team.history + team.conflictHistory
   getRepo(): Promise<RepoStatus>; // team.repo — 팀 상태 파일 GitHub 저장 상태 (연결 안 된 팀은 linked:false)
+  getNotion(): Promise<NotionStatus>; // team.notion — 팀 기록의 노션 페이지 저장 상태 (연결 안 된 팀은 linked:false)
+  verifyNotion(page: string, token?: string): Promise<NotionLinkResult>; // team.verifyNotion — 확인만, 저장 안 함
+  linkNotion(page: string, token?: string): Promise<NotionLinkResult>; // team.linkNotion — 확인 뒤 저장, 바로 한 번 씀
+  unlinkNotion(): Promise<NotionStatus>; // team.unlinkNotion — 환경 변수 연결이 있으면 그 페이지로 돌아감
+}
+
+// 팀 기록의 노션 페이지 저장 (docs/team-server.md '노션 페이지 저장' · '팀별 연결 (웹)'). 토큰은 어느 응답에도 없다
+export interface NotionStatus {
+  linked: boolean; // false = 이 팀은 노션에 쓰지 않음 (아래 필드 없음)
+  page?: string; // 페이지 ID (uuid)
+  title?: string; // 연결 때 노션이 보여 준 제목 (환경 변수 연결이면 '')
+  source?: "team" | "env"; // team = 팀이 웹에서 연결, env = 서버 환경 변수 (웹에서 해제 못 함)
+  tokenSet?: boolean;
+  linkedBy?: string | null;
+  linkedByName?: string | null;
+  linkedAt?: string | null; // ISO
+  state?: "unknown" | "saved" | "unchanged" | "failed";
+  pending?: boolean;
+  savedAt?: number | null; // epoch 초
+  httpStatus?: number | null;
+  checkedAt?: number;
+}
+
+export type NotionRefusal =
+  | "bad-format"
+  | "token-needed"
+  | "bad-token"
+  | "not-found"
+  | "not-a-page"
+  | "no-write"
+  | "rate-limited"
+  | "unreachable";
+
+export interface NotionLinkResult {
+  ok: boolean;
+  reason?: NotionRefusal;
+  check?: { page: string; title: string; canWrite: boolean };
+  notion?: NotionStatus; // 연결 요청만
 }

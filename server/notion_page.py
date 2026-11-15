@@ -18,6 +18,8 @@ from difflib import SequenceMatcher
 NOTION_API = 'https://api.notion.com/v1'
 NOTION_VERSION = '2026-03-11'  # appends take `position`; `after` is gone from this version
 REQUEST_TIMEOUT_SECONDS = 15
+# A link check (verify) makes three calls while the collector waits 8 seconds for the team server (team_client.py).
+VERIFY_TIMEOUT_SECONDS = 2
 REQUEST_INTERVAL_SECONDS = 1 / 3  # 180 requests a minute per integration outside Business and Enterprise plans
 RATE_LIMIT_RETRIES = 4  # 429 rate_limited and 529 service_overload: wait Retry-After (whole seconds), then again
 LONGEST_RETRY_AFTER_SECONDS = 60  # a longer wait fails this save; the next change tries again
@@ -50,21 +52,25 @@ class NotionError(Exception):
         self.step, self.code = step, code
 
 
-def call(target, method, path, body=None, step='read'):
-    """One request to `{api}/{path}` with `target.token`, paced and retried as Notion asks; the JSON answer."""
+def call(target, method, path, body=None, step='read', timeout=REQUEST_TIMEOUT_SECONDS, patient=True):
+    """One request to `{api}/{path}` with `target.token`, paced and retried as Notion asks; the JSON answer.
+
+    patient False is for a person waiting (a link check): no retry, and a 429 at once when the pace (after a rate
+    limit, say) would hold the request for longer than `timeout`."""
     tries = dict(rate=0, server=0)
     while True:
-        _take_turn()
+        if not _take_turn(None if patient else timeout):
+            raise NotionError(step, 429)
         request = urllib.request.Request(
             f'{target.api}/{path}', method=method, data=None if body is None else _encode(body),
             headers={'Notion-Version': NOTION_VERSION, 'Content-Type': 'application/json',
                      'User-Agent': 'SyncUp-team-server'})
         request.add_unredirected_header('Authorization', 'Bearer ' + target.token)
         try:
-            with _opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            with _opener.open(request, timeout=timeout) as response:
                 return json.loads(response.read())
         except urllib.error.HTTPError as error:
-            wait = _retry_wait(error, method, tries)
+            wait = _retry_wait(error, method, tries) if patient else None
             error.close()
             if wait is None:
                 raise NotionError(step, error.code) from None
@@ -105,13 +111,17 @@ def _error_code(error):
         return None
 
 
-def _take_turn():
+def _take_turn(longest=None):
+    """Wait for this request's turn; False, with no turn taken, when that is more than `longest` seconds away."""
     global _next_turn
     with _turns:
         now = time.monotonic()
         start = max(now, _next_turn)
+        if longest is not None and start - now > longest:
+            return False
         _next_turn = start + REQUEST_INTERVAL_SECONDS
     time.sleep(start - now)
+    return True
 
 
 def _hold(seconds):
@@ -215,3 +225,58 @@ def _chunks(blocks):
         elements, size = elements + count, size + weight
     if chunk:
         yield chunk
+
+
+# --- a link check: can this token keep SyncUp's blocks on this page? -----------------------------------------------
+PROBE = dict(type='paragraph', paragraph=dict(rich_text=[dict(type='text', text=dict(content='SyncUp 연결 확인 (곧 지워집니다)'))]))
+MAX_TITLE = 200
+
+
+def verify(target, timeout=VERIFY_TIMEOUT_SECONDS):
+    """Whether `target.token` can keep SyncUp's blocks on `target.page_id`: (None, title) when it can, else
+    (reason, title); title is '' until Notion has shown the page. Nothing is retried, since a person is waiting.
+
+    Three calls: the page itself, then one paragraph appended at its end and moved to the trash again, the two
+    writes every save makes (the integration's insert and update content capabilities).
+    reason: bad-token, not-found (no such page, or it is not shared with the integration), not-a-page (a database or
+    another object), no-write, rate-limited, unreachable."""
+    def ask(method, path, body=None, step='read'):
+        return call(target, method, path, body, step=step, timeout=timeout, patient=False)
+    try:
+        page = ask('GET', f'pages/{target.page_id}')
+    except NotionError as error:
+        return _refusal(error, {400: 'not-a-page', 401: 'bad-token', 403: 'not-found', 404: 'not-found'}), ''
+    if not isinstance(page, dict) or page.get('object') != 'page':
+        return 'not-a-page', ''
+    title = page_title(page)
+    if page.get('in_trash') or page.get('archived'):
+        return 'not-found', title
+    try:
+        made = ask('PATCH', f'blocks/{target.page_id}/children', dict(children=[PROBE]), step='append')
+    except NotionError as error:
+        return _refusal(error, {401: 'bad-token', 403: 'no-write', 404: 'no-write'}), title
+    made = made.get('results') if isinstance(made, dict) else None
+    probe = made[0].get('id') if isinstance(made, list) and len(made) == 1 and isinstance(made[0], dict) else None
+    if not isinstance(probe, str):
+        return 'unreachable', title
+    try:
+        ask('DELETE', f'blocks/{probe}', step='delete')
+    except NotionError as error:  # 404: already gone, which is all the probe wanted
+        if error.code != 404:
+            return _refusal(error, {401: 'bad-token', 403: 'no-write'}), title
+    return None, title
+
+
+def page_title(page):
+    """The page's title as Notion shows it (its one title property), at most MAX_TITLE characters."""
+    for value in (page.get('properties') or {}).values():
+        if isinstance(value, dict) and value.get('type') == 'title':
+            return ''.join(item.get('plain_text', '') for item in value.get('title') or []
+                           if isinstance(item, dict)).strip()[:MAX_TITLE]
+    return ''
+
+
+def _refusal(error, reasons):
+    if error.code in (429, 529):
+        return 'rate-limited'
+    return reasons.get(error.code, 'unreachable')

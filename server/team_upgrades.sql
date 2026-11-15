@@ -147,3 +147,35 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 $$;
 REVOKE ALL ON FUNCTION syncup.replay_web_key(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION syncup.replay_web_key(text) TO syncup_api;
+
+-- === 팀별 노션 페이지 연결 (server/notion_sync.py link_request) ==================================================
+-- The Notion page a team links from the web: any active member may link or unlink, and the latest one is recorded.
+-- The token is a secret: the API never returns it, and unlinking clears it. When no active row exists, the server's
+-- SYNCUP_NOTION_* environment link (one team) still applies.
+CREATE TABLE IF NOT EXISTS syncup.team_notion_links (
+    team_id uuid PRIMARY KEY REFERENCES syncup.teams(id),
+    page_id uuid NOT NULL,
+    token text NOT NULL DEFAULT '' CHECK (length(token) <= 500),
+    title text NOT NULL DEFAULT '' CHECK (length(title) <= 200),
+    active boolean NOT NULL DEFAULT true,
+    actor uuid NOT NULL REFERENCES syncup.users(id),
+    actor_name text NOT NULL DEFAULT '' CHECK (length(actor_name) <= 200),  -- other members' names are not readable
+    at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (NOT active OR length(token) >= 20)
+);
+ALTER TABLE syncup.team_notion_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE syncup.team_notion_links FORCE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE ON syncup.team_notion_links TO syncup_api;
+DROP POLICY IF EXISTS team_access ON syncup.team_notion_links;
+CREATE POLICY team_access ON syncup.team_notion_links TO syncup_api
+    USING (team_id = nullif(current_setting('syncup.team_id', true), '')::uuid
+        AND EXISTS(SELECT 1 FROM syncup.memberships m WHERE m.team_id = team_notion_links.team_id))
+    WITH CHECK (team_id = nullif(current_setting('syncup.team_id', true), '')::uuid
+        AND EXISTS(SELECT 1 FROM syncup.memberships m WHERE m.team_id = team_notion_links.team_id));
+DROP POLICY IF EXISTS notion_link_actor_insert ON syncup.team_notion_links;
+CREATE POLICY notion_link_actor_insert ON syncup.team_notion_links AS RESTRICTIVE FOR INSERT TO syncup_api
+    WITH CHECK (actor = nullif(current_setting('syncup.user_id', true), '')::uuid);
+DROP POLICY IF EXISTS notion_link_actor_update ON syncup.team_notion_links;
+CREATE POLICY notion_link_actor_update ON syncup.team_notion_links AS RESTRICTIVE FOR UPDATE TO syncup_api
+    USING (true) WITH CHECK (actor = nullif(current_setting('syncup.user_id', true), '')::uuid);
+-- === 팀별 노션 페이지 연결 끝 ===

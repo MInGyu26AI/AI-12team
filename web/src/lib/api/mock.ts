@@ -4,7 +4,7 @@ import { checkNewCards } from "@shared/conflict";
 import { fmtHM, ymd } from "@shared/format";
 import { MOCK_DONE_TODOS, mockCards } from "@shared/mock";
 import type { Conflict, RelatedCard, Resolution } from "@shared/types";
-import type { TeamApi } from "./types";
+import type { NotionLinkResult, NotionStatus, TeamApi } from "./types";
 
 const KEY = "syncup:mock-board:v3"; // v3: 목업을 합성 대화 H01 '온길'로 바꿈 (옛 저장값은 읽지 않음)
 
@@ -123,5 +123,36 @@ export function createMockApi(): TeamApi {
     async getRepo() {
       return { linked: false };
     },
+    // 목업 노션 연결: 이 탭 메모리에만 두고 실제 노션에는 쓰지 않는다
+    async getNotion() {
+      return mockNotion;
+    },
+    async verifyNotion(page) {
+      await delay();
+      return mockCheck(page);
+    },
+    async linkNotion(page) {
+      await delay();
+      const result = mockCheck(page);
+      if (!result.ok) return result;
+      mockNotion = {
+        linked: true, page, title: "목업 노션 페이지", source: "team", tokenSet: true,
+        linkedBy: null, linkedByName: "나", linkedAt: new Date().toISOString(),
+        state: "saved", pending: false, savedAt: Date.now() / 1000,
+      };
+      return { ...result, notion: mockNotion };
+    },
+    async unlinkNotion() {
+      await delay();
+      mockNotion = { linked: false };
+      return mockNotion;
+    },
   };
+}
+
+let mockNotion: NotionStatus = { linked: false };
+
+function mockCheck(page: string): NotionLinkResult {
+  if (!/[0-9a-f]{32}/i.test(page.replace(/-/g, ""))) return { ok: false, reason: "bad-format" };
+  return { ok: true, check: { page, title: "목업 노션 페이지", canWrite: true } };
 }
