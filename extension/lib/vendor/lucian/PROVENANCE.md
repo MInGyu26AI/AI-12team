@@ -1,0 +1,2 @@
+Lucian Icons 2.0.13. Official source https://github.com/Seokwoooo/lucian-icons . Original modules and runtime copied without modification. MIT license preserved and packaged at licenses/lucian-icons.txt. Integration uses animate=none and mouse pointerenter -> play(), keeping original drawing/timing and reduced-motion handling.
+Chrome isolated world adapter: definitions.json holds unchanged original definitions; runtime.js only adds named exports for frame/timing/origin/drawParts. lucian-overlay-icons.js mounts original SVG and effects without customElements.

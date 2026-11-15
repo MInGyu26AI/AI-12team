@@ -20,12 +20,27 @@ export async function checkTab(): Promise<TabStatus> {
   }
 }
 
-// 지금 탭에서 대화를 읽을 수 있는지 알려 준다
-export function TabNotice({ autoCollect }: { autoCollect: boolean }) {
+// 로딩 중에 연 팝업도 최신 화면을 다시 확인한다. 다음 요청은 이전 요청이 끝난 뒤에 예약한다.
+export function useTabStatus(): TabStatus {
   const [tab, setTab] = useState<TabStatus>({ kind: 'checking' });
   useEffect(() => {
-    checkTab().then(setTab);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      const next = await checkTab();
+      if (cancelled) return;
+      setTab(next);
+      timer = setTimeout(() => void refresh(), 2000);
+    };
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
+  return tab;
+}
+
+// 지금 탭에서 대화를 읽을 수 있는지 알려 준다
+export function TabNotice({ autoCollect }: { autoCollect: boolean }) {
+  const tab = useTabStatus();
 
   if (tab.kind === 'checking') return null;
   if (tab.kind === 'not-chat') return <Notice tone="info">지금 탭은 ChatGPT가 아니에요. 수집은 chatgpt.com 탭에서 동작해요.</Notice>;

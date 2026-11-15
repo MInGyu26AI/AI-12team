@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { cleanCriteria, rulesFromText } from "@shared/criteria";
@@ -19,8 +20,9 @@ export default function NewTeamPage() {
   return (
     <div className="mx-auto max-w-content space-y-6 py-10">
       <RegisteredTeamNotice title="팀원 초대" linkLabel="대화 수집으로 가기" className="">
-        새 팀은 관리자가 만들어요. 이미 등록된 팀에는 아래 초대 링크로 팀원을 직접 초대할 수 있어요.
+        새 팀은 GitHub로 로그인해 직접 만들 수 있어요. 이미 연결된 팀에는 아래 초대 링크로 팀원을 초대하세요.
       </RegisteredTeamNotice>
+      <div className="px-gutter"><Link href="/start" className="font-semibold text-brand underline">새 팀 만들기 / GitHub 로그인</Link></div>
       <div className="px-gutter">
         <InvitePanel />
       </div>

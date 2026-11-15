@@ -138,7 +138,7 @@ export const setSync = (enabled: boolean, project?: SyncProject) => (enabled ? e
 
 // 동기화로 고른 프로젝트의 대화에서는 화면 수집을 하지 않는다 (약속 8-1 R3).
 // 화면 수집은 대화 주인을 모르지만 동기화는 주인을 확인해 내 대화만 가져오기 때문이다(공유 프로젝트의 팀원 대화)
-export const SYNCED_PROJECT_SCREEN_ERROR = '이 프로젝트 대화는 동기화가 가져와요. 싱크 맞추기를 눌러 주세요';
+export const SYNCED_PROJECT_SCREEN_ERROR = '이 프로젝트는 자동 수집 중이에요. 지금 처리하려면 더 보기에서 ‘지금까지 모은 대화 넣기’를 눌러 주세요';
 const PROJECT_IN_URL = /\/g\/(g-p-[0-9a-f]{32})/;
 
 /** 이 chatgpt.com 주소가 동기화가 켜진 채 고른 프로젝트의 화면인지 (/g/g-p-<32자리 16진수>-<slug>/c/<uuid>) */

@@ -1,8 +1,8 @@
 // 자동 수집 켜기 · 종료 시각. 바꿀 때마다 로컬 수집기에 바로 저장한다
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ExtSettingsPatch } from '@shared/bridge';
 import { sendToBackground } from '@/lib/messages';
-import { endsAtOf, isEnded, type Settings } from '@/lib/settings';
+import { collectionTransitionItem, endsAtOf, isEnded, type Settings } from '@/lib/settings';
 import { fromLocalInput, toLocalInput } from './datetime-local';
 import { SwitchTrack } from './SwitchTrack';
 
@@ -13,13 +13,18 @@ async function save(patch: ExtSettingsPatch) {
 
 // 종료 시각이 지난 뒤에 켜면 수집기가 '수집 종료 시각을 먼저 갱신하세요.'로 거절한다 (CollectionLimits 가 안내한다)
 export function AutoCollectSwitch({ autoCollect }: { autoCollect: boolean }) {
+  const [transition, setTransition] = useState<'stopping' | 'starting' | null>(null);
+  useEffect(() => {
+    void collectionTransitionItem.getValue().then(setTransition);
+    return collectionTransitionItem.watch(setTransition);
+  }, []);
   return (
     <label className="flex cursor-pointer items-center justify-between rounded-lg border p-3">
       <span>
         <span className="block font-medium">자동 수집</span>
-        <span className="text-xs text-gray-500">켜 둔 동안 ChatGPT의 새 대화를 가져와요. 프로젝트 대화를 할 때만 켜 주세요</span>
+        <span className="text-xs text-gray-500" role="status">{transition === 'stopping' ? '마지막 답변 저장 중… 완료되면 수집을 꺼요.' : transition === 'starting' ? '수집을 켜는 중…' : '켜 둔 동안 ChatGPT의 새 대화를 가져와요.'}</span>
       </span>
-      <input type="checkbox" role="switch" checked={autoCollect} onChange={() => void save({ autoCollect: !autoCollect })} className="peer sr-only" />
+      <input type="checkbox" role="switch" disabled={!!transition} aria-busy={!!transition} checked={autoCollect} onChange={() => void save({ autoCollect: !autoCollect })} className="peer sr-only" />
       <SwitchTrack />
     </label>
   );

@@ -10,6 +10,7 @@ import {
   type CollectResult,
   type TabPing,
   type TabPingResult,
+  type TabPrepareStop,
   type TabToast,
 } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
@@ -49,11 +50,13 @@ export default defineContentScript({
     });
     ctx.onInvalidated(() => overlay.host.remove());
 
-    settingsItem.getValue().then((s) => (settings = s));
-    settingsItem.watch((s) => {
-      if (!settings?.autoCollect || !s.autoCollect) autoCollect.markSeen();
+    const applySettings = (s: Settings) => {
+      autoCollect.activityChanged(!!settings?.autoCollect, s.autoCollect);
       settings = s;
-    });
+    };
+    settingsItem.getValue().then(applySettings);
+    const unwatchSettings = settingsItem.watch(applySettings);
+    ctx.onInvalidated(unwatchSettings);
 
     // 수집기가 거절할 요청은 보내지 않고 이유를 알린다. 설정을 아직 못 읽었으면 설정 전으로 본다
     const isReady = () => {
@@ -64,7 +67,7 @@ export default defineContentScript({
     };
     wireSendButtons(site, overlay, isReady, autoCollect.markSeen);
     listenForSync(site);
-    listenForPingAndToast(site, overlay);
+    listenForPingAndToast(site, overlay, autoCollect.prepareStop);
   },
 });
 
@@ -80,9 +83,10 @@ function wireSendButtons(site: SiteAdapter, overlay: ChatOverlay, isReady: () =>
     if (!isReady()) return;
     const { messages } = site.extract();
     if (!messages.length) return showToast(READ_FAIL_GUIDE, 'error');
-    markSeen(messages);
     sendAllButton.disabled = true;
-    report(await sendCollect('manual', messages));
+    const result = await sendCollect('manual', messages);
+    if (result.ok && !result.intakeIssues) markSeen(messages);
+    report(result);
     sendAllButton.disabled = false;
   });
 
@@ -105,8 +109,13 @@ function wireSendButtons(site: SiteAdapter, overlay: ChatOverlay, isReady: () =>
 
 // 팝업의 상태 확인(ping)과 백그라운드의 화면 안내(toast). ping 은 sendResponse 로 바로 답한다
 // (Promise 를 돌려주는 답은 Chrome 148 미만에서 팝업에 닿지 않는다). toast 는 답하지 않는다
-function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay) {
-  browser.runtime.onMessage.addListener((msg: TabPing | TabToast, _sender, sendResponse) => {
+function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay, prepareStop: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+  browser.runtime.onMessage.addListener((msg: TabPing | TabToast | TabPrepareStop, sender, sendResponse) => {
+    if (msg?.type === 'collection.prepareStop' && sender.id === browser.runtime.id) {
+      overlay.showToast('마지막 답변을 저장한 뒤 수집을 꺼요…', 'ok');
+      void prepareStop().then(sendResponse);
+      return true;
+    }
     if (msg?.type === 'toast') overlay.showToast(msg.text, msg.tone);
     if (msg?.type !== 'ping') return;
     const result = site.extract();

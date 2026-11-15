@@ -1,28 +1,68 @@
+import { mountLucianIcons } from './lucian-overlay-icons';
 import type { SyncNowResult } from '@shared/bridge';
 import { sendToBackground, type BgResponse, type TabToast } from './messages';
 import { EXTENSION_UPDATED_GUIDE, deliverTeamRecord, loadTeamRecord, type TeamRecordSource } from './team-record';
 
-// AI 채팅 화면 오른쪽 아래의 "싱크업에 보내기"·"선택한 내용 보내기"·"싱크 맞추기"·"팀 기록 불러오기" 버튼과 안내. shadow DOM 으로 사이트 스타일과 분리한다.
+// 대화 작업은 바로 표시하고 지금까지 모은 대화 넣기는 더 보기에 둔다. 기존 수집 경로는 유지한다.
+const icon = (name: string) => `<span data-lucian="${name}" animate="none" aria-hidden="true"></span>`;
+const tool = (cls: string, label: string, detail: string, paths: string, disabled = false) => `
+  <div class="tool">
+    <button type="button" class="${cls}" aria-label="${label}" aria-describedby="tip-${cls}" ${disabled ? 'disabled' : ''}>${icon(paths)}</button>
+    <span class="tip" id="tip-${cls}" role="tooltip"><strong>${label}</strong><span>${detail}</span></span>
+  </div>`;
 const TEMPLATE = `
   <style>
     :host { all: initial; }
     .wrap { position: fixed; right: 20px; bottom: 96px; z-index: 2147483646; display: flex; flex-direction: column;
-            align-items: flex-end; gap: 6px; font: 600 13px/1.3 "Pretendard Variable", Pretendard, system-ui, sans-serif; }
-    button { border: 1px solid rgba(0,0,0,.08); border-radius: 9999px; padding: 8px 12px; cursor: pointer; color: #fff;
-             background: #1d4ed8; box-shadow: 0 4px 12px rgba(0,0,0,.15); font: inherit; opacity: .94; }
-    button.sel { background: #fff; color: #1d4ed8; border-color: #1d4ed8; }
-    button.alt { background: #fff; color: #1d4ed8; border-color: #1d4ed8; }
-    button:disabled { opacity: .45; cursor: default; }
-    .toast { max-width: 280px; padding: 8px 12px; border-radius: 10px; color: #fff; font-weight: 500;
-             box-shadow: 0 4px 12px rgba(0,0,0,.15); display: none; }
+      align-items: flex-end; gap: 8px; font: 500 13px/1.5 "Pretendard Variable", Pretendard, system-ui, sans-serif; }
+    details { position: relative; }
+    summary { list-style: none; display: grid; place-items: center; width: 44px; height: 44px; box-sizing: border-box;
+      border: 1px solid #dbe3f2; border-radius: 14px; color: #3159c9; background: #fff; cursor: pointer; box-shadow: 0 3px 12px #0002; }
+    summary::-webkit-details-marker { display: none; }
+    summary:focus-visible { outline: 3px solid #93b4ff; outline-offset: 3px; }
+
+    .maintenance { position: absolute; right: 54px; bottom: 0; width: 260px; max-width: calc(100vw - 98px);
+      box-sizing: border-box; padding: 14px; border-radius: 14px; background: #fff; color: #172033; box-shadow: 0 6px 24px #0003; }
+    .maintenance p { margin: 0 0 10px; font-size: 12px; }
+    .maintenance button { width: 100%; display: flex; gap: 8px; justify-content: center; font-size: 13px; }
+    .maintenance .tip { display: none; }
+    .tool { position: relative; padding: 3px; margin: -3px; }
+    button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid #dbe3f2;
+      border-radius: 14px; cursor: pointer; color: #3159c9; background: #fff; box-shadow: 0 3px 12px #0002; font: inherit; }
+    button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+    button:disabled { opacity: .35; cursor: default; }
+    .wrap { color: light-dark(#20232a, #eceef4); }
+    button, summary { width: 48px; height: 48px; border: 0; border-radius: 0; background: transparent;
+      color: inherit; box-shadow: none; }
+    summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+    .maintenance { color: light-dark(#20232a, #eceef4); background: light-dark(#fff, #232428); }
+    .tip { position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); width: 244px;
+      max-width: calc(100vw - 98px); box-sizing: border-box; padding: 11px 14px; border-radius: 12px; background: #172033;
+      color: #fff; box-shadow: 0 6px 24px #0003; opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
+    .tip strong, .tip span { display: block; } .tip strong { font-weight: 650; margin-bottom: 4px; }
+    .tip::after { content: ''; position: absolute; left: 100%; top: 0; width: 14px; height: 100%; }
+    .tip span { color: #d4def0; font-size: 12px; font-weight: 400; }
+    .tool:hover .tip, .tool:focus-within .tip { opacity: 1; visibility: visible; pointer-events: auto; }
+    .tool.dismissed .tip { opacity: 0; visibility: hidden; }
+    .toast { max-width: min(280px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 12px; color: #fff;
+      font-weight: 500; box-shadow: 0 4px 12px #0003; display: none; }
     .toast.ok { background: #0f766e; } .toast.error { background: #b91c1c; } .toast.show { display: block; }
+    @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
   </style>
-  <div class="wrap">
-    <div class="toast" role="status"></div>
-    <button type="button" class="alt record">팀 기록 불러오기</button>
-    <button type="button" class="alt sync">싱크 맞추기</button>
-    <button type="button" class="sel" disabled>선택한 내용 보내기</button>
-    <button type="button" class="all">싱크업에 보내기</button>
+  <div class="wrap" aria-label="SyncUp 대화 도구">
+    <div class="toast" role="status" aria-live="polite"></div>
+    ${tool('record', '팀 기록 불러오기', '팀의 결정과 충돌을 이 입력창에 넣어요. AI에게 자동으로 전송하지 않아요.', 'book')}
+    ${tool('sel', '선택한 내용 넣기', '드래그한 글에서 개인 승인함의 검토 후보를 만들어요. 먼저 글을 선택하고 수집을 켜 주세요. 승인 전에는 팀에 공유하지 않아요.', 'cursor', true)}
+    ${tool('all', '이 대화 넣기', '현재 열린 대화에서 화면에 불러온 내용을 처리해요. 개인 승인함에 검토 후보가 생기며, 승인 후 팀에 공유돼요. 자동 수집 중인 프로젝트는 더 보기의 ‘지금까지 모은 대화 넣기’를 사용하세요.', 'document')}
+    <details class="more">
+      <summary aria-label="더 보기 · 수집 관리" title="더 보기 · 수집 관리">${icon('more')}</summary>
+      <div class="maintenance">
+        <p><strong>수집 관리</strong></p>
+        <p>자동 수집을 기다리지 않고 지금 처리할 때 사용하세요.</p>
+        <p id="queue-scope">연결한 프로젝트의 새 대화를 확인하고, 수집함에 쌓인 대화를 처리해요. 다른 대화의 대기분도 포함돼요. 프로젝트 연결이 꺼져 있으면 쌓인 대화만 처리해요.</p>
+    ${tool('sync', '지금까지 모은 대화 넣기', '연결한 프로젝트의 새 대화를 확인한 뒤, 수집함에 쌓인 대화를 처리해요. 프로젝트 연결이 꺼져 있으면 쌓인 대화만 처리해요.', 'refresh')}
+      </div>
+    </details>
   </div>`;
 
 export interface ChatOverlay {
@@ -60,7 +100,33 @@ export function createChatOverlay(actions: OverlayActions = {}): ChatOverlay {
   const host = document.createElement('div');
   host.id = 'syncup-root';
   const shadow = host.attachShadow({ mode: 'open' });
+  // Match the page theme, including ChatGPT's explicit dark class. No animation timer.
+  const updateTheme = () => {
+    const root = document.documentElement;
+    const scheme = getComputedStyle(root).colorScheme;
+    host.style.colorScheme = root.classList.contains('dark') ? 'dark' : root.classList.contains('light') ? 'light' : scheme || 'light dark';
+  };
+  updateTheme();
   shadow.innerHTML = TEMPLATE;
+  mountLucianIcons(shadow);
+  // The vendor's default hover also includes keyboard/touch. Disable those bindings
+  // and explicitly play once per mouse entry; never on click, focus, or a timer.
+  shadow.querySelectorAll<HTMLButtonElement | HTMLElement>('button, summary').forEach((control) => {
+    control.addEventListener('pointerenter', (event) => {
+      if ((event as PointerEvent).pointerType !== 'mouse' || control.matches(':disabled')) return;
+      const glyph = control.querySelector<HTMLElement & { play(): boolean }>('[animate="none"]');
+      glyph?.play();
+    });
+  });
+  shadow.querySelectorAll<HTMLDivElement>('.tool').forEach((wrapper) => {
+    const button = wrapper.querySelector('button')!;
+    const updateFocus = () => { wrapper.tabIndex = button.disabled ? 0 : -1; };
+    updateFocus();
+    new MutationObserver(updateFocus).observe(button, { attributes: true, attributeFilter: ['disabled'] });
+    wrapper.addEventListener('keydown', (event) => { if (event.key === 'Escape') wrapper.classList.add('dismissed'); });
+    wrapper.addEventListener('mouseleave', () => wrapper.classList.remove('dismissed'));
+    wrapper.addEventListener('focusout', () => wrapper.classList.remove('dismissed'));
+  });
   const toast = shadow.querySelector<HTMLDivElement>('.toast')!;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const overlay: ChatOverlay = {
@@ -76,6 +142,12 @@ export function createChatOverlay(actions: OverlayActions = {}): ChatOverlay {
       toastTimer = setTimeout(() => (toast.className = 'toast'), tone === 'error' ? 6000 : 3000);
     },
   };
+  overlay.syncButton.insertAdjacentHTML('beforeend', '<span>지금까지 모은 대화 넣기</span>');
+  overlay.syncButton.setAttribute('aria-describedby', 'queue-scope');
+  const more = shadow.querySelector<HTMLDetailsElement>('.more')!;
+  more.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { more.open = false; more.querySelector('summary')!.focus(); }
+  });
   wireSyncButton(overlay);
   wireRecordButton(overlay, actions.fetchTeamRecord);
   return overlay;
@@ -85,7 +157,7 @@ export function createChatOverlay(actions: OverlayActions = {}): ChatOverlay {
 function wireSyncButton({ syncButton, showToast }: ChatOverlay) {
   syncButton.addEventListener('click', async () => {
     syncButton.disabled = true;
-    showToast('동기화하는 중이에요…', 'ok');
+    showToast('새 대화와 수집 대기분을 확인하고 있어요…', 'ok');
     try {
       const response = await sendToBackground<BgResponse | undefined>({ type: 'syncNow', params: { reason: 'button' } });
       if (!response) return showToast(EXTENSION_UPDATED_GUIDE, 'error');

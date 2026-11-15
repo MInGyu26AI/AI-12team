@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cleanCriteria, rulesFromText } from '@shared/criteria';
-import { isConfigured, type Settings } from '@/lib/settings';
+import { isConfigured, settingsItem, type Settings } from '@/lib/settings';
 import { normalizeWebUrl, webUrlOf } from '@/lib/web-url';
 import { Notice } from './Notice';
 import { saveSetup } from './save-setup';
@@ -23,6 +23,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
   const [projectTopic, setProjectTopic] = useState(initial.projectTopic);
   const [subtopics, setSubtopics] = useState(initial.enabledSubtopics);
   const [webUrlInput, setWebUrlInput] = useState(webUrlOf(initial));
+  const [addressStatus, setAddressStatus] = useState('');
   const [goal, setGoal] = useState(initial.teamCriteria?.teamGoal ?? '');
   const [scope, setScope] = useState(initial.teamCriteria?.teamScope ?? '');
   const [rules, setRules] = useState((initial.teamCriteria?.teamRules ?? []).join('\n'));
@@ -73,11 +74,22 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
       </fieldset>
 
       <WebUrlField value={webUrlInput} normalized={webUrl} onChange={setWebUrlInput} />
+      <button type="button" disabled={!webUrl} className="w-full rounded-lg border px-3 py-2 disabled:opacity-40"
+        onClick={async () => {
+          if (!webUrl) return;
+          try {
+            await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl });
+            setAddressStatus('주소를 저장했어요. 웹의 PC 연결 페이지를 새로고침해 주세요.');
+          } catch {
+            setAddressStatus('주소를 저장하지 못했어요. 다시 시도해 주세요.');
+          }
+        }}>연결 주소만 저장</button>
+      {addressStatus && <p role="status" className="text-xs text-gray-600">{addressStatus}</p>}
 
       {/* 최초 설정에서 자동 수집 범위와 외부 AI 전송을 알려야 한다 (CLAUDE.md 9장 개인정보·보안 원칙) */}
       <div className="space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
         <p className="font-medium text-gray-800">프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유합니다</p>
-        <p>· 자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화(내 말·AI 답변)를 읽어요. 프로젝트 대화를 할 때만 켜 주세요.</p>
+        <p>· 자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화(내 말·AI 답변)를 읽어요.</p>
         <p>· 프로젝트 주제와 관련된 내용만 후보로 골라 내 검토함에 보여 줘요. 고르기 위해 민감정보를 가린 발췌를 외부 AI로 보냅니다.</p>
         <p>· 팀에는 내가 승인한 카드만 공유하고, 원본 대화 전체는 보내지 않아요.</p>
       </div>

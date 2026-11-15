@@ -17,6 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body className="flex min-h-full flex-col bg-background">
+        {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <div className="border-b bg-amber-50 px-4 py-2 text-center text-sm text-amber-950">시험용 SyncUp · 이 Mac의 별도 팀 데이터로 진행합니다.</div>}
         {children}
         <Toaster richColors position="top-center" />
       </body>

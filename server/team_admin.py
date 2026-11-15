@@ -38,6 +38,7 @@ def init(c, password_file):
     apply_sql(c, 'team_schema.sql')
     apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
+    apply_sql(c, 'team_onboarding.sql')
 
 
 def migrate_integration(c):
@@ -46,6 +47,7 @@ def migrate_integration(c):
     if not c.execute("SELECT to_regclass('syncup.conflict_checks')").fetchone()[0]:
         apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
+    apply_sql(c, 'team_onboarding.sql')
 
 
 def issue_token(c, user_id, path, days):

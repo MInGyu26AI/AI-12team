@@ -32,6 +32,9 @@ export const settingsItem = storage.defineItem<Settings>('local:settings', {
   fallback: { teamName: '', projectTopic: '', userName: '', enabledSubtopics: [...SUBTOPICS], autoCollect: false },
 });
 
+// No conversation bodies: pending toggle state survives popup close/reopen.
+export const collectionTransitionItem = storage.defineItem<'stopping' | 'starting' | null>('session:collectionTransition', { fallback: null });
+
 /** 수집기 status 를 저장할 설정으로. 확장이 정한 값은 그대로 두고, 확장이 읽지 않는 status 필드는 담지 않는다 */
 export const settingsFromStatus = (previous: Settings, status: ExtStatus): Settings => ({
   webUrl: previous.webUrl,

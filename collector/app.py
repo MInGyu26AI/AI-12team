@@ -53,6 +53,7 @@ def parse_args():
     parser.add_argument('--team-token-file', type=Path, help='현재 사용자만 읽을 수 있는 연결 키 파일. 웹에서 받은 키면 빼도 된다')
     parser.add_argument('--team-id', help='최초 또는 시작 시 선택할 팀 ID')
     parser.add_argument('--integrated', action='store_true', help='통합 분류와 확장 프로그램 연결 활성화')
+    parser.add_argument('--start-paused', action='store_true', help='사용자가 켜기 전까지 대화 수집 중지')
     args = parser.parse_args()
     try:
         saved = saved_connection(args.state)  # team.json the native host wrote after a web login (key_setup.py)
@@ -156,6 +157,10 @@ def start_workers(srv, args):
 def serve_review(args, parser):
     srv = _open_review_server(args, parser)
     profile = _connect_team(srv, args, parser)
+    if getattr(args, 'start_paused', False):
+        from collection_session import set_paused
+        with connect(srv.db) as c:
+            set_paused(c, True)
     if args.integrated:
         _start_pipeline(srv, args, profile)
     start_workers(srv, args)

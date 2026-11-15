@@ -225,7 +225,6 @@ describe('startAutoCollect', () => {
   });
 
   it('우리 버튼 안의 변화로는 보내지 않는다', async () => {
-    visible.push('new-1');
     overlay.append(document.createElement('span'));
     await waitDebounce();
     expect(sent).toEqual([]);

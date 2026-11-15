@@ -93,7 +93,7 @@ const outermost = (nodes: HTMLElement[]) => nodes.filter((n) => !nodes.some((o) 
 // 그런 요소는 읽지 않는다. [hidden] 조상이 있으면 숨김이다(일부 DOM 구현은 [hidden] 을 display:none 으로 계산하지 않는다).
 // checkVisibility() 가 true 면 보이는 것이다. false 이거나 없을 때(jsdom 등)는 display: contents 요소도 false 를 주기 때문에,
 // 자신부터 조상까지 display:none 이 실제로 있는지를 직접 본다
-function isVisible(el: HTMLElement): boolean {
+export function isVisibleChatgptElement(el: HTMLElement): boolean {
   if (el.closest('[hidden]')) return false;
   if (typeof el.checkVisibility === 'function' && el.checkVisibility()) return true;
   for (let n: HTMLElement | null = el; n; n = n.parentElement) {
@@ -153,10 +153,31 @@ const siteIdOf = (el: HTMLElement) => {
   return undefined;
 };
 
+// Hidden controls from previous conversations must not hold the last answer forever.
+export const isChatgptStreaming = () => SELECTORS.streaming.some((selector) =>
+  [...document.querySelectorAll<HTMLElement>(selector)].some((el) =>
+    isVisibleChatgptElement(el) && !el.closest('[aria-hidden="true"]') && getComputedStyle(el).visibility !== 'hidden'));
+
+function captureOf(candidates: { el: HTMLElement; text: string }[]): NonNullable<ExtractResult['capture']> {
+  const { roles } = fillRoles(candidates.map(({ el }) => roleOf(el)));
+  const observed: NonNullable<ExtractResult['capture']>['observed'] = [];
+  let replyTo: string | undefined;
+  candidates.forEach(({ el, text }, index) => {
+    const siteId = siteIdOf(el);
+    if (!siteId && !text) return;
+    const id = `chatgpt:${siteId ?? `${conversationIdOf(location.href)}:${hash(text)}`}`;
+    const role = roles[index]!;
+    if (role === 'user') replyTo = id;
+    observed.push({ id, role, ...(role === 'assistant' && replyTo ? { replyTo } : {}) });
+  });
+  const streaming = isChatgptStreaming();
+  return { observed, streaming, ...(streaming && replyTo ? { pendingReplyTo: replyTo } : {}) };
+}
+
 // 글이 있는 요소들 → 수집 메시지. 생성 중인 마지막 AI 답변은 완료된 뒤에 다시 읽는다
 function toMessages(found: { el: HTMLElement; text: string }[]) {
   const { roles, guessed } = fillRoles(found.map((x) => roleOf(x.el)));
-  const streaming = !!first(document, SELECTORS.streaming);
+  const streaming = isChatgptStreaming();
   const convId = conversationIdOf(location.href);
   const title = conversationTitle();
   const now = new Date().toISOString();
@@ -198,11 +219,14 @@ export const chatgpt: SiteAdapter = {
 
   extract(): ExtractResult {
     const tried: ExtractResult['tried'] = [];
+    let firstCapture: ExtractResult['capture'];
     for (const { name, nodes } of STRATEGIES) {
-      const found = nodes()
-        .filter((el) => !el.closest(SELECTORS.notice) && isVisible(el))
-        .map((el) => ({ el, text: textOf(el) }))
-        .filter((x) => x.text.length > 0 && !NOTICE_TEXT.test(x.text));
+      const candidates = nodes()
+        .filter((el) => !el.closest(SELECTORS.notice) && isVisibleChatgptElement(el))
+        .map((el) => ({ el, text: textOf(el) }));
+      const capture = captureOf(candidates);
+      if (capture.observed.length && !firstCapture) firstCapture = capture;
+      const found = candidates.filter((x) => x.text.length > 0 && !NOTICE_TEXT.test(x.text));
       tried.push({ name, count: found.length });
       if (!found.length) continue;
 
@@ -214,7 +238,7 @@ export const chatgpt: SiteAdapter = {
             (guessedRoles ? ` (화자 ${guessedRoles}개는 순서로 추정)` : ''),
         ),
       );
-      return { messages, selector: name, tried, guessedRoles };
+      return { messages, selector: name, tried, guessedRoles, capture };
     }
 
     logOnce(`fail:${location.pathname}`, () =>
@@ -224,6 +248,6 @@ export const chatgpt: SiteAdapter = {
         '→ lib/sites/chatgpt.ts 의 SELECTORS 를 고쳐 주세요',
       ),
     );
-    return { messages: [], selector: null, tried, guessedRoles: 0 };
+    return { messages: [], selector: null, tried, guessedRoles: 0, capture: firstCapture };
   },
 };

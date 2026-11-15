@@ -1,0 +1,127 @@
+"""Self-service signup/team creation on isolated real PostgreSQL and fake Supabase. No production connections."""
+import repo_paths  # noqa: F401
+import concurrent.futures
+import hashlib
+import json
+import secrets
+import unittest
+import uuid
+
+import psycopg
+
+from check_teams import TeamIsolation, own_tests, request
+from fake_supabase import fake_supabase, github_user, challenge_of, PROVIDER_TOKEN
+from key_issue import KeyIssuer
+from team_access import verify_database
+import onboarding
+
+
+class Onboarding(TeamIsolation):
+    def setUp(self):
+        super().setUp()
+        self.supabase = self.enterContext(fake_supabase())
+        self.api.key_issuer = KeyIssuer(self.supabase.url, self.supabase.key)
+        self.identity = github_user(int(uuid.uuid4().hex[:12], 16), 'synthetic')
+
+    def call(self, method, path='/onboarding', token=None, data=None):
+        status, raw = request(self.api, method, path, token, data)
+        return status, json.loads(raw)
+
+    def login(self, user=None, name='새 사용자'):
+        verifier = secrets.token_urlsafe(48)
+        code = self.supabase.login(challenge_of(verifier), user or self.identity)
+        return self.call('POST', '/onboarding/login', data=dict(code=code, verifier=verifier, name=name))
+
+    def team(self, token, request_id=None, name='새 팀'):
+        return self.call('POST', '/onboarding/teams', token,
+                         dict(request_id=request_id or str(uuid.uuid4()), name=name, topic='합성 프로젝트'))
+
+    def test_new_user_creates_team_and_can_get_a_native_key(self):
+        status, signed = self.login()
+        self.assertEqual(status, 200)
+        token = signed['session']
+        self.assertNotIn(PROVIDER_TOKEN, json.dumps(signed))
+        self.assertTrue(self.supabase.logged_out)
+        self.assertEqual(self.call('GET', token=token)[1]['teams'], [])
+        status, team = self.team(token)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.call('GET', token=token)[1]['teams'], [dict(id=team['id'], name='새 팀')])
+        self.assertEqual(request(self.api, 'GET', '/me', token)[0], 401)  # never a collector credential
+        verifier = secrets.token_urlsafe(48)
+        code = self.supabase.login(challenge_of(verifier), self.identity)
+        raw_key = secrets.token_urlsafe(32)
+        status, issued = self.call('POST', '/keys', data=dict(code=code, verifier=verifier,
+            digest=hashlib.sha256(raw_key.encode()).hexdigest(), device='macOS'))
+        self.assertEqual(status, 200)
+        self.assertEqual(issued['name'], '새 사용자')
+        self.assertEqual(request(self.api, 'GET', '/teams/'+team['id']+'/settings', raw_key)[0], 200)
+
+    def test_relogin_keeps_name_and_does_not_duplicate_identity(self):
+        first = self.login()[1]['session']
+        created = self.team(first)[1]
+        second = self.login(name='바뀌면 안 되는 이름')[1]['session']
+        account = self.call('GET', token=second)[1]
+        self.assertEqual(account['name'], '새 사용자')
+        self.assertEqual(account['teams'][0]['id'], created['id'])
+
+    def test_team_creation_is_idempotent_and_serialized_at_limit(self):
+        token = self.login()[1]['session']
+        rid = str(uuid.uuid4())
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _: self.team(token, rid), range(4)))
+        self.assertTrue(all(s == 200 for s, _ in results))
+        self.assertEqual(len({r['id'] for _, r in results}), 1)
+        self.assertEqual(self.team(token, rid, '다른 이름')[0], 409)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _: self.team(token), range(4)))
+        self.assertEqual(sum(s == 200 for s, _ in results), 2)
+        self.assertEqual(sum(s == 409 for s, _ in results), 2)
+
+    def test_sessions_expire_logout_and_inactive_users_cannot_write(self):
+        token = self.login()[1]['session']
+        self.assertEqual(self.call('DELETE', token=token)[0], 200)
+        self.assertEqual(self.team(token)[0], 401)
+        token = self.login()[1]['session']
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute("UPDATE syncup.onboarding_sessions SET expires_at=now()-interval '1 second' WHERE digest=%s", (onboarding.digest(token),))
+        self.assertEqual(self.call('GET', token=token)[0], 401)
+        token = self.login()[1]['session']
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute('UPDATE syncup.users SET active=false WHERE id=(SELECT user_id FROM syncup.onboarding_sessions WHERE digest=%s)', (onboarding.digest(token),))
+        self.assertEqual(self.team(token)[0], 401)
+        self.assertEqual(self.login()[0], 403)
+
+    def test_no_cross_user_access_or_token_privilege_confusion(self):
+        alice = self.login()[1]['session']
+        self.team(alice)
+        bob = self.login(github_user(9991002, 'other'))[1]['session']
+        self.assertEqual(self.call('GET', token=bob)[1]['teams'], [])
+        self.assertEqual(self.call('GET', token=self.tokens['Alice'])[0], 401)
+        self.assertEqual(self.call('GET')[0], 401)
+        self.assertEqual(self.team(secrets.token_urlsafe(32))[0], 401)
+        with psycopg.connect(self.api_dsn) as c:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                c.execute('SELECT * FROM syncup.onboarding_sessions')
+        verify_database(self.api_dsn, web_keys=True)
+
+    def test_bad_pkce_and_metadata_cannot_claim_identity(self):
+        verifier = secrets.token_urlsafe(48)
+        code = self.supabase.login(challenge_of(verifier), self.identity)
+        self.assertEqual(self.call('POST', '/onboarding/login', data=dict(code=code, verifier='x'*64, name='x'))[0], 401)
+        forged = github_user(9991003, 'forged', identities=[], user_metadata={'provider_id': self.identity['identities'][0]['id']})
+        self.assertEqual(self.login(forged)[0], 403)
+        status, _ = self.login(name='\ninvalid')
+        self.assertEqual(status, 400)
+
+    def test_migration_twice_keeps_account_team_and_membership(self):
+        token = self.login()[1]['session']
+        team = self.team(token)[1]
+        self.admin('migrate-integration')
+        self.admin('migrate-integration')
+        verify_database(self.api_dsn, web_keys=True)
+        self.assertEqual(self.call('GET', token=token)[1]['teams'][0]['id'], team['id'])
+
+
+if __name__ == '__main__':
+    result = unittest.TextTestRunner(verbosity=2).run(own_tests(Onboarding))
+    raise SystemExit(not result.wasSuccessful())
