@@ -56,6 +56,7 @@
   --color-blush-deep: #e2c9c4; /* 고리 안쪽 */
   --color-flare: #f5cdbe; /* 충돌 띠 위 글자 */
   --color-glass: rgb(255 255 255 / 0.72); /* 카드·패널: 뒤의 번짐이 살짝 비친다 */
+  --color-paper: #fbf8f3; /* 화면 바탕과 같은 색 (아바타 겹침 테두리 등) */
   --color-wash-rose: rgb(233 166 179);
   --color-wash-olive: rgb(185 196 138);
   --color-wash-peach: rgb(245 205 190);
