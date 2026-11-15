@@ -58,16 +58,20 @@ def target_from_env(env=os.environ):
     return RepoTarget(team_id, repo, branch, token)
 
 
-def state_files(c, target):
-    """(syncup.json content, {file name: text}) for the linked team, read under the caller's row access."""
-    team_id = target.team_id
+def team_state(c, team_id, repo=None):
+    """The team's syncup.json content, read under the caller's row access; also what the Notion page shows."""
     team = c.execute('SELECT name FROM syncup.teams WHERE id=%s', (team_id,)).fetchone()
     changed = c.execute('''SELECT greatest((SELECT max(at) FROM syncup.todo_states WHERE team_id=%s),
         (SELECT max(at) FROM syncup.conflict_events WHERE team_id=%s),
         (SELECT at FROM syncup.team_settings WHERE team_id=%s)) AS at''', (team_id, team_id, team_id)).fetchone()['at']
-    state = build_state(board(c, team_id, history=True), conflicts(c, team_id, history=True), done_todos(c, team_id),
-                        team=dict(name=team and team['name'], repo=target.repo, **state_team(c, team_id)),
-                        changed_at=changed.timestamp() if changed else None)
+    return build_state(board(c, team_id, history=True), conflicts(c, team_id, history=True), done_todos(c, team_id),
+                       team=dict(name=team and team['name'], repo=repo, **state_team(c, team_id)),
+                       changed_at=changed.timestamp() if changed else None)
+
+
+def state_files(c, target):
+    """(syncup.json content, {file name: text}) for the linked team."""
+    state = team_state(c, target.team_id, target.repo)
     return state, {'SYNCUP.md': render_markdown(state), 'syncup.json': dumps(state)}
 
 

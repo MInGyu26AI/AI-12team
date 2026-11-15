@@ -58,6 +58,7 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('team', [PY, 'checks/check_minimal_diagnostics.py'], '진단 기록 최소화'),
     ('team', [PY, 'checks/check_local_functional_http.py'], '네이티브 → 로컬 RPC → PostgreSQL → 다른 팀원'),
     ('team', [PY, 'checks/check_repo_sync.py'], '팀 상태 파일 GitHub 저장 (가짜 GitHub API, 토큰·원문 미포함)'),
+    ('team', [PY, 'checks/check_notion_sync.py'], '팀 상태 노션 페이지 저장 (가짜 노션 API, 바뀐 블록만·429·토큰 미포함)'),
     ('model', [PY, 'checks/check_local_privacy_model.py'], '실제 로컬 모델 측정 (느림)'),
     ('model', [PY, 'checks/check_privacy_memory_pipeline.py'], '실제 로컬 모델 → 필터 → 승인'),
 ]

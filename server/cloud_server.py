@@ -14,6 +14,7 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
 import key_issue
+import notion_sync
 from repo_sync import target_from_env
 from team_access import DatabaseSetupError, verify_database
 from team_server import TeamHandler, TeamServer
@@ -65,10 +66,10 @@ def settings():
     return dsn, host, port
 
 
-def repo_settings():
-    """The GitHub repository the linked team's state files are saved to, or None (repo_sync.py)."""
+def save_targets():
+    """Where the linked teams' state is saved: (GitHub repository, Notion page), each None when not set."""
     try:
-        return target_from_env()
+        return target_from_env(), notion_sync.target_from_env()
     except ValueError as error:  # the message names the setting, never the token
         raise SettingError(str(error)) from None
 
@@ -76,7 +77,7 @@ def repo_settings():
 def main():
     try:
         dsn, host, port = settings()
-        target = repo_settings()
+        target, notion = save_targets()
         issuer = key_issue.issuer_from_env()
         verify_database(dsn, web_keys=issuer is not None)
     except (SettingError, key_issue.SettingError, DatabaseSetupError) as error:
@@ -85,7 +86,8 @@ def main():
         raise SystemExit('Cloud configuration or restricted DB connection failed; credentials are not logged.') from None
     # The provider terminates TLS; only this authenticated API is bound publicly.
     with TeamServer(('0.0.0.0', port), CloudHandler) as server:
-        server.dsn, server.public_host, server.repo_target, server.key_issuer = dsn, host, target, issuer
+        server.dsn, server.public_host, server.repo_target = dsn, host, target
+        server.notion_target, server.key_issuer = notion, issuer
         print('SyncUp team API ready behind managed HTTPS ingress.', flush=True)
         server.serve_forever()
 

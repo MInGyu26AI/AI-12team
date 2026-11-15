@@ -16,6 +16,7 @@ import uuid
 
 import psycopg
 
+import notion_sync
 from conflict_checks import retry_check
 from conflict_resolution import resolve
 from conflict_scheduler import schedule
@@ -51,6 +52,7 @@ class TeamServer(http.server.ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         self.checks_stop = threading.Event()
         self.repo_target = None  # repo_sync.RepoTarget when one team's state is saved to GitHub
+        self.notion_target = None  # notion_sync.NotionTarget when one team's state is saved to a Notion page
         self.key_issuer = None  # key_issue.KeyIssuer when teammates get keys by logging in on the web
         super().__init__(*args, **kwargs)
 
@@ -103,15 +105,20 @@ class TeamHandler(SecureHandler):
         if status == 200 and team_id is not None:
             # No worker runs on its own: any member's successful team request resumes that team's due checks.
             schedule(self.server, token, team_id)
-            self.save_repo_files(token, team_id, parts, actor)
+            self.save_team_state(token, team_id, parts, actor)
 
-    def save_repo_files(self, token, team_id, parts, actor):
-        """A change is saved to the linked repository. After a start, the team's first request of any kind saves
-        once right away, so a save that was waiting when the server stopped still happens and the status is known."""
+    def save_team_state(self, token, team_id, parts, actor):
+        """A change is saved to the linked repository and Notion page. After a start, the team's first request of any
+        kind saves once right away, so a save that was waiting when the server stopped still happens and the status
+        is known."""
         if self.command == 'POST':
             schedule_save(self.server, token, team_id, actor, approved=parts[2:] == ['items'])
-        elif first_check_due(self.server, team_id):
+            notion_sync.schedule_save(self.server, token, team_id)
+            return
+        if first_check_due(self.server, team_id):
             schedule_save(self.server, token, team_id, delay=0)
+        if notion_sync.first_check_due(self.server, team_id):
+            notion_sync.schedule_save(self.server, token, team_id, delay=0)
 
     def parse_path(self):
         """(path parts, team id or None for /me); checked before the token so unknown paths never touch the DB."""
@@ -148,6 +155,8 @@ def dispatch(c, user_id, team_id, method, parts, data, server=None):
         return settings_request(c, team_id, user_id, method, data)
     if method == 'GET' and tail == ['repo']:
         return dict(team_id=str(team_id), repo=repo_status(server, team_id))
+    if method == 'GET' and tail == ['notion']:
+        return dict(team_id=str(team_id), notion=notion_sync.notion_status(server, team_id))
     if method == 'GET' and tuple(tail) in BOARD_READS:
         return dict(team_id=str(team_id), **BOARD_READS[tuple(tail)](c, team_id))
     change = CHANGES.get((tail[0], tail[2])) if len(tail) == 3 else None
@@ -191,8 +200,8 @@ def main():
     dsn = os.environ.get('SYNCUP_DATABASE_URL')
     if not dsn:
         parser.error('SYNCUP_DATABASE_URL 환경 변수가 필요합니다.')
-    try:
-        target = target_from_env()  # its messages name the setting, never the token
+    try:  # their messages name the setting, never the token
+        target, notion = target_from_env(), notion_sync.target_from_env()
     except ValueError as error:
         parser.error(str(error))
     try:
@@ -207,7 +216,7 @@ def main():
         # Driver messages can contain connection details; show only the kind of problem.
         parser.error('제한된 syncup_api 계정과 팀 DB 연결을 확인하세요.')
     with TeamServer(('127.0.0.1', args.port), TeamHandler) as srv:
-        srv.dsn, srv.repo_target, srv.key_issuer = dsn, target, issuer
+        srv.dsn, srv.repo_target, srv.notion_target, srv.key_issuer = dsn, target, notion, issuer
         print(f'팀 API http://127.0.0.1:{srv.server_port}/ · 외부 연결은 HTTPS 프록시 필요', flush=True)
         srv.serve_forever()
 

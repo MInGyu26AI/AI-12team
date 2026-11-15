@@ -1,0 +1,298 @@
+"""Saving the team state to one Notion page, at the same moments as the GitHub save (repo_sync.py).
+
+The server's environment links one team to one page; no request can choose the page:
+SYNCUP_NOTION_TEAM (team id), SYNCUP_NOTION_PAGE (page id) and SYNCUP_NOTION_TOKEN, an internal integration's
+secret, with the page shared to that integration. It is set apart from the GitHub settings: either can be on alone.
+The page shows what SYNCUP.md shows (ai/syncup_ai/team_state.py render_markdown) as Notion blocks. Only top-level
+blocks that differ from the last save are replaced, and nothing is written when the page already shows the same.
+The token is sent only to the Notion API (notion_page.py); it is never stored, logged or returned.
+"""
+import os
+import re
+import threading
+import time
+import uuid
+import weakref
+from dataclasses import dataclass, field
+
+import repo_sync
+from ai.syncup_ai.team_state import RESOLUTION_NAMES, by_whom, short_date
+from diagnostics import failure
+from notion_page import MAX_RICH_TEXT, MAX_TEXT, NOTION_API, NotionError, fingerprint, save
+from team_access import authorized
+
+PAGE_ID = re.compile(r'[0-9a-fA-F]{32}')
+SECRET = re.compile(r'[!-~]{20,500}')  # visible ASCII only: it goes into an HTTP header
+ALERT_COLORS = {'충돌': 'red', '변경': 'blue'}  # the board's alert levels; anything else is 'needs a look' (yellow)
+
+
+@dataclass(frozen=True)
+class NotionTarget:
+    team_id: uuid.UUID
+    page_id: str
+    token: str = field(repr=False)
+    api: str = NOTION_API
+
+
+def target_from_env(env=os.environ):
+    """The linked page, or None when no Notion setting is given (then nothing is saved)."""
+    team, page, token = (env.get(name, '').strip()
+                         for name in ('SYNCUP_NOTION_TEAM', 'SYNCUP_NOTION_PAGE', 'SYNCUP_NOTION_TOKEN'))
+    if not (team or page or token):
+        return None
+    if not (team and page and token):
+        raise ValueError('SYNCUP_NOTION_TEAM·SYNCUP_NOTION_PAGE·SYNCUP_NOTION_TOKEN을 함께 설정하세요.')
+    if not PAGE_ID.fullmatch(page.replace('-', '')):
+        raise ValueError('SYNCUP_NOTION_PAGE는 페이지 ID(16진수 32자리, 하이픈은 있어도 됨)여야 합니다.')
+    if not SECRET.fullmatch(token):
+        raise ValueError('SYNCUP_NOTION_TOKEN은 노션 내부 통합의 시크릿이어야 합니다.')
+    try:
+        team_id = uuid.UUID(team)
+    except ValueError:
+        raise ValueError('SYNCUP_NOTION_TEAM은 팀 ID(uuid)여야 합니다.') from None
+    return NotionTarget(team_id, str(uuid.UUID(page.replace('-', ''))), token)
+
+
+# --- the page: SYNCUP.md's sections as blocks --------------------------------------------------------------------
+
+def _pieces(content):
+    """`content` cut into runs of at most MAX_TEXT UTF-16 units, never inside a character."""
+    pieces, piece, units = [], '', 0
+    for character in content:
+        size = 2 if ord(character) > 0xFFFF else 1
+        if units + size > MAX_TEXT:
+            pieces.append(piece)
+            piece, units = '', 0
+        piece, units = piece + character, units + size
+    return pieces + ([piece] if piece else [])
+
+
+def _text(content, **style):
+    """Rich text items for one run of text (bold, italic, strikethrough, code, color); long runs are split."""
+    annotations = {name: value for name, value in style.items() if value}
+    return [dict(type='text', text=dict(content=piece), **({'annotations': annotations} if annotations else {}))
+            for piece in _pieces(content)]
+
+
+def _block(kind, *runs, children=(), **extra):
+    body = dict(rich_text=[item for run in runs for item in run][:MAX_RICH_TEXT], **extra)
+    if children:
+        body['children'] = list(children)
+    return {'type': kind, kind: body}
+
+
+def _heading(title, level=2):
+    return _block(f'heading_{level}', _text(title))
+
+
+def _bullet(*runs, children=()):
+    return _block('bulleted_list_item', *runs, children=children)
+
+
+def _note(content):
+    return _block('paragraph', _text(content, color='gray'))
+
+
+def _header(state, mark):
+    team, s = state['team'], state['summary']
+    counts = (f"기준 시각 {state['updated_at'] or '-'} · 결정 {s['decisions']} · 열린 충돌 {s['open_conflicts']}"
+              f" · 할 일 {s['todos']} (완료 {s['todos_done']})" + (f" · 레포 {team['repo']}" if team.get('repo') else ''))
+    title = 'SyncUp 팀 기록' + (f" — {team['name']}" if team.get('name') else '')
+    runs = [_text(title + '\n', bold=True),
+            _text('팀이 승인한 결정을 SyncUp이 자동으로 모은 페이지입니다. 직접 고치지 마세요 (다음 변경 때 덮어씁니다).\n'),
+            _text(counts, color='gray')]
+    if mark:
+        runs += [_text(' · 지문 ', color='gray'), _text(mark, code=True, color='gray')]
+    return _block('callout', *runs, icon=dict(type='emoji', emoji='🔄'), color='gray_background')
+
+
+def _body(state):
+    team, blocks = state['team'], []
+    if team.get('goal') or team.get('scope') or team.get('rules'):
+        blocks.append(_heading('팀 기준'))
+        blocks += [_bullet(_text(f'{label}: ', bold=True), _text(value)) for label, value in
+                   [('목표', team.get('goal')), ('범위', team.get('scope'))] + [('규칙', r) for r in team.get('rules') or []]
+                   if value]
+
+    if state['open_conflicts']:
+        blocks.append(_heading('⚠️ 확인이 필요한 결정'))
+        for c in state['open_conflicts']:
+            judgement = c['judgement'] or '충돌'
+            reason = [_bullet(_text(f"이유: {c['reason']}"))] if c.get('reason') else []
+            blocks.append(_bullet(
+                _text(c['topic_key'] or '결정', bold=True), _text(' '),
+                _text(f'[{judgement}]', bold=True, color=ALERT_COLORS.get(judgement, 'yellow')),
+                _text(' (팀 논의 중)' if c['status'] == 'discuss' else ''),
+                _text(f": 기존 \"{c['existing']['content']}\"({c['existing']['owner'] or '?'}) ↔ "
+                      f"새 \"{c['new']['content']}\"({c['new']['owner'] or '?'})"), children=reason))
+
+    blocks.append(_heading('현재 결정'))
+    subtopic = None
+    for topic in state['decisions']:
+        if not topic['current']:
+            continue
+        if topic['subtopic'] != subtopic:
+            subtopic = topic['subtopic']
+            blocks.append(_heading(subtopic, level=3))
+        history = [_bullet(_text(old['content'] or '', strikethrough=True),
+                           _text(f"{by_whom(old)} ({'바뀜' if old['state'] == 'superseded' else '채택 안 됨'})"))
+                   for old in topic['history'][:2]]
+        for n, d in enumerate(topic['current'], 1):  # like SYNCUP.md: earlier decisions once, after the last current
+            below = [_bullet(_text(f"이유: {d['reason']}"))] if d.get('reason') else []
+            below += history if n == len(topic['current']) else []
+            blocks.append(_bullet(_text(topic['topic_key'], bold=True), _text(f": {d['content']}{by_whom(d)}"),
+                                  _text(' (검토 중)' if d['state'] == 'review' else '', italic=True), children=below))
+    if subtopic is None:
+        blocks.append(_note('(아직 승인된 결정이 없습니다)'))
+
+    blocks.append(_heading('할 일'))
+    if not state['todos']:
+        blocks.append(_note('(아직 승인된 할 일이 없습니다)'))
+    for t in [t for t in state['todos'] if not t['done']] + [t for t in state['todos'] if t['done']]:
+        owner = f" — {t['owner']}" if t.get('owner') else ''
+        due = f" · {short_date(t['due'])}까지" if t.get('due') else ''
+        blocks.append(_block('to_do', _text(t['id'], code=True), _text(f" {t['content']}{owner}{due}"), checked=t['done']))
+
+    if state['research']:
+        blocks.append(_heading('조사한 내용'))
+        blocks += [_bullet(_text(f"{r['content']}" + (f" ({r['topic_key']})" if r.get('topic_key') else '')))
+                   for r in state['research']]
+
+    if state['resolved_conflicts']:
+        resolved = [_bullet(_text(c['topic_key'] or '결정', bold=True),
+                            _text(f": {RESOLUTION_NAMES.get(c['resolution'], c['resolution'])}"
+                                  + (f" — {c['note']}" if c.get('note') else '')))
+                    for c in reversed(state['resolved_conflicts'])]
+        blocks.append(_block('heading_2', _text('최근 해결한 충돌'), is_toggleable=True, children=resolved))
+    return blocks
+
+
+def page_blocks(state):
+    """The page for `state`: a header callout showing a fingerprint of all of it, then SYNCUP.md's sections."""
+    body = _body(state)
+    return [_header(state, fingerprint([_header(state, None), body])), *body]
+
+
+# --- when: the GitHub save's moments, with its own queue and status ----------------------------------------------
+
+@dataclass
+class _Job:
+    token: str = field(repr=False)
+    first: float = 0  # when the first change of this batch came (monotonic)
+    due: float = 0
+    wake: threading.Event = field(default_factory=threading.Event)
+
+
+@dataclass
+class _Saves:
+    """One server's Notion saves by team."""
+    waiting: dict = field(default_factory=dict)  # team -> the _Job waiting for changes to settle
+    running: dict = field(default_factory=dict)  # team -> number of saves under way
+    known: dict = field(default_factory=dict)  # team -> the SyncUp blocks on its page (notion_page.save keeps it)
+    status: dict = field(default_factory=dict)  # team -> the latest outcome, shown by GET …/notion
+
+
+_servers = weakref.WeakKeyDictionary()  # server -> _Saves; a stopped server's entry goes with it
+_lock = threading.Lock()  # guards every _Saves
+_saving = threading.Lock()  # one Notion save at a time; GitHub saves run apart from these
+
+
+def _saves(server):
+    """The server's _Saves; the caller holds _lock."""
+    if server not in _servers:
+        _servers[server] = _Saves()
+    return _servers[server]
+
+
+def linked(server, team_id):
+    """The page linked to this team (an id as uuid or text), or None."""
+    target = getattr(server, 'notion_target', None)
+    return target if target is not None and str(target.team_id) == str(team_id) else None
+
+
+def first_check_due(server, team_id):
+    """True until the linked team's first save after a start has begun (it also checks the connection)."""
+    target = linked(server, team_id)
+    if target is None:
+        return False
+    with _lock:
+        saves = _saves(server)
+        return not any(target.team_id in table for table in (saves.status, saves.waiting, saves.running))
+
+
+def schedule_save(server, token, team_id, delay=None):
+    """Save the linked team's page once no change has come for `delay` seconds (default: the GitHub save's),
+    but no later than the GitHub save's longest wait after the batch's first change. Other teams are ignored."""
+    target = linked(server, team_id)
+    if target is None or server.checks_stop.is_set():
+        return
+    now = time.monotonic()
+    delay = repo_sync.SAVE_DELAY_SECONDS if delay is None else delay
+    with _lock:
+        saves = _saves(server)
+        job = saves.waiting.get(target.team_id)
+        start = job is None
+        if start:
+            job = saves.waiting[target.team_id] = _Job(token, first=now)
+        job.token = token  # the latest member's token reads the board
+        job.due = min(now + delay, job.first + repo_sync.SAVE_MAX_WAIT_SECONDS)
+        job.wake.set()
+    if start:
+        threading.Thread(target=_wait_then_save, args=(server, target, job), daemon=True).start()
+
+
+def _wait_then_save(server, target, job):
+    team_id = target.team_id
+    while True:
+        with _lock:
+            wait = job.due - time.monotonic()
+            if wait <= 0:
+                saves = _saves(server)
+                saves.waiting.pop(team_id, None)  # changes from now on wait for the next save
+                saves.running[team_id] = saves.running.get(team_id, 0) + 1
+                break
+            job.wake.clear()
+        job.wake.wait(wait)
+    try:
+        if not server.checks_stop.is_set():
+            _save_and_record(server, target, job)
+    finally:
+        with _lock:
+            running = _saves(server).running
+            running[team_id] -= 1
+            if not running[team_id]:
+                del running[team_id]
+
+
+def _save_and_record(server, target, job):
+    """Rebuild and save; the outcome goes to GET …/notion, a failure also to the diagnostic log (step and kind only)."""
+    with _saving:
+        with _lock:
+            saves = _saves(server)
+            known = saves.known.setdefault(target.team_id, {})  # only saves, one at a time, use it
+            saved_at = (saves.status.get(target.team_id) or {}).get('savedAt')
+        try:
+            with authorized(server.dsn, job.token, target.team_id) as (c, _user):
+                repo = repo_sync.linked(server, target.team_id)
+                state = repo_sync.team_state(c, target.team_id, repo and repo.repo)
+            wrote = save(target, page_blocks(state), known)
+            saved_at = time.time() if wrote else saved_at
+            result = dict(state='saved' if wrote else 'unchanged', savedAt=saved_at)
+        except Exception as error:  # a failed save never affects the team API; the next change tries again
+            failure('notion_' + (error.step if isinstance(error, NotionError) else 'save'), error, target.team_id)
+            result = dict(state='failed', savedAt=saved_at,
+                          httpStatus=error.code if isinstance(error, NotionError) else None)
+        with _lock:
+            _saves(server).status[target.team_id] = dict(result, checkedAt=time.time())
+
+
+def notion_status(server, team_id):
+    """What GET …/notion shows about the linked page; {'linked': False} for every other team."""
+    target = linked(server, team_id)
+    if target is None:
+        return dict(linked=False)
+    with _lock:
+        saves = _saves(server)
+        busy = target.team_id in saves.waiting or target.team_id in saves.running
+        status = dict(saves.status.get(target.team_id) or dict(state='unknown'), pending=busy)
+    return dict(linked=True, page=target.page_id, **status)
