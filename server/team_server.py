@@ -21,6 +21,7 @@ from conflict_resolution import resolve
 from conflict_scheduler import schedule
 from diagnostics import failure
 import key_issue
+import team_invites
 from repo_sync import first_check_due, linked, repo_status, schedule_save, target_from_env
 from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
@@ -80,6 +81,8 @@ class TeamHandler(SecureHandler):
     def handle_api(self):
         if self.path == '/keys':  # web login → key; authenticated by the login itself, not a key
             return key_issue.handle(self)
+        if self.path == '/invites/preview':  # 초대 링크: the join page's look before the login (team_invites.py)
+            return team_invites.handle_preview(self)
         status, result, token, team_id, actor = 200, {}, '', None, None
         try:
             parts, team_id = self.parse_path()
@@ -108,6 +111,8 @@ class TeamHandler(SecureHandler):
     def save_repo_files(self, token, team_id, parts, actor):
         """A change is saved to the linked repository. After a start, the team's first request of any kind saves
         once right away, so a save that was waiting when the server stopped still happens and the status is known."""
+        if parts[2] == 'invites':  # 초대 링크 change no team file
+            return
         if self.command == 'POST':
             schedule_save(self.server, token, team_id, actor, approved=parts[2:] == ['items'])
         elif first_check_due(self.server, team_id):
@@ -146,6 +151,8 @@ def dispatch(c, user_id, team_id, method, parts, data, server=None):
         return shared_cards(c, team_id, user_id, method, tail, data)
     if tail == ['settings']:
         return settings_request(c, team_id, user_id, method, data)
+    if tail[0] == 'invites':  # 초대 링크 (team_invites.py)
+        return team_invites.team_request(c, team_id, method, tail, data)
     if method == 'GET' and tail == ['repo']:
         return dict(team_id=str(team_id), repo=repo_status(server, team_id))
     if method == 'GET' and tuple(tail) in BOARD_READS:

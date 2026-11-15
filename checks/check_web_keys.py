@@ -267,8 +267,209 @@ class WebKeys(TeamIsolation):
         self.assertEqual(request(self.api, 'GET', '/me', self.tokens['Bob'])[0], 200)
 
 
+# ── 초대 링크 (server/team_invites.py) ──
+class InviteLinks(WebKeys):
+    """An active member's link, then a GitHub login that joins with it: new users, known users and every refusal."""
+
+    def setUp(self):
+        super().setUp()
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute('DELETE FROM syncup.invite_events')
+            c.execute('DELETE FROM syncup.invites')
+            c.execute('DELETE FROM syncup.identities WHERE user_id <> ALL(%s::uuid[])', (list(self.users.values()),))
+            c.execute('DELETE FROM syncup.users WHERE id <> ALL(%s::uuid[])', (list(self.users.values()),))
+
+    def team(self, method, tail, user='Alice', team='A', data=None):
+        status, raw = request(self.api, method, f'/teams/{self.teams[team]}/{tail}', self.tokens[user], data)
+        return status, json.loads(raw)
+
+    def create(self, user='Alice', team='A'):
+        status, body = self.team('POST', 'invites', user, team, {})
+        self.assertEqual(status, 200, body)
+        return body
+
+    def preview(self, code):
+        status, raw = request(self.api, 'POST', '/invites/preview', data=dict(code=code))
+        return status, json.loads(raw)
+
+    def join(self, registration, user, code, name='새 팀원'):
+        challenge = self.host(registration, 'setup.begin', invite=dict(code=code, name=name))['result']['challenge']
+        return self.host(registration, 'setup.connect', code=self.supabase.login(challenge, user))
+
+    def members(self, team='A'):
+        with psycopg.connect(self.admin_dsn) as c:
+            return sorted(r[0] for r in c.execute("""SELECT u.name FROM syncup.memberships m JOIN syncup.users u
+                ON u.id=m.user_id WHERE m.team_id=%s AND m.active""", (self.teams[team],)))
+
+    def invite_outcomes(self):
+        with psycopg.connect(self.admin_dsn) as c:
+            return [r[0] for r in c.execute('SELECT outcome FROM syncup.invite_events ORDER BY id')]
+
+    def test_a_new_github_user_joins_with_a_link_and_the_collector_sees_the_team(self):
+        made = self.create()
+        code = made['code']
+        self.assertRegex(code, r'^[A-Za-z0-9_-]{24}$')
+        self.assertEqual(self.preview(code)[1], dict(status='valid', team='A팀', expires_at=made['expires_at'],
+                                                     members=2, member_limit=8))
+        state, registration = self.new_pc()
+        self.assertEqual(self.host(registration, 'setup.invite', code=code)['result']['team'], 'A팀')
+        answer = self.join(registration, github_user(5001, 'erin'), code, name=' 에린 ')
+        self.assertTrue(answer['ok'], answer)
+        self.assertEqual(answer['result']['invite'], dict(team='A팀', added=True))
+        self.assertEqual((answer['result']['name'], answer['result']['teams']), ('에린', ['A팀']))
+        self.assertEqual(self.members(), ['Alice', 'Dana', '에린'])
+        key = (state / 'team.key').read_text().strip()
+        self.assertEqual(json.loads(request(self.api, 'GET', '/me', key)[1])['teams'][0]['name'], 'A팀')
+        self.assertNotIn(code, (state / 'login.pending').read_text() if (state / 'login.pending').exists() else '')
+        # The list never shows a code, and records who made the link and how many joined.
+        status, listed = self.team('GET', 'invites', 'Dana')
+        self.assertEqual(status, 200)
+        self.assertEqual((listed['members'], listed['member_limit']), (3, 8))
+        self.assertEqual([(i['created_by'], i['joined'], i['revoked_at']) for i in listed['invites']],
+                         [('Alice', 1, None)])
+        self.assertNotIn(code, json.dumps(listed))
+        with psycopg.connect(self.admin_dsn) as c:
+            dump = json.dumps([list(map(str, r)) for t in ('invites', 'invite_events', 'key_events')
+                               for r in c.execute('SELECT * FROM syncup.' + t)])
+        self.assertNotIn(code, dump)
+        # The same link serves another person; the identity is not re-made for a second login.
+        other_state, other = self.new_pc()
+        self.assertTrue(self.join(other, github_user(5002, 'finn'), code, name='핀')['ok'])
+        self.assertEqual(self.invite_outcomes(), ['joined', 'joined'])
+
+    def test_a_known_user_gets_only_the_membership_and_a_member_gets_a_key(self):
+        code = self.create(user='Bob', team='B')['code']
+        _, registration = self.new_pc()
+        answer = self.join(registration, github_user(GITHUB['Alice'], 'alice'), code, name='무시될 이름')
+        self.assertTrue(answer['ok'], answer)
+        self.assertEqual(answer['result']['name'], 'Alice')
+        self.assertEqual(sorted(answer['result']['teams']), ['A팀', 'B팀'])
+        _, again = self.new_pc()
+        answer = self.join(again, github_user(GITHUB['Dana'], 'dana'), code)  # Dana is in B already
+        self.assertTrue(answer['ok'], answer)
+        self.assertEqual(answer['result']['invite'], dict(team='B팀', added=False))
+        self.assertEqual(self.members('B'), ['Alice', 'Bob', 'Dana'])
+        self.assertEqual(self.invite_outcomes(), ['joined', 'member'])
+
+    def test_expired_revoked_full_forged_and_other_team_links_are_refused(self):
+        _, registration = self.new_pc()
+        erin = github_user(5101, 'erin')
+        made = self.create()
+        # Revoke: by any member of the team, not by someone of another team, and at once.
+        self.assertEqual(self.team('POST', f"invites/{made['id']}/revoke", 'Bob', 'A', {})[0], 403)
+        self.assertEqual(self.team('POST', f"invites/{made['id']}/revoke", 'Bob', 'B', {})[0], 404)
+        self.assertEqual(self.team('POST', f"invites/{made['id']}/revoke", 'Dana', 'A', {})[0], 200)
+        self.assertEqual(self.preview(made['code'])[1], dict(status='revoked'))
+        self.assertEqual(self.join(registration, erin, made['code']),
+                         dict(ok=False, error=key_setup.INVITE_ANSWERS['link']))
+        # Expired.
+        made = self.create()
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute("UPDATE syncup.invites SET expires_at=now()-interval '1 second' WHERE id=%s", (made['id'],))
+        self.assertEqual(self.preview(made['code'])[1], dict(status='expired'))
+        self.assertEqual(self.join(registration, erin, made['code']),
+                         dict(ok=False, error=key_setup.INVITE_ANSWERS['link']))
+        # Forged: a well-formed code nobody made, and malformed ones that never reach the database.
+        forged = secrets.token_urlsafe(18)
+        self.assertEqual(self.preview(forged)[1], dict(status='unknown_link'))
+        self.assertEqual(self.join(registration, erin, forged), dict(ok=False, error=key_setup.INVITE_ANSWERS['link']))
+        for bad in ('short', made['code'] + 'x', made['code'][:-1] + '!'):
+            self.assertEqual(self.preview(bad)[0], 400)
+            self.assertEqual(self.host(registration, 'setup.begin', invite=dict(code=bad, name='x')),
+                             dict(ok=False, error=key_setup.BAD_INVITE))
+        # A link of team B joins team B only, never the team of the member who forwards it.
+        code_b = self.create(user='Bob', team='B')['code']
+        self.assertTrue(self.join(registration, erin, code_b)['ok'])
+        self.assertEqual(self.members('A'), ['Alice', 'Dana'])
+        # Full: 8 active members. A removed member does not come back through a link.
+        code = self.create()['code']
+        with psycopg.connect(self.admin_dsn) as c:
+            for n in range(6):
+                user = c.execute("INSERT INTO syncup.users(id,name) VALUES(gen_random_uuid(),%s) RETURNING id",
+                                 (f'채움{n}',)).fetchone()[0]
+                c.execute('INSERT INTO syncup.memberships(team_id,user_id) VALUES(%s,%s)', (self.teams['A'], user))
+        self.assertEqual(self.preview(code)[1], dict(status='team_full'))
+        _, pc = self.new_pc()
+        self.assertEqual(self.join(pc, github_user(5102, 'gina'), code),
+                         dict(ok=False, error=key_setup.INVITE_ANSWERS['team_full']))
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute("DELETE FROM syncup.memberships WHERE team_id=%s AND user_id IN (SELECT id FROM syncup.users WHERE name LIKE '채움%%')", (self.teams['A'],))
+            c.execute("DELETE FROM syncup.users WHERE name LIKE '채움%%'")
+            c.execute('UPDATE syncup.memberships SET active=false WHERE team_id=%s AND user_id=%s',
+                      (self.teams['A'], self.users['Dana']))
+        _, pc = self.new_pc()
+        self.assertEqual(self.join(pc, github_user(GITHUB['Dana'], 'dana'), code),
+                         dict(ok=False, error=key_setup.INVITE_ANSWERS['removed']))
+        # Nothing of a refused join stays but its event: no user, identity or membership was made.
+        with psycopg.connect(self.admin_dsn) as c:
+            self.assertEqual(c.execute("SELECT count(*) FROM syncup.identities WHERE subject='5102'").fetchone()[0], 0)
+        self.assertEqual(self.invite_outcomes(),
+                         ['revoked', 'expired', 'unknown_link', 'joined', 'team_full', 'removed'])
+
+    def test_member_rules_limits_concurrency_and_no_code_in_logs(self):
+        self.assertEqual(self.team('POST', 'invites', 'Bob', 'A', {})[0], 403)  # not a member of A
+        self.assertEqual(self.team('POST', 'invites', 'Alice', 'A', {'x': 1})[0], 404)
+        codes = [self.create()['code'] for _ in range(5)]
+        status, body = self.team('POST', 'invites', data={})
+        self.assertEqual((status, body['created']), (200, False))  # five open links per team
+        # Eight members at most even when many join at once.
+        with psycopg.connect(self.admin_dsn) as c:
+            for n in range(4):
+                user = c.execute("INSERT INTO syncup.users(id,name) VALUES(gen_random_uuid(),%s) RETURNING id",
+                                 (f'채움{n}',)).fetchone()[0]
+                c.execute('INSERT INTO syncup.memberships(team_id,user_id) VALUES(%s,%s)', (self.teams['A'], user))
+        def one(n):
+            return self.direct(github_user(6000 + n, f'p{n}'), invite=codes[n % 5], name=f'동시{n}')[0]
+        with concurrent.futures.ThreadPoolExecutor(5) as pool:
+            statuses = sorted(pool.map(one, range(5)))
+        self.assertEqual(statuses, [200, 200, 409, 409, 409])
+        self.assertEqual(len(self.members()), 8)
+        # Preview is rate limited for the whole server.
+        import team_invites
+        saved, team_invites.PREVIEW_LIMIT = team_invites.PREVIEW_LIMIT, key_issue_window(2)
+        try:
+            self.assertEqual([self.preview(codes[0])[0] for _ in range(3)], [200, 200, 429])
+        finally:
+            team_invites.PREVIEW_LIMIT = saved
+        # The code is in no log line or diagnostic, even when the database fails.
+        self.api.dsn = self.api_dsn.replace('syncup_api:', 'syncup_api:wrong')
+        with self.assertLogs('syncup', 'WARNING') as logs:
+            self.assertEqual(self.preview(codes[1])[0], 503)
+            self.assertEqual(self.direct(github_user(6100, 'q'), invite=codes[1], name='큐')[0], 503)
+        for code in codes:
+            self.assertNotIn(code, '\n'.join(logs.output))
+        self.api.key_issuer = None
+        self.assertEqual(self.preview(codes[0])[0], 404)
+
+    def test_api_role_cannot_reach_invite_tables_and_startup_check_notices_drift(self):
+        verify_database(self.api_dsn, web_keys=True)
+        with psycopg.connect(self.api_dsn) as c:
+            for table in ('invites', 'invite_events'):
+                with self.subTest(table=table), self.assertRaises(psycopg.errors.InsufficientPrivilege), c.transaction():
+                    c.execute('SELECT * FROM syncup.' + table)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege), c.transaction():  # no member set
+                c.execute('SELECT * FROM syncup.create_invite(%s,%s)', (self.teams['A'], 'a' * 64))
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege), c.transaction():
+                c.execute("SELECT set_config('syncup.user_id',%s,true)", (self.users['Bob'],))
+                c.execute('SELECT * FROM syncup.create_invite(%s,%s)', (self.teams['A'], 'a' * 64))
+        for drift in ('ALTER FUNCTION syncup.join_with_invite(text,jsonb,text,text,text,text,text) SECURITY INVOKER',
+                      'ALTER TABLE syncup.invites NO FORCE ROW LEVEL SECURITY'):
+            with self.subTest(drift=drift):
+                with psycopg.connect(self.admin_dsn) as c:
+                    c.execute(drift)
+                with self.assertRaisesRegex(DatabaseSetupError, '초대 링크'):
+                    verify_database(self.api_dsn, web_keys=True)
+                self.admin('migrate-integration')
+                verify_database(self.api_dsn, web_keys=True)
+
+
+def key_issue_window(limit):
+    from key_issue import WindowLimit
+    return WindowLimit(limit, 60)
+
+
 def load_tests(loader, tests, pattern):
-    return own_tests(WebKeys)
+    return own_tests(WebKeys, InviteLinks)
 
 
 if __name__ == '__main__':

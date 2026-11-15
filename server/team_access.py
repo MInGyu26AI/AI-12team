@@ -50,6 +50,9 @@ def verify_database(dsn, web_keys=False):
                 raise DatabaseSetupError(f'server/team_admin.py migrate-integration으로 {purpose} 스키마를 적용하세요.')
         if web_keys and not _web_keys_ready(c, role):
             raise DatabaseSetupError('server/team_admin.py migrate-integration으로 웹 연결 키 스키마를 적용하세요.')
+        from team_invites import invites_ready  # invite links join with web keys (team_invites.py)
+        if web_keys and not invites_ready(c, role):
+            raise DatabaseSetupError('server/team_admin.py migrate-integration으로 초대 링크 스키마를 적용하세요.')
 
 
 # team_upgrades.sql: the tables the API must not touch directly, and the functions it uses instead.

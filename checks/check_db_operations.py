@@ -105,6 +105,13 @@ class ServerUpgrade(TeamIntegration):
             issued = c.execute("SELECT o_outcome FROM syncup.issue_web_key(%s::jsonb,%s,%s,NULL,'macOS')",
                                ('[{"provider":"github","subject":"1001"}]','a'*64,'b'*64)).fetchone()[0]
         self.assertEqual(issued,'issued')
+        # 초대 링크 (team_upgrades.sql create_invite, join_with_invite): a link, and one join event.
+        with psycopg.connect(self.api_dsn) as c:
+            c.execute("SELECT set_config('syncup.user_id',%s,false)",(self.users['Alice'],))
+            made = c.execute('SELECT o_outcome FROM syncup.create_invite(%s,%s)',(self.teams['A'],'c'*64)).fetchone()[0]
+            joined = c.execute("SELECT o_outcome FROM syncup.join_with_invite(%s,%s::jsonb,%s,%s,NULL,'macOS','합성')",
+                               ('c'*64,'[{"provider":"github","subject":"1001"}]','d'*64,'e'*64)).fetchone()[0]
+        self.assertEqual((made,joined),('created','member'))
         with psycopg.connect(self.admin_dsn) as c:
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
         before,_ = self.snapshot(self.admin_dsn)
