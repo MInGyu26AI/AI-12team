@@ -386,6 +386,7 @@ RETURNS TABLE (o_outcome text, o_user_id uuid, o_name text, o_expires_at timesta
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
     v_invite syncup.invites;
+    v_github_lock bigint;
     v_users uuid[];
     v_new boolean;
     v_membership boolean;  -- an existing membership's active flag; NULL when there is none
@@ -403,6 +404,15 @@ BEGIN
         RETURN NEXT;
         RETURN;
     END IF;
+    -- Use open_onboarding's GitHub account locks before the team lock and identity lookup.
+    FOR v_github_lock IN
+        SELECT DISTINCT hashtextextended('syncup.onboarding.github:' || (e.value->>'subject'), 0)
+        FROM jsonb_array_elements(p_identities) AS e(value)
+        WHERE e.value->>'provider' = 'github' AND e.value->>'subject' IS NOT NULL
+        ORDER BY 1
+    LOOP
+        PERFORM pg_advisory_xact_lock(v_github_lock);
+    END LOOP;
     -- One team's joins run one at a time, so the member limit cannot be raced past. Read the link again under the
     -- lock: a revoke committed while this join waited counts.
     PERFORM pg_advisory_xact_lock(hashtextextended(v_invite.team_id::text, 0));

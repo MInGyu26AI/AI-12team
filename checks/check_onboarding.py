@@ -4,10 +4,12 @@ import concurrent.futures
 import hashlib
 import json
 import secrets
+import time
 import unittest
 import uuid
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from check_teams import TeamIsolation, own_tests, request
 from fake_supabase import fake_supabase, github_user, challenge_of, PROVIDER_TOKEN
@@ -63,6 +65,60 @@ class Onboarding(TeamIsolation):
         account = self.call('GET', token=second)[1]
         self.assertEqual(account['name'], '새 사용자')
         self.assertEqual(account['teams'][0]['id'], created['id'])
+
+    def test_parallel_signup_and_invite_share_one_identity(self):
+        code_hash = secrets.token_hex(32)
+        with psycopg.connect(self.api_dsn) as c:
+            c.execute("SELECT set_config('syncup.user_id', %s, true)", (self.users['Alice'],))
+            invite = c.execute('SELECT o_outcome FROM syncup.create_invite(%s, %s)',
+                               (self.teams['A'], code_hash)).fetchone()[0]
+        self.assertEqual(invite, 'created')
+
+        for signup_first in (True, False):
+            with self.subTest(signup_first=signup_first):
+                subject = str(int(uuid.uuid4().hex[:12], 16))
+                session = secrets.token_hex(32)
+                identities = Jsonb([dict(provider='github', subject=subject)])
+
+                def signup(c):
+                    result = c.execute('SELECT syncup.open_onboarding(%s, %s, %s, %s)',
+                                       (subject, secrets.token_hex(32), session, '합성 사용자')).fetchone()[0]
+                    return result['outcome']
+
+                def join(c):
+                    return c.execute('''SELECT o_outcome, o_user_id FROM
+                        syncup.join_with_invite(%s, %s, %s, %s, NULL, 'macOS', '합성 사용자')''',
+                        (code_hash, identities, secrets.token_hex(32), secrets.token_hex(32))).fetchone()
+
+                def second_request(action):
+                    with psycopg.connect(self.api_dsn, application_name='syncup-onboarding-race') as c:
+                        c.execute("SET LOCAL statement_timeout = '10s'")
+                        return action(c)
+
+                # Hold whichever route ran first open until the other is blocked in PostgreSQL.
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool, \
+                        psycopg.connect(self.api_dsn) as first, \
+                        psycopg.connect(self.admin_dsn, autocommit=True) as observer:
+                    first_action, second_action = (signup, join) if signup_first else (join, signup)
+                    first_result = first_action(first)
+                    second = pool.submit(second_request, second_action)
+                    waiting = None
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline:
+                        waiting = observer.execute('''SELECT wait_event FROM pg_stat_activity
+                            WHERE application_name='syncup-onboarding-race' AND wait_event_type='Lock' ''').fetchone()
+                        if waiting:
+                            break
+                        time.sleep(.05)
+                    first.commit()
+                    self.assertEqual(waiting, ('advisory',))
+                    second_result = second.result(timeout=5)
+                    signed, joined = (first_result, second_result) if signup_first else (second_result, first_result)
+                    self.assertEqual(signed, 'ready')
+                    self.assertEqual(joined[0], 'joined')
+                    user = observer.execute('SELECT user_id FROM syncup.onboarding_sessions WHERE digest=%s',
+                                            (session,)).fetchone()[0]
+                    self.assertEqual(user, joined[1])
 
     def test_team_creation_is_idempotent_and_serialized_at_limit(self):
         token = self.login()[1]['session']
