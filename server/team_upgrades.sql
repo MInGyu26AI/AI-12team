@@ -148,6 +148,7 @@ $$;
 REVOKE ALL ON FUNCTION syncup.replay_web_key(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION syncup.replay_web_key(text) TO syncup_api;
 
+-- --- 7-1 팀 GitHub 레포 연결 (feat/team-repo-link) ---
 -- The GitHub repository a team links from the web (server/repo_sync.py link_request): any active member may link or
 -- unlink, and the latest one is recorded. The token is a secret: the API never returns it, and unlinking clears it.
 -- When no active row exists, the server's SYNCUP_GITHUB_* environment link (one team) still applies.

@@ -7,25 +7,14 @@ from storage import connect
 READ_PATHS = {'team.board': 'board', 'team.history': 'history', 'team.conflicts': 'conflicts',
               'team.conflictHistory': 'conflicts/history', 'team.done': 'todos/done', 'team.repo': 'repo',
               'team.settings': 'settings'}
-WRITE_METHODS = ('team.resolve', 'team.setDone', 'team.retryCheck', 'team.updateSettings',
-                 'team.verifyRepo', 'team.linkRepo', 'team.unlinkRepo')
+WRITE_METHODS = ('team.resolve', 'team.setDone', 'team.retryCheck', 'team.updateSettings')
 # team.updateSettings fields (server/team_settings.py). A topic changed here reaches this collector's own
 # classification through sync_team_topic; collection.configure is the path that changes it locally at once.
 SETTINGS_FIELDS = ('topic', 'goal', 'scope', 'rules')
-# The team's GitHub link (server/repo_sync.py link_request): (path, allowed fields). The token passes through to the
-# team server only; nothing here stores or logs it.
-REPO_WRITES = {'team.verifyRepo': ('repo/verify', ('repo', 'branch', 'token')),
-               'team.linkRepo': ('repo', ('repo', 'branch', 'token', 'acceptPublic')),
-               'team.unlinkRepo': ('repo/unlink', ())}
 
 
 def _write_request(method, params):
-    """(path, body) of a write on one conflict or card, the team settings or the team's GitHub link."""
-    if method in REPO_WRITES:
-        path, fields = REPO_WRITES[method]
-        if set(params) - set(fields):
-            raise ValueError('레포 연결 필드 오류')
-        return path, {k: params[k] for k in fields if k in params}
+    """(path, body) of a write on one conflict or card, or of the team settings."""
     if method == 'team.updateSettings':
         body = {k: params[k] for k in SETTINGS_FIELDS if k in params}
         if not body or set(params) - set(SETTINGS_FIELDS):
@@ -57,3 +46,24 @@ def relay(pipeline, method, params):
     if result.get('team_id') != team_id:
         raise ValueError('대상 팀 응답 불일치')
     return result
+
+
+# --- 7-1 팀 GitHub 레포 연결 (feat/team-repo-link) ---
+# The web's team.verifyRepo / team.linkRepo / team.unlinkRepo (server/repo_sync.py link_request): (path, allowed
+# fields). Kept as its own block so other team writes can be added beside it. The token passes through to the team
+# server only; nothing here stores or logs it.
+REPO_WRITES = {'team.verifyRepo': ('repo/verify', ('repo', 'branch', 'token')),
+               'team.linkRepo': ('repo', ('repo', 'branch', 'token', 'acceptPublic')),
+               'team.unlinkRepo': ('repo/unlink', ())}
+WRITE_METHODS += tuple(REPO_WRITES)
+_write_request_without_repo = _write_request
+
+
+def _write_request(method, params):  # noqa: F811  relay() looks this name up when it runs
+    """(path, body) of a repository link write; every other write as before."""
+    if method not in REPO_WRITES:
+        return _write_request_without_repo(method, params)
+    path, fields = REPO_WRITES[method]
+    if set(params) - set(fields):
+        raise ValueError('레포 연결 필드 오류')
+    return path, {k: params[k] for k in fields if k in params}
