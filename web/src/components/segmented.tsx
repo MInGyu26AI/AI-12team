@@ -27,7 +27,7 @@ export function Segmented<T extends string>({
     (group?.querySelector(`[data-value="${next.value}"]`) as HTMLElement | null)?.focus();
   };
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg bg-muted p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex border border-ink bg-glass">
       {options.map((o, i) => {
         const on = o.value === value;
         return (
@@ -43,7 +43,7 @@ export function Segmented<T extends string>({
             className={cn(
               "rounded-md font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
               size === "sm" ? "px-2.5 py-0.5 text-xs" : "px-3.5 py-1.5 text-sm",
-              on ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              on ? "bg-ink text-white" : "text-ink-2 hover:text-ink",
             )}
           >
             {o.label}

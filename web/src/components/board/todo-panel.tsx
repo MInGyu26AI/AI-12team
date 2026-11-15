@@ -50,7 +50,7 @@ export function TodoPanel({ todos, done, todoIds, onToggle }: {
                       type="button"
                       onClick={() => void copyId(suId)}
                       title="ID 복사 · 커밋 메시지나 PR 제목에 넣으면 이 할 일과 연결돼요"
-                      className="mr-1.5 inline-flex translate-y-[-1px] items-center gap-[3px] rounded-[4px] bg-brand-soft px-[5px] py-0.5 align-middle text-[11px] leading-none font-medium text-muted-foreground hover:text-foreground"
+                      className="mr-1.5 inline-flex translate-y-[-1px] items-center gap-[3px] rounded-[4px] bg-blush px-[5px] py-0.5 align-middle font-mono text-[11px] leading-none font-medium text-ink hover:bg-blush-deep"
                     >
                       {suId}
                       <Copy className="size-2.5" aria-hidden />

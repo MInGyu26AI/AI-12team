@@ -13,6 +13,7 @@ import { ExcludedMessages, HeldBatches, PrivacyTab } from "@/components/review/p
 import { ReviewNotices } from "@/components/review/review-notices";
 import { ShareBar } from "@/components/review/share-bar";
 import { PageTitle } from "@/components/page-title";
+import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import { LoadingState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { buttonOutline, chip } from "@/components/ui/surface";
@@ -98,9 +99,12 @@ export default function ReviewPage() {
   const retryPrivacy = () => void collector.refresh();
 
   return (
-    <div className="mx-auto max-w-[860px] space-y-4 px-gutter py-10">
+    <div className="relative min-h-[calc(100dvh-4rem)] overflow-hidden">
+      <WatercolorBg />
+    <div className="relative mx-auto max-w-[860px] space-y-4 px-gutter py-10">
       <div className="space-y-4">
         <PageTitle
+          display="Pick what goes to the team."
           title="팀에 올릴 내용을 골라 주세요"
           actions={
             !USE_MOCK && (
@@ -166,6 +170,7 @@ export default function ReviewPage() {
           }}
         />
       )}
+    </div>
     </div>
   );
 }
