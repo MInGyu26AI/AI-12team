@@ -6,6 +6,7 @@ import { USE_MOCK } from "@/lib/api";
 import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 import { EnTitle } from "@/components/page-title";
+import { BurstIcon } from "@/components/ui/burst-icon";
 
 export const metadata: Metadata = {
   title: "이용 방법 · Sync up",
@@ -116,7 +117,10 @@ export default function GuidePage() {
                   </Link>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground break-keep">{s.body}</p>
-                <p className="mt-3 rounded-lg bg-brand-soft/60 px-3 py-2 text-xs text-foreground/80 break-keep">💡 {s.tip}</p>
+                <p className="mt-3 flex items-start gap-2 bg-blush px-3 py-2 text-xs text-foreground/80 break-keep">
+                  <BurstIcon className="mt-px size-3.5 text-ink" />
+                  <span>{s.tip}</span>
+                </p>
               </div>
             </li>
           ))}
