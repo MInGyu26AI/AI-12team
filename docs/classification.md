@@ -74,13 +74,14 @@
 | reason | 결정 이유 (있으면) | 대화 자동 수집이 있어야 시연 효과가 큼 | 선택 |
 | owner | 결정자 또는 할 일 담당자 | 이서준 | 결정·할 일 |
 | due | 할 일 기한 (YYYY-MM-DD, 없으면 null) | null | 할 일 |
-| is_change | 기존 결정을 바꾸는 표현인지 | true | 결정 |
+| is_change | 기존 결정을 바꾸는 표현이거나, 기존 팀 결정과 같은 대상에 다른 값을 정했는지 | true | 결정 |
 | source | 출처 (AI 종류·시간, 링크, 사람) | ChatGPT, 2026-11-06 21:10 | 필수 |
 | masked | 민감정보를 가렸는지 | false | 필수 |
 | confidence | 분류 확신도 (0~1). 0.6 미만이면 확인 필요 | 0.85 | 필수 |
 
 - 개인(personal)은 sentence를 저장하지 않고 relevance와 필수 필드(source·masked·confidence)만 남깁니다.
-- 프롬프트에 팀 이름, 프로젝트 주제, 켜 둔 소주제 목록, 기존 세부 주제 목록을 함께 넣어야 합니다.
+- 프롬프트에 팀 이름, 프로젝트 주제, 켜 둔 소주제 목록, 기존 세부 주제 목록, 기존 팀 결정 목록(팀 보드의 현재 결정, 최대 30줄)을 함께 넣어야 합니다.
+- 로컬 수집기는 `is_change`가 켜진 결정의 세부 주제가 팀 결정과 같고 내용이 다르면 승인함에 '팀 결정과 어긋남'(미리 알림)을 붙입니다. 본인에게만 보이고 최종 판정은 승인 뒤 팀 서버가 합니다 ([privacy.md 1-2절](privacy.md#1-2-승인-전-미리-알림-확장-0216)).
 
 예시 JSON:
 {"sentence":"브라우저 확장도 MVP에 넣자.","relevance":"related","subtopic":"작업·결과물","tag":"decision","topic_key":"MVP 범위","is_new_topic":false,"content":"브라우저 확장 = MVP 포함","reason":null,"owner":"이서준","due":null,"is_change":true,"source":"ChatGPT, 2026-11-06 21:10","masked":false,"confidence":0.85}

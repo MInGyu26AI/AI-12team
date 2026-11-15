@@ -1,6 +1,7 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
 import type { MessageSite } from "./bridge";
+import { PRE_ALERT_HINT, PRE_ALERT_LABEL } from "./pre-alert";
 import type { Card, Conflict, RelatedCard, Resolution, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
@@ -104,6 +105,7 @@ const BADGE_COLOR = {
   masked: "bg-sensitive-soft text-sensitive border-sensitive/20", // 민감정보=빨강
   lowConfidence: "bg-warn-soft text-warn border-warn/20",
   change: "bg-change-soft text-change border-change/20",
+  preAlert: "bg-alert-conflict-soft text-alert-conflict border-alert-conflict/20",
 } as const;
 
 export const LOW_CONFIDENCE = 0.6;
@@ -111,11 +113,17 @@ export const LOW_CONFIDENCE = 0.6;
 // 팀 보드·공유 후보에 올라갈 수 있는 카드 (관련 + 제안 아님)
 export const isShareable = (c: Card): c is RelatedCard => c.relevance === "related" && c.tag !== "none";
 
-// 상태 배지 목록 (순서 = 표시 순서)
+// 상태 배지 목록 (순서 = 표시 순서). title 은 마우스를 올리면 보이는 설명
 export function statusBadges(c: Card) {
-  const badges: { label: string; color: string }[] = [];
+  const badges: { label: string; color: string; title?: string }[] = [];
   if (c.confidence < LOW_CONFIDENCE) badges.push({ label: "확인 필요", color: BADGE_COLOR.lowConfidence });
   if (c.masked) badges.push({ label: "민감정보 가림", color: BADGE_COLOR.masked });
-  if (c.relevance === "related" && c.is_change && c.tag === "decision") badges.push({ label: "변경", color: BADGE_COLOR.change });
+  // 같은 세부 주제의 팀 결정과 어긋나면 미리 알림 배지만 단다. 그 밖의 is_change 는 AI 가 본 '바꾸는 결정'이라 '변경 표현'
+  // (팀 보드의 '변경'은 서버 충돌 판정이라 이름을 나눈다)
+  if (c.relevance === "related" && c.preAlert) {
+    badges.push({ label: PRE_ALERT_LABEL, color: BADGE_COLOR.preAlert, title: PRE_ALERT_HINT });
+  } else if (c.relevance === "related" && c.is_change && c.tag === "decision") {
+    badges.push({ label: "변경 표현", color: BADGE_COLOR.change, title: "AI가 기존 안을 바꾸는 결정으로 봤어요. 같은 세부 주제의 팀 결정과 어긋나면 '팀 결정과 어긋남'으로 따로 알려요." });
+  }
   return badges;
 }

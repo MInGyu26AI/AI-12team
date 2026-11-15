@@ -28,6 +28,7 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_connector_notion.py'], '노션 연결(가짜 노션 서버: 설정·블록 변환·화자 규칙·커서·Retry-After·종단 간)'),
     ('local', [PY, 'checks/check_connector_google.py'], '구글 문서 연결: 127.0.0.1 OAuth(PKCE)·토큰 갱신·문서 변환·담당자 확인 (가짜 구글 서버)'),
     ('local', [PY, 'checks/check_team_topic.py'], '팀이 함께 쓰는 프로젝트 주제: 올리기·따라가기·팀 설정 중계'),
+    ('local', [PY, 'checks/check_pre_alert.py'], '승인 전 미리 알림: 팀 결정을 분류 입력에·같은 주제 변경 표시·묶기·팀에 안 보냄'),
     ('local', [PY, 'checks/check_pipeline_schema.py'], '로컬 DB 마이그레이션·승인 계약·TS 공용 상수'),
     ('local', [PY, 'checks/check_retention.py'], '원문·백업 7일 보존 정책'),
     ('local', [PY, 'checks/check_local_privacy.py'], '로컬 개인정보 필터·외부 전송 차단'),

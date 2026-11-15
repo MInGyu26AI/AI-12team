@@ -41,8 +41,8 @@ Mac 로컬 수집기 (개인 DB <상태 폴더>/private.sqlite)
 | 받기 | 검사·가림(`ai/syncup_ai/mask.py`) 뒤 저장. 형식 오류·같은 ID의 바뀐 내용은 따로 보관 | `turn_intake` |
 | 묶기 | 대화마다 N턴(기본 10, 1~50)을 작업 하나로. `flush`는 덜 찬 묶음도 ([턴 세기](../ai/README.md#2-대화-횟수-기준-묶기)) | `batch_queue` |
 | 개인정보 검사 | 허용·제외·보류로 나눔 | `local_privacy` |
-| 분류 | 허용된 문장만 외부 AI로. 직전에 `outbound_guard`와 수집 세션을 다시 확인 | `batch_classification` |
-| 후보 | 관련(related)이고 표시가 제안(none)이 아닌 카드만 후보로. 실패하면 `failed_new`, 원문 보존 | `batch_classification` |
+| 분류 | 허용된 문장만 외부 AI로. 직전에 `outbound_guard`와 수집 세션을 다시 확인. 팀 보드의 현재 결정(최대 30줄)을 함께 넣음 | `batch_classification`, `team_decisions` |
+| 후보 | 관련(related)이고 표시가 제안(none)이 아닌 카드만 후보로. 실패하면 `failed_new`, 원문 보존. 같은 세부 주제의 팀 결정을 바꾸는 결정은 미리 알림(본인만, [privacy.md 1-2절](privacy.md#1-2-승인-전-미리-알림-확장-0216)) | `batch_classification`, `team_decisions` |
 | 승인 | 소속 재확인, 내용·목적지(서버·사용자·팀)를 고정해 `outbox`에 | `candidate_review`, `delivery.approve` |
 | 전송 | 1초마다 한 건씩 ([재시도](running.md#실패와-중단)) | `delivery.deliver` |
 | 정리 | 기간 지난 원문·백업 ([보존](privacy.md#6-보존-7일)) | `retention` |

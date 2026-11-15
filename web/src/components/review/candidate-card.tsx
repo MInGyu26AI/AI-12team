@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Pencil, TriangleAlert, X } from "lucide-react";
 import { fmtDue, parseSource } from "@shared/format";
 import { CLASSIFICATION_METHOD_LABEL, TAG_BORDER, TAG_COLOR, TAG_LABEL, statusBadges } from "@shared/labels";
+import { PRE_ALERT_HINT, preAlertText, type PreAlert } from "@shared/pre-alert";
 import type { RelatedCard } from "@shared/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isSelectable } from "@/lib/review-candidates";
@@ -45,7 +46,7 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", TAG_COLOR[c.tag])}>{TAG_LABEL[c.tag]}</span>
           {statusBadges(c).map((b) => (
-            <span key={b.label} className={cn("rounded-full px-2 py-0.5 text-xs font-medium", b.color)}>
+            <span key={b.label} title={b.title} className={cn("rounded-full px-2 py-0.5 text-xs font-medium", b.color)}>
               {b.label}
             </span>
           ))}
@@ -96,6 +97,7 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
           </label>
         )}
 
+        {c.preAlert && <PreAlertNote alert={c.preAlert} />}
         {meta && <p className={cn("text-sm break-keep", c.tag === "todo" ? "font-semibold text-tag-todo" : "text-muted-foreground")}>{meta}</p>}
         <p className="text-xs text-muted-foreground/80 break-keep">“{c.sentence}”</p>
         {onEvidenceChange && <EvidenceEditor sentence={c.sentence} onSave={onEvidenceChange} />}
@@ -103,6 +105,19 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
         {c.evidence?.roleGuessed && <RoleConfirm onConfirm={() => onConfirmUser?.()} onDismiss={onDismiss} />}
       </div>
     </article>
+  );
+}
+
+// 승인 전 미리 알림: 어긋나는 팀 결정 (본인에게만 보임, 팀에는 보내지 않음)
+function PreAlertNote({ alert }: { alert: PreAlert }) {
+  return (
+    <div role="note" className="flex gap-2 rounded-lg bg-alert-conflict-soft px-3 py-2 text-sm text-alert-conflict">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="space-y-0.5 break-keep">
+        <p className="font-medium">{preAlertText(alert)}</p>
+        <p className="text-xs opacity-80">{PRE_ALERT_HINT}</p>
+      </div>
+    </div>
   );
 }
 
