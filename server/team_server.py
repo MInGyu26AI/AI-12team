@@ -23,6 +23,7 @@ from conflict_scheduler import schedule
 from diagnostics import failure
 import key_issue
 from repo_sync import first_check_due, linked, repo_status, schedule_save, target_from_env
+from repo_sync import link_request, load_link  # 7-1 팀 GitHub 레포 연결
 from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
 from team_board import board, conflict_events, conflicts, done_todos, mark_todo, shared_item, shared_items
@@ -89,6 +90,8 @@ class TeamHandler(SecureHandler):
             data = json.loads(self.body()) if self.command == 'POST' else None
             if self.command == 'POST' and parts[2:3] == ['notion']:  # checks Notion outside any DB transaction
                 result = notion_sync.link_request(self.server, token, team_id, parts[3:], data)
+            elif self.command == 'POST' and parts[2:3] == ['repo']:  # 7-1: checks GitHub outside any DB transaction
+                result = link_request(self.server, token, team_id, parts[3:], data)
             else:
                 with authorized(self.server.dsn, token, team_id) as (c, user_id):
                     result = dispatch(c, user_id, team_id, self.command, parts, data, self.server)
@@ -155,6 +158,7 @@ def dispatch(c, user_id, team_id, method, parts, data, server=None):
         return me(c, user_id)
     notion_sync.load_link(c, server, team_id)  # the team's Notion link, for this request's saves and status
     tail = parts[2:]
+    load_link(c, server, team_id)  # 7-1: the team's GitHub link, for this request's saves and status
     if tail[0] == 'items' and len(tail) != 3:
         return shared_cards(c, team_id, user_id, method, tail, data)
     if tail == ['settings']:

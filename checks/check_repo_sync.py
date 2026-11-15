@@ -1,6 +1,7 @@
 """Saving SYNCUP.md·syncup.json to GitHub: a local fake GitHub API and real PostgreSQL; no network, no real token."""
 import repo_paths  # noqa: F401  collector/·server/·contract/·ai 경로
 import json
+import logging
 import threading
 import time
 import types
@@ -8,6 +9,9 @@ import unittest
 import uuid
 from unittest.mock import patch
 
+import psycopg
+
+import local_rpc
 import repo_sync
 import team_relay
 from ai.syncup_ai.team_state import build_state
@@ -15,11 +19,14 @@ from check_team_integration import checked
 from check_teams import TeamIsolation, own_tests, request
 from conflict_scheduler import schedule
 from fake_github import COMMIT_URL, FakeGitHub, fake_github, header_trap
-from github_repo import GitHubError, blob_sha, save
+from github_repo import GitHubError, blob_sha, save, verify
 from local_fixtures import public_card
 from repo_sync import RepoTarget, commit_message, repo_status, schedule_save, target_from_env
 
 TOKEN = 'synthetic-github-token-DO-NOT-LOG'
+# Tokens a team types into the web: deliberately unlike any real GitHub token format.
+WEB_TOKEN = 'synthetic-web-link-token-0001-DO-NOT-LOG'
+OTHER_TOKEN = 'synthetic-web-link-token-0002-DO-NOT-LOG'
 PRIVATE_SENTENCE = 'PRIVATE_SENTENCE_SENTINEL_512'
 PRIVATE_SOURCE = 'PRIVATE_SOURCE_SENTINEL_512'
 FILES = {'SYNCUP.md': '# 기록\n', 'syncup.json': '{"syncup_version": 1}\n'}
@@ -279,9 +286,257 @@ class RepoSyncTeam(TeamIsolation):
         self.assert_public()
 
 
+class GitHubVerify(unittest.TestCase):
+    """The link check: the repository, the branch, then a write probe; a reason instead of every failure."""
+
+    def setUp(self):
+        self.fake = FakeGitHub()
+        origin = self.enterContext(fake_github(self.fake))
+        self.target = RepoTarget(uuid.uuid4(), 'team/repo', 'main', WEB_TOKEN, api=origin)
+
+    def test_a_token_that_can_write_passes_in_three_calls(self):
+        self.assertEqual(verify(self.target), (None, True))
+        self.assertEqual([(m, p.split('/repos/team/repo')[1]) for m, p, *_ in self.fake.requests],
+                         [('GET', ''), ('GET', '/git/ref/heads/main'), ('POST', '/git/blobs')])
+        self.assertEqual(self.fake.commits(), ['init'])  # the probe moves no branch
+        self.assertFalse(any(WEB_TOKEN in path + body for _, path, body, _ in self.fake.requests))
+        self.fake.info['private'] = False
+        self.assertEqual(verify(self.target), (None, False))
+
+    def test_each_failure_has_its_reason(self):
+        cases = [
+            ('bad-token', None, lambda: setattr(self.fake, 'tokens', {OTHER_TOKEN})),
+            ('not-found', None, lambda: self.fake.missing.add('team/repo')),
+            ('no-branch', True, lambda: setattr(self.fake, 'branch', 'develop')),
+            ('no-write', True, lambda: setattr(self.fake, 'refuse_blobs', 403)),
+            ('no-write', True, lambda: self.fake.info.update(permissions=dict(push=False))),
+            ('no-write', True, lambda: self.fake.info.update(archived=True)),
+            ('rate-limited', None, lambda: setattr(self.fake, 'fail_next',
+                                                   ('GET', '/repos/', 403, {'x-ratelimit-remaining': '0'}))),
+            ('rate-limited', True, lambda: setattr(self.fake, 'fail_next', ('GET', '/git/ref/', 429))),
+            ('unreachable', None, lambda: setattr(self.fake, 'fail_next', ('GET', '/repos/', 502))),
+        ]
+        for reason, private, arrange in cases:
+            with self.subTest(reason=reason):
+                self.fake = FakeGitHub()
+                origin = self.enterContext(fake_github(self.fake))
+                arrange()
+                target = RepoTarget(self.target.team_id, 'team/repo', 'main', WEB_TOKEN, api=origin)
+                self.assertEqual(verify(target), (reason, private))
+                self.assertEqual(self.fake.commits(), ['init'])
+        self.fake.info['permissions'] = dict(push=False)  # GitHub said no: no write probe is sent
+        verify(RepoTarget(self.target.team_id, 'team/repo', 'main', WEB_TOKEN, api=origin))
+        self.assertEqual(self.fake.sent('POST', '/git/blobs'), [])
+
+    def test_no_permissions_field_still_probes_the_write(self):
+        del self.fake.info['permissions']  # what a fine-grained token may see; the person's role is not the token's
+        self.fake.refuse_blobs = 403
+        self.assertEqual(verify(self.target), ('no-write', True))
+
+
+class RepoLinkTeam(TeamIsolation):
+    """Teams link their own repository from the web; team A's members link, team B stays out."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeGitHub()
+        self.api.github_api = self.enterContext(fake_github(self.fake))
+        self.api.repo_target = None
+        self.enterContext(patch.object(repo_sync, 'SAVE_DELAY_SECONDS', .3))
+        self.logged = self.enterContext(self.assertLogs('syncup', logging.WARNING))
+        logging.getLogger('syncup').warning('start')  # assertLogs needs one record even when nothing fails
+
+    def tearDown(self):
+        for secret in (WEB_TOKEN, OTHER_TOKEN):
+            self.assertFalse(any(secret in line for line in self.logged.output), self.logged.output)
+        super().tearDown()
+
+    def link(self, action='', data=None, user='Dana', team='A'):
+        path = f"/teams/{self.teams[team]}/repo" + (f'/{action}' if action else '')
+        status, body = request(self.api, 'POST', path, self.tokens[user], data if data is not None else {})
+        for secret in (WEB_TOKEN, OTHER_TOKEN):
+            self.assertNotIn(secret, body)
+        return status, json.loads(body)
+
+    def status(self, user='Dana', team='A'):
+        status, body = request(self.api, 'GET', f"/teams/{self.teams[team]}/repo", self.tokens[user])
+        self.assertEqual(status, 200, body)
+        self.assertNotIn(WEB_TOKEN, body)
+        return json.loads(body)['repo']
+
+    def stored(self, team='A'):
+        with psycopg.connect(self.admin_dsn) as c:
+            return c.execute('SELECT repo,branch,token,private,active FROM syncup.team_repo_links WHERE team_id=%s',
+                             (self.teams[team],)).fetchone()
+
+    def share(self, identifier, content, user='Dana', team='A'):
+        packet = dict(id=identifier, label='결정', text=content, quote='합성 인용', speaker='사용자', version=2,
+                      card=dict(public_card('합성 인용'), content=content, tag='decision', topic_key='DB'))
+        status, body = request(self.api, 'POST', self.path(team), self.tokens[user],
+                               dict(packet=packet, approved_by=self.users[user], approved_at=time.time()))
+        self.assertEqual(status, 200, body)
+
+    def settled(self, timeout=10):
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            status = self.status()
+            if not status['pending'] and status['state'] != 'unknown':
+                return status
+            time.sleep(.05)
+        self.fail('the repository save did not finish')
+
+    def test_a_member_checks_links_and_the_team_saves_there(self):
+        status, body = self.link('verify', dict(repo='https://github.com/team/repo.git', token=WEB_TOKEN))
+        self.assertEqual((status, body['ok'], body['check']),
+                         (200, True, dict(repo='team/repo', branch='main', private=True, canWrite=True)))
+        self.assertNotIn('alternative', body)
+        self.assertEqual((self.status(), self.stored()), (dict(linked=False), None))  # a check stores nothing
+        status, body = self.link(data=dict(repo='team/repo', branch='main', token=WEB_TOKEN))
+        self.assertEqual((status, body['ok']), (200, True))
+        linked = body['repo']
+        self.assertEqual({k: linked[k] for k in ('linked', 'repo', 'branch', 'source', 'tokenSet', 'private',
+                                                 'linkedBy', 'linkedByName')},
+                         dict(linked=True, repo='team/repo', branch='main', source='team', tokenSet=True, private=True,
+                              linkedBy=self.users['Dana'], linkedByName='Dana'))
+        self.assertEqual(self.stored(), ('team/repo', 'main', WEB_TOKEN, True, True))
+        self.assertEqual(self.status('Alice')['linkedByName'], 'Dana')  # every member sees who linked it
+        self.share('d1', 'DB = PostgreSQL')
+        self.assertEqual(self.settled()['state'], 'saved')
+        self.assertEqual(self.fake.commits()[0], 'SyncUp: DB 결정 추가 (Dana 승인)')
+        self.assertEqual({auth for m, p, b, auth in self.fake.requests if '/git/commits' in p}, {'Bearer ' + WEB_TOKEN})
+        self.assertEqual(self.status('Bob', 'B'), dict(linked=False))
+
+    def test_a_public_repository_needs_consent_and_points_to_notion(self):
+        self.fake.info['private'] = False
+        status, body = self.link('verify', dict(repo='team/repo', token=WEB_TOKEN))
+        self.assertEqual((body['ok'], body['check']['private'], body['alternative']), (True, False, 'notion'))
+        status, body = self.link(data=dict(repo='team/repo', token=WEB_TOKEN))
+        self.assertEqual((status, body['ok'], body['reason'], body['alternative']),
+                         (200, False, 'public-needs-consent', 'notion'))
+        self.assertIsNone(self.stored())
+        self.assertEqual(self.link(data=dict(repo='team/repo', token=WEB_TOKEN, acceptPublic=False))[1]['reason'],
+                         'public-needs-consent')
+        status, body = self.link(data=dict(repo='team/repo', token=WEB_TOKEN, acceptPublic=True))
+        self.assertEqual((body['ok'], body['repo']['private']), (True, False))
+
+    def test_refusals_say_why_and_store_nothing(self):
+        self.fake.tokens = {WEB_TOKEN}
+        cases = [
+            (dict(repo='not a repo', token=WEB_TOKEN), 'bad-format'),
+            (dict(repo='team/repo', branch='a..b', token=WEB_TOKEN), 'bad-format'),
+            (dict(repo='team/repo', token='short'), 'bad-format'),
+            (dict(repo='team/repo', token='has space ' + WEB_TOKEN), 'bad-format'),
+            (dict(repo='team/repo'), 'token-needed'),
+            (dict(repo='team/repo', token=OTHER_TOKEN), 'bad-token'),
+            (dict(repo='team/repo', branch='develop', token=WEB_TOKEN), 'no-branch'),
+        ]
+        for data, reason in cases:
+            with self.subTest(reason=reason, data=data):
+                status, body = self.link(data=data)
+                self.assertEqual((status, body['ok'], body['reason']), (200, False, reason))
+        self.fake.missing.add('team/secret')
+        self.assertEqual(self.link(data=dict(repo='team/secret', token=WEB_TOKEN))[1]['reason'], 'not-found')
+        self.fake.refuse_blobs = 403
+        self.assertEqual(self.link(data=dict(repo='team/repo', token=WEB_TOKEN))[1]['reason'], 'no-write')
+        self.assertIsNone(self.stored())
+        for bad in (dict(repo='team/repo', token=WEB_TOKEN, owner='x'), dict(repo=3), dict(repo='team/repo', token=5),
+                    dict(repo='team/repo', acceptPublic='yes')):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.link(data=bad)[0], 400)
+        self.assertEqual(self.link('unlink', dict(token=WEB_TOKEN))[0], 400)
+        self.assertEqual(self.link('elsewhere', {})[0], 404)
+
+    def test_relinking_reuses_the_token_only_for_the_same_repository(self):
+        self.assertTrue(self.link(data=dict(repo='team/repo', token=WEB_TOKEN))[1]['ok'])
+        self.fake.branch = 'feat/sync'
+        status, body = self.link(data=dict(repo='team/repo', branch='feat/sync'), user='Alice')
+        self.assertEqual((body['ok'], body['repo']['branch'], body['repo']['linkedByName']), (True, 'feat/sync', 'Alice'))
+        self.assertEqual(self.stored()[:3], ('team/repo', 'feat/sync', WEB_TOKEN))
+        self.assertEqual(self.link(data=dict(repo='other/repo', branch='feat/sync'))[1]['reason'], 'token-needed')
+        self.assertEqual(self.link('verify', dict(repo='team/repo', branch='feat/sync'))[1]['ok'], True)
+
+    def test_unlinking_clears_the_token_and_stops_saving(self):
+        self.link(data=dict(repo='team/repo', token=WEB_TOKEN))
+        self.share('d1', 'DB = PostgreSQL')
+        self.settled()
+        commits = len(self.fake.commits())
+        status, body = self.link('unlink', {}, user='Alice')
+        self.assertEqual((status, body['ok'], body['repo']), (200, True, dict(linked=False)))
+        self.assertEqual(self.stored(), ('team/repo', 'main', '', True, False))
+        self.share('d2', 'DB = SQLite')
+        time.sleep(.8)
+        self.assertEqual(len(self.fake.commits()), commits)
+        self.assertEqual(self.status(), dict(linked=False))
+        self.assertEqual(self.link('unlink', {})[1]['ok'], True)  # again: nothing to clear, still fine
+
+    def test_the_team_link_wins_over_the_server_setting_and_unlinking_returns_to_it(self):
+        self.api.repo_target = RepoTarget(uuid.UUID(self.teams['A']), 'admin/repo', 'main', TOKEN, api=self.api.github_api)
+        self.assertEqual((self.status()['repo'], self.status()['source']), ('admin/repo', 'env'))
+        self.link(data=dict(repo='team/repo', token=WEB_TOKEN))
+        self.assertEqual((self.status()['repo'], self.status()['source']), ('team/repo', 'team'))
+        self.link('unlink', {})
+        self.assertEqual((self.status()['repo'], self.status()['source'], self.status()['linkedBy']),
+                         ('admin/repo', 'env', None))
+
+    def test_a_save_waiting_for_the_old_repository_goes_to_the_new_one(self):
+        with patch.object(repo_sync, 'SAVE_DELAY_SECONDS', 1.5):
+            self.link(data=dict(repo='team/old', token=WEB_TOKEN))
+            self.share('d1', 'DB = PostgreSQL')
+            self.link(data=dict(repo='team/new', token=WEB_TOKEN))
+            self.settled()
+        saved_to = {p.split('/')[3] for m, p, *_ in self.fake.requests if m == 'PATCH'}
+        self.assertEqual(saved_to, {'new'})
+
+    def test_other_teams_can_neither_read_nor_change_it_even_in_sql(self):
+        self.link(data=dict(repo='team/repo', token=WEB_TOKEN))
+        self.assertEqual(request(self.api, 'GET', f"/teams/{self.teams['A']}/repo", self.tokens['Bob'])[0], 403)
+        self.assertEqual(self.link('unlink', {}, user='Bob')[0], 403)
+        self.assertEqual(self.link(data=dict(repo='team/repo', token=OTHER_TOKEN), user='Bob')[0], 403)
+        self.assertEqual(self.stored()[2], WEB_TOKEN)
+        with self.team_db('Bob', 'B') as c:
+            self.assertEqual(c.execute('SELECT * FROM syncup.team_repo_links').fetchall(), [])
+        with self.team_db('Alice', 'A') as c:
+            user = self.users['Alice']
+            for query, args in [
+                    ('INSERT INTO syncup.team_repo_links(team_id,repo,token,actor) VALUES(%s,%s,%s,%s)',
+                     (self.teams['B'], 'evil/repo', OTHER_TOKEN, user)),
+                    ('UPDATE syncup.team_repo_links SET repo=%s, actor=%s', ('evil/repo', self.users['Bob'])),
+                    ('DELETE FROM syncup.team_repo_links', ())]:
+                with self.subTest(query=query), self.assertRaises(psycopg.errors.InsufficientPrivilege), c.transaction():
+                    c.execute(query, args)
+
+    def test_github_is_called_outside_any_database_transaction(self):
+        waiting = []
+
+        def look():
+            with psycopg.connect(self.admin_dsn) as c:
+                waiting.append(c.execute("""SELECT count(*) FROM pg_stat_activity
+                    WHERE usename='syncup_api' AND state LIKE 'idle in transaction%'""").fetchone()[0])
+        self.fake.during = look
+        self.assertTrue(self.link(data=dict(repo='team/repo', token=WEB_TOKEN))[1]['ok'])
+        self.fake.during = None
+        self.assertEqual(waiting, [0, 0, 0])  # the three link-check calls
+
+    def test_the_web_links_through_the_local_relay_and_errors_never_echo_the_token(self):
+        pipeline = types.SimpleNamespace(db=self.db, client=self.client)  # the collector's bound team is A
+        result = team_relay.relay(pipeline, 'team.verifyRepo', dict(repo='team/repo', token=WEB_TOKEN))
+        self.assertEqual((result['ok'], result['check']['canWrite']), (True, True))
+        result = local_rpc.dispatch(pipeline, 'team.linkRepo', dict(repo='team/repo', token=WEB_TOKEN))
+        self.assertEqual((result['ok'], result['repo']['source']), (True, 'team'))
+        self.assertEqual(team_relay.relay(pipeline, 'team.repo', {})['repo']['repo'], 'team/repo')
+        for bad in (dict(repo='team/repo', token=WEB_TOKEN, extra=WEB_TOKEN), dict(token=WEB_TOKEN, id=WEB_TOKEN)):
+            with self.subTest(bad=sorted(bad)), self.assertRaises(ValueError) as caught:
+                local_rpc.dispatch(pipeline, 'team.linkRepo', bad)
+            self.assertNotIn(WEB_TOKEN, str(caught.exception))  # the local RPC answers str(error) to the web
+        with self.assertRaises(OSError) as caught:  # the server's 400: the local RPC answers a fixed 503 text for it
+            local_rpc.dispatch(pipeline, 'team.linkRepo', dict(repo=['team/repo'], token=WEB_TOKEN))
+        self.assertNotIn(WEB_TOKEN, str(caught.exception) + repr(caught.exception))
+        self.assertEqual(team_relay.relay(pipeline, 'team.unlinkRepo', {})['repo'], dict(linked=False))
+
+
 def load_tests(loader, tests, pattern):
-    plain = [loader.loadTestsFromTestCase(case) for case in (GitHubSave, SaveScheduling)]
-    return unittest.TestSuite([*plain, own_tests(RepoSyncTeam)])
+    plain = [loader.loadTestsFromTestCase(case) for case in (GitHubSave, SaveScheduling, GitHubVerify)]
+    return unittest.TestSuite([*plain, own_tests(RepoSyncTeam), own_tests(RepoLinkTeam)])
 
 
 if __name__ == '__main__':

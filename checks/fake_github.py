@@ -1,6 +1,7 @@
-"""A local stand-in for the GitHub REST API (the Git Data endpoints server/github_repo.py uses), for checks only.
+"""A local stand-in for the GitHub REST API (the endpoints server/github_repo.py uses), for checks only.
 
 One branch and root files only. Blob ids follow git's own formula here, independently of github_repo.blob_sha.
+Any owner/name answers as the same repository, except the names in `missing`.
 """
 import base64
 from contextlib import contextmanager
@@ -29,6 +30,11 @@ class FakeGitHub:
         self.redirect_next = None  # (path fragment, location): answered once with a 302 to `location`
         self.before_ref_update = None  # runs once before a branch move, e.g. a teammate's push
         self.refuse_updates = False  # a branch rule (protection) refuses every update with 422
+        self.info = dict(private=True, archived=False, permissions=dict(push=True))  # GET /repos/{owner}/{name}
+        self.missing = set()  # owner/name that answer 404, as a repository the token cannot see
+        self.tokens = None  # when a set: any other Authorization token is answered 401
+        self.refuse_blobs = None  # a status that POST git/blobs answers, as a token without Contents write
+        self.during = None  # runs inside every request, e.g. to look at the database meanwhile
         self.head = self.commit({'README.md': '# 팀 레포\n'}, 'init', [])
 
     def store(self, kind, value, sha=None):
@@ -67,17 +73,27 @@ class FakeGitHub:
         with self.lock:
             return [r for r in self.requests if r[0] == method and fragment in r[1]]
 
-    def answer(self, method, path, body):
+    def answer(self, method, path, body, auth=None):
+        if self.during:
+            self.during()
+        if self.tokens is not None and (auth or '').removeprefix('Bearer ') not in self.tokens:
+            return 401, {'message': 'Bad credentials'}
+        if '/'.join(urllib.parse.urlsplit(path).path.split('/')[2:4]) in self.missing:
+            return 404, {'message': 'Not Found'}
         if self.redirect_next and self.redirect_next[0] in path:
             location, self.redirect_next = self.redirect_next[1], None
             return 302, {'location': location}
         if self.fail_next and method == self.fail_next[0] and self.fail_next[1] in path:
-            status, self.fail_next = self.fail_next[2], None
-            return status, {'message': 'synthetic failure'}
+            (status, *headers), self.fail_next = self.fail_next[2:], None
+            return status, {'message': 'synthetic failure', '_headers': dict(*headers)}
         url = urllib.parse.urlsplit(path)
         parts = url.path.split('/')[4:]  # after /repos/{owner}/{name}
         if method == 'GET':
             return self.read(parts, urllib.parse.parse_qs(url.query))
+        if method == 'POST' and parts == ['git', 'blobs']:
+            if self.refuse_blobs:
+                return self.refuse_blobs, {'message': 'Resource not accessible by personal access token'}
+            return 201, {'sha': self.store('blob', body['content'], git_blob_id(body['content']))}
         if method == 'POST' and parts == ['git', 'trees']:
             files = {p: self.objects[s] for p, s in self.objects[body['base_tree']].items()}
             return 201, {'sha': self.tree(dict(files, **{e['path']: e['content'] for e in body['tree']}))}
@@ -89,6 +105,8 @@ class FakeGitHub:
         return 404, {}
 
     def read(self, parts, query):
+        if parts == []:
+            return 200, dict(self.info)
         if parts[:3] == ['git', 'ref', 'heads']:
             return (200, {'object': {'sha': self.head}}) if '/'.join(parts[3:]) == self.branch else (404, {})
         if parts[:2] == ['git', 'commits']:
@@ -124,8 +142,11 @@ class FakeGitHub:
 
 
 def _reply(handler, status, reply):
+    headers = reply.pop('_headers', None) or {}
     data = json.dumps(reply).encode()
     handler.send_response(status)
+    for name, value in headers.items():
+        handler.send_header(name, value)
     if 300 <= status < 400:
         handler.send_header('Location', reply['location'])
     handler.send_header('Content-Type', 'application/json')
@@ -145,7 +166,8 @@ def fake_github(fake):
             raw = self.rfile.read(int(self.headers.get('Content-Length') or 0))
             with fake.lock:
                 fake.requests.append((self.command, self.path, raw.decode(), self.headers.get('Authorization')))
-                status, reply = fake.answer(self.command, self.path, json.loads(raw) if raw else None)
+                status, reply = fake.answer(self.command, self.path, json.loads(raw) if raw else None,
+                                            self.headers.get('Authorization'))
             _reply(self, status, reply)
 
         do_GET = do_POST = do_PATCH = handle_api
