@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, Copy, Download, FolderOpen, GitBranch, Info, Laptop, Monitor, Puzzle, RefreshCw, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ChromeExtensionsVisual, ExtensionAddressVisual, ExtensionIdVisual } from "@/components/installation-visuals";
+import { ChromeExtensionsVisual, ExtensionIdVisual } from "@/components/installation-visuals";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
 import type { SetupStatus } from "@/lib/github-login";
 
@@ -75,12 +75,12 @@ export function InstallationGuide({ downloads, version }: { downloads: DesktopDo
       {downloads.every(d => !d.url) && <p role="status" className="mt-4 text-sm">아직 설치 파일이 공개되지 않았어요. 가입과 팀 생성은 먼저 마칠 수 있어요. 다운로드가 준비된 뒤 이 페이지에서 계속해 주세요.</p>}
     </InstallStep>
 
-    <InstallStep number={2} id="extension" title="그림을 보며 Chrome 확장 연결하기" description="SyncUp 앱과 Chrome을 함께 열어 주세요. 아래 그림은 눌러야 할 위치를 보여주는 화면 예시예요.">
-      <div className="grid items-center gap-7 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
+    <InstallStep number={2} id="extension" title="스크린샷을 보며 Chrome 확장 연결하기" description={`SyncUp 앱과 Chrome을 함께 열어 주세요. 현재 배포된 확장은 ${version}이며, 아래 실제 화면에서 눌러야 할 위치를 확인할 수 있어요.`}>
+      <div className="grid gap-6">
         <div>
           <h3 className="text-base font-bold">먼저, 확장 폴더를 Chrome에 추가해요</h3>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">SyncUp 앱에서 <strong className="font-semibold text-foreground">확장 폴더 열기</strong>를 누르세요. 그다음 아래 주소를 복사해 Chrome 주소창에 붙여넣으세요.</p>
-          <div className="mt-4 flex flex-wrap items-center gap-2"><div className="min-w-0 flex-1"><ExtensionAddressVisual /></div><Button variant="outline" onClick={copyAddress} className="h-10 px-3" aria-label="Chrome 확장 관리 주소 복사">{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "복사 완료" : "주소 복사"}</Button></div>
+          <div className="mt-4 flex flex-wrap items-center gap-3"><code className="min-w-0 break-all rounded-md bg-surface-soft px-3 py-2 text-sm">chrome://extensions</code><Button variant="outline" onClick={copyAddress} className="h-10 px-3" aria-label="Chrome 확장 관리 주소 복사">{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "복사 완료" : "주소 복사"}</Button></div>
           <p role="status" className="mt-2 text-xs leading-relaxed text-muted-foreground">{copyError ? "복사하지 못했어요. chrome://extensions를 직접 입력해 주세요." : copied ? "Chrome 주소창에 붙여넣고 Enter를 누르세요." : "주소: chrome://extensions"}</p>
           <ol className="mt-5 space-y-3"><GuideAction number={1}>오른쪽 위 <strong>개발자 모드</strong>를 켜세요.</GuideAction><GuideAction number={2}><strong>압축해제된 확장 프로그램 로드</strong>를 누르고, SyncUp 앱에서 열린 폴더를 선택하세요.</GuideAction></ol>
           <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><FolderOpen aria-hidden="true" className="mt-0.5 size-4 shrink-0" />설치가 끝나도 확장 폴더는 옮기거나 지우지 마세요.</p>
@@ -95,7 +95,7 @@ export function InstallationGuide({ downloads, version }: { downloads: DesktopDo
           <ol className="mt-5 space-y-3"><GuideAction number={3}>카드의 <strong>ID 32자리</strong>를 복사해 SyncUp 앱에 붙여넣으세요.</GuideAction><GuideAction number={4}>앱에서 <strong>백업하고 이 PC에 설치</strong>를 누르세요.</GuideAction></ol>
           <div className="mt-5 rounded-lg bg-surface-soft p-4 text-xs leading-6 text-muted-foreground"><Info aria-hidden="true" className="mb-2 size-4" />기존 연결 설정은 앱이 백업해요. 이전 데이터와 연결 키는 지우지 않고, 관리자 비밀번호도 요구하지 않아요.</div>
         </div>
-        <ExtensionIdVisual version={version} />
+        <ExtensionIdVisual />
       </div>
       <div className="mt-8 flex items-start gap-3 rounded-lg border border-card-border bg-surface-soft p-4 text-sm leading-6"><RefreshCw aria-hidden="true" className="mt-1 size-4 shrink-0" /><p>확장 팝업의 <strong>개인 검토함 주소</strong>가 현재 사이트 주소인지 확인한 뒤, <strong>이 페이지를 새로고침</strong>해 주세요.</p></div>
     </InstallStep>
