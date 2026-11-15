@@ -211,3 +211,263 @@ CREATE POLICY repo_link_actor_insert ON syncup.team_repo_links AS RESTRICTIVE FO
 DROP POLICY IF EXISTS repo_link_actor_update ON syncup.team_repo_links;
 CREATE POLICY repo_link_actor_update ON syncup.team_repo_links AS RESTRICTIVE FOR UPDATE TO syncup_api
     USING (true) WITH CHECK (actor = nullif(current_setting('syncup.user_id', true), '')::uuid);
+
+-- ── 초대 링크 (server/team_invites.py, docs/team-server.md '초대 링크로 팀에 참여') ─────────────────────────────────
+-- Any active member makes a link to their own team; who made it and when are kept, and there is no role column.
+-- One link serves many people for 7 days, until the team has 8 active members or any member revokes it. Whoever
+-- opens it logs in with GitHub on the web (key_issue.py): a login no identity row knows becomes a new user with that
+-- identity, a known user only gets the membership, and either gets a web key from issue_web_key in the same
+-- transaction. The API makes the 144-bit code and passes only its SHA-256, so no table keeps the code. The validity,
+-- the member limit and the number of open links are fixed in the functions below, not passed in.
+CREATE TABLE IF NOT EXISTS syncup.invites (
+    id uuid PRIMARY KEY,
+    team_id uuid NOT NULL REFERENCES syncup.teams(id),
+    code_hash text NOT NULL UNIQUE CHECK (code_hash ~ '^[0-9a-f]{64}$'),
+    created_by uuid NOT NULL REFERENCES syncup.users(id),
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    expires_at timestamptz NOT NULL,
+    revoked_by uuid REFERENCES syncup.users(id),
+    revoked_at timestamptz,
+    CHECK ((revoked_by IS NULL) = (revoked_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS invites_by_team ON syncup.invites (team_id, created_at);
+-- Every join that reached the database. No code, code hash, provider user ID or IP: an unknown link keeps only the
+-- outcome, and a login that made no user keeps no user.
+CREATE TABLE IF NOT EXISTS syncup.invite_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    invite_id uuid REFERENCES syncup.invites(id),
+    outcome text NOT NULL CHECK (outcome IN ('joined', 'member', 'unknown_link', 'expired', 'revoked', 'team_full',
+        'removed', 'unknown', 'ambiguous', 'inactive', 'limited', 'reused', 'full')),
+    user_id uuid REFERENCES syncup.users(id)
+);
+-- Row security with no policy and no grant, as for identities: the API role uses the functions below only.
+ALTER TABLE syncup.invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE syncup.invites FORCE ROW LEVEL SECURITY;
+ALTER TABLE syncup.invite_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE syncup.invite_events FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON syncup.invites, syncup.invite_events FROM PUBLIC;
+
+-- The most active members a link fills a team to. The functions below only; the API role cannot call it.
+CREATE OR REPLACE FUNCTION syncup.team_member_limit() RETURNS integer
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, pg_temp AS $$ SELECT 8 $$;
+REVOKE ALL ON FUNCTION syncup.team_member_limit() FROM PUBLIC;
+
+-- Active members (active user, active membership) of p_team.
+CREATE OR REPLACE FUNCTION syncup.team_member_count(p_team uuid) RETURNS integer
+LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
+    SELECT count(*)::integer FROM syncup.memberships m JOIN syncup.users u ON u.id = m.user_id
+    WHERE m.team_id = p_team AND m.active AND u.active
+$$;
+REVOKE ALL ON FUNCTION syncup.team_member_count(uuid) FROM PUBLIC;
+
+-- The request's user (team_access.authorized sets syncup.user_id after checking the key) when they are an active
+-- member of p_team; insufficient_privilege otherwise, which the API answers with 403. The functions below only.
+CREATE OR REPLACE FUNCTION syncup.invite_member(p_team uuid) RETURNS uuid
+LANGUAGE plpgsql STABLE SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_user uuid := nullif(current_setting('syncup.user_id', true), '')::uuid;
+BEGIN
+    IF v_user IS NULL OR NOT EXISTS (SELECT 1 FROM syncup.memberships m JOIN syncup.users u ON u.id = m.user_id
+            WHERE m.team_id = p_team AND m.user_id = v_user AND m.active AND u.active) THEN
+        RAISE EXCEPTION 'not an active member of this team' USING ERRCODE = '42501';
+    END IF;
+    RETURN v_user;
+END
+$$;
+REVOKE ALL ON FUNCTION syncup.invite_member(uuid) FROM PUBLIC;
+
+-- A new link of p_team, made by the request's user. 'too_many' while the team already has 5 open links.
+CREATE OR REPLACE FUNCTION syncup.create_invite(p_team uuid, p_code_hash text)
+RETURNS TABLE (o_outcome text, o_id uuid, o_expires_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_user uuid;
+BEGIN
+    IF p_code_hash IS NULL OR p_code_hash !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION 'invalid invite request' USING ERRCODE = '22023';
+    END IF;
+    v_user := syncup.invite_member(p_team);
+    -- The key team_access.team_lock takes: one team's links, joins and writes change one at a time.
+    PERFORM pg_advisory_xact_lock(hashtextextended(p_team::text, 0));
+    IF (SELECT count(*) FROM syncup.invites i WHERE i.team_id = p_team AND i.revoked_at IS NULL
+            AND i.expires_at > clock_timestamp()) >= 5 THEN
+        o_outcome := 'too_many';
+        RETURN NEXT;
+        RETURN;
+    END IF;
+    o_id := gen_random_uuid();
+    o_expires_at := clock_timestamp() + interval '7 days';
+    INSERT INTO syncup.invites(id, team_id, code_hash, created_by, expires_at)
+        VALUES (o_id, p_team, p_code_hash, v_user, o_expires_at);
+    o_outcome := 'created';
+    RETURN NEXT;
+END
+$$;
+REVOKE ALL ON FUNCTION syncup.create_invite(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION syncup.create_invite(uuid, text) TO syncup_api;
+
+-- p_team's member count and its links of the last 7 days (newest 20), for its members. Never a code or its hash.
+CREATE OR REPLACE FUNCTION syncup.list_invites(p_team uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+    PERFORM syncup.invite_member(p_team);
+    RETURN jsonb_build_object(
+        'members', syncup.team_member_count(p_team),
+        'member_limit', syncup.team_member_limit(),
+        'invites', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                'id', r.id, 'created_by', r.creator, 'created_at', r.created_at, 'expires_at', r.expires_at,
+                'revoked_at', r.revoked_at, 'joined', r.joined) ORDER BY r.created_at DESC)
+            FROM (SELECT i.id, u.name AS creator, i.created_at, i.expires_at, i.revoked_at,
+                         (SELECT count(*) FROM syncup.invite_events e
+                          WHERE e.invite_id = i.id AND e.outcome = 'joined') AS joined
+                  FROM syncup.invites i JOIN syncup.users u ON u.id = i.created_by
+                  WHERE i.team_id = p_team AND i.expires_at > clock_timestamp() - interval '7 days'
+                  ORDER BY i.created_at DESC LIMIT 20) r), '[]'::jsonb));
+END
+$$;
+REVOKE ALL ON FUNCTION syncup.list_invites(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION syncup.list_invites(uuid) TO syncup_api;
+
+-- Revoke one link of p_team, by any active member. false when p_team has no such link; revoking twice keeps the first.
+CREATE OR REPLACE FUNCTION syncup.revoke_invite(p_team uuid, p_invite uuid) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_user uuid;
+BEGIN
+    v_user := syncup.invite_member(p_team);
+    PERFORM pg_advisory_xact_lock(hashtextextended(p_team::text, 0));
+    UPDATE syncup.invites i SET revoked_by = v_user, revoked_at = clock_timestamp()
+        WHERE i.id = p_invite AND i.team_id = p_team AND i.revoked_at IS NULL;
+    RETURN EXISTS (SELECT 1 FROM syncup.invites i WHERE i.id = p_invite AND i.team_id = p_team);
+END
+$$;
+REVOKE ALL ON FUNCTION syncup.revoke_invite(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION syncup.revoke_invite(uuid, uuid) TO syncup_api;
+
+-- What the join page shows before the login: the team name and expiry of a usable link, the state of any other.
+-- Anyone holding the code may ask (POST /invites/preview, rate limited by the API); nothing else of the team shows.
+CREATE OR REPLACE FUNCTION syncup.preview_invite(p_code_hash text)
+RETURNS TABLE (o_status text, o_team text, o_expires_at timestamptz, o_members integer, o_member_limit integer)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_invite syncup.invites;
+BEGIN
+    SELECT i.* INTO v_invite FROM syncup.invites i WHERE i.code_hash = p_code_hash;
+    IF NOT FOUND THEN
+        o_status := 'unknown_link';
+        RETURN NEXT;
+        RETURN;
+    END IF;
+    o_members := syncup.team_member_count(v_invite.team_id);
+    o_member_limit := syncup.team_member_limit();
+    o_status := CASE WHEN v_invite.revoked_at IS NOT NULL THEN 'revoked'
+                     WHEN v_invite.expires_at <= clock_timestamp() THEN 'expired'
+                     WHEN o_members >= o_member_limit THEN 'team_full' ELSE 'valid' END;
+    IF o_status = 'valid' THEN
+        o_team := (SELECT t.name FROM syncup.teams t WHERE t.id = v_invite.team_id);
+        o_expires_at := v_invite.expires_at;
+    ELSE
+        o_members := NULL;
+    END IF;
+    RETURN NEXT;
+END
+$$;
+REVOKE ALL ON FUNCTION syncup.preview_invite(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION syncup.preview_invite(text) TO syncup_api;
+
+-- Join p_team of a link with a web login, and register its key. Arguments after p_code_hash are issue_web_key's;
+-- p_name names a new user only (a known user keeps the name the team knows). Membership, user and identity rows
+-- are made only when issue_web_key issues the key: otherwise they roll back and only the event stays.
+-- A change of the result columns needs DROP FUNCTION first.
+CREATE OR REPLACE FUNCTION syncup.join_with_invite(p_code_hash text, p_identities jsonb, p_session text,
+                                                   p_digest text, p_replaces text, p_device text, p_name text)
+RETURNS TABLE (o_outcome text, o_user_id uuid, o_name text, o_expires_at timestamptz, o_team text, o_added boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_invite syncup.invites;
+    v_users uuid[];
+    v_new boolean;
+    v_membership boolean;  -- an existing membership's active flag; NULL when there is none
+    v_key record;
+BEGIN
+    IF p_code_hash IS NULL OR p_code_hash !~ '^[0-9a-f]{64}$' OR p_name IS NULL
+            OR length(btrim(p_name)) NOT BETWEEN 1 AND 40 OR jsonb_typeof(p_identities) IS DISTINCT FROM 'array'
+            OR jsonb_array_length(p_identities) = 0 THEN
+        RAISE EXCEPTION 'invalid invite request' USING ERRCODE = '22023';
+    END IF;
+    SELECT i.* INTO v_invite FROM syncup.invites i WHERE i.code_hash = p_code_hash;
+    IF NOT FOUND THEN
+        o_outcome := 'unknown_link';
+        INSERT INTO syncup.invite_events(outcome) VALUES (o_outcome);
+        RETURN NEXT;
+        RETURN;
+    END IF;
+    -- One team's joins run one at a time, so the member limit cannot be raced past. Read the link again under the
+    -- lock: a revoke committed while this join waited counts.
+    PERFORM pg_advisory_xact_lock(hashtextextended(v_invite.team_id::text, 0));
+    SELECT i.* INTO v_invite FROM syncup.invites i WHERE i.id = v_invite.id;
+    SELECT array_agg(DISTINCT i.user_id) INTO v_users
+    FROM jsonb_array_elements(p_identities) AS e(value)
+    JOIN syncup.identities i ON i.provider = e.value->>'provider' AND i.subject = e.value->>'subject';
+    v_new := v_users IS NULL;
+    o_user_id := v_users[1];
+    IF NOT v_new THEN
+        SELECT m.active INTO v_membership FROM syncup.memberships m
+        WHERE m.team_id = v_invite.team_id AND m.user_id = o_user_id;
+    END IF;
+    o_added := v_membership IS NULL;
+    IF v_invite.revoked_at IS NOT NULL THEN
+        o_outcome := 'revoked';
+    ELSIF v_invite.expires_at <= clock_timestamp() THEN
+        o_outcome := 'expired';
+    ELSIF cardinality(v_users) > 1 THEN
+        o_outcome := 'ambiguous';
+        o_user_id := NULL;
+    ELSIF NOT v_new AND NOT (SELECT u.active FROM syncup.users u WHERE u.id = o_user_id) THEN
+        o_outcome := 'inactive';
+    ELSIF v_membership IS FALSE THEN
+        o_outcome := 'removed';  -- taken out of this team on purpose; only the administrator brings them back
+    ELSIF o_added AND syncup.team_member_count(v_invite.team_id) >= syncup.team_member_limit() THEN
+        o_outcome := 'team_full';
+    END IF;
+    IF o_outcome IS NULL THEN
+        BEGIN
+            IF v_new THEN
+                o_user_id := gen_random_uuid();
+                INSERT INTO syncup.users(id, name) VALUES (o_user_id, btrim(p_name));
+                INSERT INTO syncup.identities(provider, subject, user_id, note)
+                    SELECT e.value->>'provider', e.value->>'subject', o_user_id, 'invite'
+                    FROM jsonb_array_elements(p_identities) AS e(value);
+            END IF;
+            IF o_added THEN
+                INSERT INTO syncup.memberships(team_id, user_id) VALUES (v_invite.team_id, o_user_id);
+            END IF;
+            SELECT * INTO v_key FROM syncup.issue_web_key(p_identities, p_session, p_digest, p_replaces, p_device);
+            IF v_key.o_outcome <> 'issued' THEN
+                RAISE EXCEPTION 'web key not issued' USING ERRCODE = 'SU001';  -- undo this block only
+            END IF;
+        EXCEPTION WHEN SQLSTATE 'SU001' THEN
+            IF v_new THEN
+                o_user_id := NULL;  -- the user rolled back with the block
+            END IF;
+        END;
+        IF v_key.o_outcome = 'issued' THEN
+            o_outcome := CASE WHEN o_added THEN 'joined' ELSE 'member' END;
+            o_name := v_key.o_name;
+            o_expires_at := v_key.o_expires_at;
+            o_team := (SELECT t.name FROM syncup.teams t WHERE t.id = v_invite.team_id);
+        ELSE
+            o_outcome := v_key.o_outcome;
+        END IF;
+    END IF;
+    INSERT INTO syncup.invite_events(invite_id, outcome, user_id) VALUES (v_invite.id, o_outcome, o_user_id);
+    IF o_outcome NOT IN ('joined', 'member') THEN
+        o_user_id := NULL;
+        o_added := NULL;
+    END IF;
+    RETURN NEXT;
+END
+$$;
+REVOKE ALL ON FUNCTION syncup.join_with_invite(text, jsonb, text, text, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION syncup.join_with_invite(text, jsonb, text, text, text, text, text) TO syncup_api;

@@ -58,9 +58,10 @@ JSON = 'application/json; charset=utf-8'
 class Rejected(Exception):
     """An answer for the PC with a fixed message; never carries input or Supabase text."""
 
-    def __init__(self, status, message):
+    def __init__(self, status, message, reason=None):
         super().__init__(message)
         self.status, self.message = status, message
+        self.reason = reason  # a fixed word the native host maps to its own message (team_invites.REFUSED)
 
 
 class SettingError(ValueError):
@@ -133,6 +134,8 @@ class KeyIssuer:
 
     def issue(self, dsn, data):
         """(status, response object) for one POST /keys body."""
+        import team_invites  # an invite link's join (team_invites.py builds on this module)
+        data, invite = team_invites.take_invite(data)
         request = parse_request(data)
         replayed = self._replay(dsn, request['digest'])
         if replayed:
@@ -143,6 +146,8 @@ class KeyIssuer:
         access = session.get('access_token')
         try:
             identities, session_hash = login_identities(session)
+            if invite:
+                return team_invites.join(dsn, identities, session_hash, request, invite)
             return self._register(dsn, identities, session_hash, request)
         finally:
             # The answer above already holds; this only ends the Supabase session, whose tokens are dropped here.
@@ -284,4 +289,6 @@ def handle(handler):
         status, result = issuer.issue(handler.server.dsn, data)
     except Rejected as rejected:
         status, result = rejected.status, {'error': rejected.message}
+        if rejected.reason:
+            result['reason'] = rejected.reason
     handler.reply(status, json.dumps(result, ensure_ascii=False), JSON)

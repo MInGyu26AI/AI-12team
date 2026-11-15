@@ -3,21 +3,17 @@
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { RegisteredTeamNotice } from "@/components/registered-team-notice";
 import { Button } from "@/components/ui/button";
 import { USE_MOCK } from "@/lib/api";
 import { useDemoTeam } from "@/lib/team";
+import { InviteJoin } from "./invite-join";
 
 const COLORS = ["#4F46E5", "#3B9AE1", "#C2407A", "#3F9D52", "#D9670B", "#7E22CE"];
 
 export function JoinForm({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   if (USE_MOCK) return <DemoJoin code={code} />;
-  return (
-    <RegisteredTeamNotice title="팀 연결 확인" linkLabel="등록된 팀 확인하기" className="max-w-md py-16">
-      현재 내부 시연은 관리자가 사용자와 팀 소속을 등록합니다. 초대 코드만으로 소속이나 권한을 만들지 않습니다.
-    </RegisteredTeamNotice>
-  );
+  return <InviteJoin code={code} />; // 실제 모드: GitHub 로그인으로 참여 (server/team_invites.py)
 }
 
 // 초대 링크로 들어온 팀원 (목업 모드 전용, 이 브라우저의 목업 팀에 참여)
