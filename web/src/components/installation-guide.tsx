@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
+import { ChromeExtensionSteps } from "@/components/installation-visuals";
 import { Button } from "@/components/ui/button";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
 import type { SetupStatus } from "@/lib/github-login";
@@ -38,9 +39,17 @@ export function InstallationGuide({ downloads, version }: { downloads: DesktopDo
         {d.url ? <a className="mt-4 inline-block font-semibold text-brand underline" href={d.url} rel="noreferrer">설치 파일 받기</a> : <p className="mt-4 text-sm text-muted-foreground">설치 파일 배포 준비 중</p>}</div>)}</div>
       {downloads.every(d => !d.url) && <p role="status" className="mt-4 text-sm">아직 설치 파일이 공개되지 않았어요. 가입과 팀 생성은 먼저 마칠 수 있어요. 다운로드가 준비된 뒤 이 페이지에서 계속해 주세요.</p>}
     </section>
-    <section className="rounded-xl border bg-card p-6"><h2 className="text-lg font-semibold">2. 앱 안내에 따라 Chrome 확장 연결</h2>
-      <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm"><li>SyncUp 앱에서 <b>확장 폴더 열기</b>를 누르세요.</li><li>Chrome 주소창에 <code>chrome://extensions</code> 입력 → <b>개발자 모드</b> 켜기 → <b>압축해제된 확장 프로그램 로드</b>에서 열린 폴더를 선택하세요.</li><li>SyncUp 카드의 <b>ID 32자리</b>를 앱에 붙여 넣고 <b>백업하고 이 PC에 설치</b>를 누르세요.</li><li>확장 팝업의 <b>개인 검토함 주소</b>가 현재 사이트 주소인지 확인하고 이 페이지를 새로고침하세요.</li></ol>
-      <p className="mt-4 text-xs text-muted-foreground">확장 v{version} · 기존 연결 설정은 앱이 백업합니다. 사용자 계정의 설정만 바꾸며 관리자 비밀번호를 요구하지 않아요.</p>
+    <section className="border bg-card p-4 sm:p-6" aria-labelledby="install-chrome-title">
+      <h2 id="install-chrome-title" className="scroll-mt-24 text-lg font-semibold">2. Chrome 확장 설치</h2>
+      <p className="mt-3 text-sm leading-6 break-keep text-ink-body">
+        SyncUp 앱에서 <strong>확장 폴더 열기</strong>를 누른 다음, Chrome 주소창에{" "}
+        <code className="inline-block bg-surface-soft px-1.5 text-ink">chrome://extensions</code>를 입력하세요.
+      </p>
+      <ChromeExtensionSteps />
+      <p className="mt-6 border-t pt-4 text-sm leading-6 break-keep text-ink-body">
+        확장 팝업의 <strong>개인 검토함 주소</strong>가 현재 사이트 주소인지 확인한 뒤 이 페이지를 새로고침하세요.
+      </p>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">확장 v{version} · 기존 연결 설정은 앱이 백업해요.</p>
     </section>
     <section className="rounded-xl border bg-card p-6"><h2 className="text-lg font-semibold">3. GitHub로 이 PC 연결</h2><p className="mt-2 text-sm text-muted-foreground">웹 가입과 PC 연결은 별도예요. 같은 GitHub 계정으로 연결하면 이 PC에 안전하게 연결 키가 저장돼요.</p>
       <Link href={next} className="mt-4 inline-block font-semibold text-brand underline">{next.startsWith("/join/") ? "받은 초대 링크로 돌아가 참여하기" : "GitHub로 이 PC 연결하기"}</Link>
