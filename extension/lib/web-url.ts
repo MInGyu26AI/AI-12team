@@ -3,7 +3,8 @@
 import type { Settings } from './settings';
 
 export const LOCAL_WEB_URL = 'http://localhost:3000';
-export const PRODUCTION_WEB_URL = 'https://syncup-live-murex.vercel.app'; // Vercel 실제 모드 배포
+export const PRODUCTION_WEB_URL = 'https://syncup-ashen.vercel.app';
+const PREVIOUS_PRODUCTION_WEB_URL = 'https://syncup-live-murex.vercel.app';
 export const DEFAULT_WEB_URL: string =
   normalizeWebUrl(import.meta.env.WXT_WEB_URL || PRODUCTION_WEB_URL) ?? PRODUCTION_WEB_URL;
 
@@ -29,7 +30,8 @@ export const bridgeSupported = (origin: string) =>
   LOCAL_WEB_ORIGINS.includes(origin) || (origin.startsWith('https://') && origin.endsWith(DEPLOY_HOST_SUFFIX));
 
 // 설정값이 없거나 수집기 status 를 옮기기 전일 수 있으므로 항상 이 함수로 읽는다
-export const webUrlOf = (s: Pick<Settings, 'webUrl'>) => s.webUrl || DEFAULT_WEB_URL;
+export const webUrlOf = (s: Pick<Settings, 'webUrl'>) =>
+  s.webUrl === PREVIOUS_PRODUCTION_WEB_URL ? PRODUCTION_WEB_URL : s.webUrl || DEFAULT_WEB_URL;
 
 /**
  * 이 출처의 페이지가 로컬 수집기 RPC(개인 후보 읽기·승인 등)를 부를 수 있는지. 사용자가 설정한 개인 검토함 주소 하나만 믿는다.

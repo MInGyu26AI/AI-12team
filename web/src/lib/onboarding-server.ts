@@ -1,6 +1,7 @@
 // Server-only BFF: provider tokens and permanent PC connection keys never reach the web.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { loginDestination } from "./auth-navigation";
 
 const production = process.env.NODE_ENV === "production";
 export const SESSION = production ? "__Host-syncup_onboarding" : "syncup_onboarding";
@@ -55,7 +56,7 @@ export async function upstream(path: "/onboarding" | "/onboarding/login" | "/onb
   return { status: response.status, data };
 }
 
-export function beginFlow(name: string) {
+export function beginFlow(name?: string, next?: string) {
   const verifier = randomBytes(48).toString("base64url");
   const state = randomBytes(32).toString("base64url");
   const supabase = configuredOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -65,7 +66,7 @@ export function beginFlow(name: string) {
   const url = new URL("/auth/v1/authorize", supabase);
   url.search = new URLSearchParams({ provider: "github", redirect_to: callback.toString(),
     code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "s256" }).toString();
-  const value = Buffer.from(JSON.stringify({ verifier, state, name, created: Date.now() })).toString("base64url");
+  const value = Buffer.from(JSON.stringify({ verifier, state, name, next: loginDestination(next), created: Date.now() })).toString("base64url");
   return { url: url.toString(), value };
 }
 
@@ -77,9 +78,10 @@ export function readFlow(request: NextRequest) {
   if (typeof flow.state !== "string" || !TOKEN.test(flow.state) ||
       !timingSafeEqual(Buffer.from(flow.state), Buffer.from(state)) ||
       typeof flow.verifier !== "string" || !/^[A-Za-z0-9_-]{64}$/.test(flow.verifier) ||
-      typeof flow.name !== "string" || !flow.name.trim() || flow.name.length > 40 ||
+      (flow.name !== undefined && (typeof flow.name !== "string" || !flow.name.trim() || flow.name.length > 40 || /[\u0000-\u001f\u007f]/.test(flow.name))) ||
+      flow.next !== undefined && loginDestination(flow.next) !== flow.next ||
       !Number.isFinite(flow.created) || Date.now() - flow.created > 600000 || flow.created > Date.now()) throw new Error("flow");
-  return flow as { verifier: string; name: string };
+  return { ...flow, next: loginDestination(flow.next) } as { verifier: string; name?: string; next: string };
 }
 
 export function failure() { return json({ error: "연결하지 못했어요. 잠시 뒤 다시 시도해 주세요." }, 503); }

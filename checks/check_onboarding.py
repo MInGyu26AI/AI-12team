@@ -43,6 +43,7 @@ class Onboarding(TeamIsolation):
         self.assertNotIn(PROVIDER_TOKEN, json.dumps(signed))
         self.assertTrue(self.supabase.logged_out)
         self.assertEqual(self.call('GET', token=token)[1]['teams'], [])
+        self.assertRegex(self.call('GET', token=token)[1]['id'], r'^[0-9a-f-]{36}$')
         status, team = self.team(token)
         self.assertEqual(status, 200)
         self.assertEqual(self.call('GET', token=token)[1]['teams'], [dict(id=team['id'], name='새 팀')])
@@ -112,6 +113,18 @@ class Onboarding(TeamIsolation):
         self.assertEqual(self.login(forged)[0], 403)
         status, _ = self.login(name='\ninvalid')
         self.assertEqual(status, 400)
+
+    def test_one_click_login_uses_provider_name_only_as_display_and_keeps_existing_name(self):
+        verifier = secrets.token_urlsafe(48)
+        user = github_user(9991010, 'provider', user_metadata={'full_name': '깃허브 표시 이름'})
+        code = self.supabase.login(challenge_of(verifier), user)
+        status, result = self.call('POST', '/onboarding/login', data=dict(code=code, verifier=verifier))
+        self.assertEqual(status, 200)
+        self.assertEqual(result['name'], '깃허브 표시 이름')
+        account = self.call('GET', token=result['session'])[1]
+        again = self.login(user, name='바꾸려는 이름')[1]
+        self.assertEqual(again['name'], '깃허브 표시 이름')
+        self.assertEqual(self.call('GET', token=again['session'])[1]['id'], account['id'])
 
     def test_migration_twice_keeps_account_team_and_membership(self):
         token = self.login()[1]['session']

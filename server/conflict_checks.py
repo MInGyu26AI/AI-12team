@@ -228,8 +228,10 @@ def _record(c, team_id, lease, result, elapsed_ms):
 def _record_success(c, team_id, lease, result, elapsed_ms):
     for conflict in result['conflicts']:
         _save_alert(c, team_id, conflict)
+    outcome = 'needs-review' if any(item.get('judgement') == UNCERTAIN_JUDGEMENT
+                                  for item in result['conflicts']) else 'complete'
     _advance(c, team_id, lease, check_finished(lease.diagnostic, result, lease.card_id, lease.candidate_ids,
-                                               elapsed_ms, 'complete'))
+                                               elapsed_ms, outcome))
 
 
 def _record_uncertain(c, team_id, lease, result, elapsed_ms):

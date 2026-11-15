@@ -92,7 +92,7 @@ class DiagnosticPersistence(TeamIntegration):
         board = self.team_request('GET', 'board')[1]
         self.assertNotIn('diagnostics', json.dumps(board))
 
-    def test_diagnostic_uncertain_pair_is_unknown_and_not_retried(self):
+    def test_diagnostic_uncertain_pair_is_counted_and_not_retried(self):
         self.ready(2)
         calls = []
         class Model:
@@ -111,7 +111,7 @@ class DiagnosticPersistence(TeamIntegration):
         item = self.board_item('new')
         self.assertEqual(item['conflictCheckProgress'], dict(total=2, completed=2, skipped=0))
         self.assertEqual([x['judgement'] for x in self.team_request('GET', 'conflicts')[1]['conflicts']], ['확인 필요'])
-        self.assertIsNone(d['checked_count'])
+        self.assertEqual(d['checked_count'], 1)  # the integrated engine preserves its examined pair
         self.assertNotIn(SECRET, json.dumps(d))
 
     def test_diagnostic_transport_limit_manual_reset_and_latest_only(self):

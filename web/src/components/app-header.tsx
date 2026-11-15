@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AvatarStack } from "@/components/avatar";
 import { Brand } from "@/components/brand";
+import { LogoutButton } from "@/components/logout-button";
+import { useWebAccount } from "@/lib/account-context";
 import { useTeam } from "@/lib/team";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,7 @@ const NAV = [
 export function AppHeader() {
   const pathname = usePathname();
   const team = useTeam();
+  const account = useWebAccount();
   const setup = pathname.startsWith("/team/new") || pathname.startsWith("/join");
 
   // 새 피그마 헤더 (노드 182:3): 크림 바탕 · 아래 테두리 · 가로 32px 세로 12px 여백. 왼쪽 로고+팀 칩, 가운데 탭, 오른쪽 아바타
@@ -51,8 +54,9 @@ export function AppHeader() {
             );
           })}
         </nav>
-        <div className="ml-auto lg:ml-0 lg:justify-self-end">
-          <AvatarStack names={setup ? [team.me] : team.members.map((m) => m.name)} />
+        <div className="ml-auto flex items-center gap-2 lg:ml-0 lg:justify-self-end">
+          {account ? <><Link href="/start" className="max-w-28 truncate text-sm hover:underline">{account.name}</Link><LogoutButton className="px-2 py-1 text-xs" /></> :
+            <AvatarStack names={setup ? [team.me] : team.members.map((m) => m.name)} />}
         </div>
       </div>
     </header>

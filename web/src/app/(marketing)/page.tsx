@@ -25,7 +25,7 @@ const SCATTERED = [
 ];
 
 const HOW = [
-  { title: START.step, body: START.href === "/team/new" ? "팀장이 팀을 만들고 링크로 팀원을 불러요" : "관리자가 등록한 팀으로 바로 연결돼요", tag: "처음 한 번 · 팀장" },
+  { title: START.step, body: START.href === "/team/new" ? "팀장이 팀을 만들고 링크로 팀원을 불러요" : "GitHub로 로그인하고 팀을 만들거나 초대로 참여해요", tag: "처음 한 번 · 팀장" },
   { title: "브라우저 확장 연결", body: "Chrome에 확장 프로그램을 추가해요", tag: "처음 한 번 · 모두", link: true },
   { title: "싱크 맞추기", body: "ChatGPT 프로젝트 대화를 SyncUp으로 가져와요", tag: "대화할 때마다" },
   { title: "승인함에서 체크", body: "팀에 올릴 결정·할 일만 골라요", tag: "내가 직접", strong: true },

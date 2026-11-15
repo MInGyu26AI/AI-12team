@@ -16,7 +16,7 @@ from ai.syncup_ai.llm import DecisionsClient
 from batch_classification import classify_queued
 from check_teams import TeamIsolation, own_tests, request, running_server
 from collection_settings import configure
-from conflict_checks import UNCERTAIN_JUDGEMENT, UNCERTAIN_REASON
+from conflict_checks import UNCERTAIN_JUDGEMENT
 from local_fixtures import AI, public_card, work_gate
 from native_host import request as native_request
 from review_page import Review
@@ -268,9 +268,11 @@ class TeamIntegration(TeamIsolation):
                              ('complete', '', dict(total=2, completed=2, skipped=0)))
             self.assertEqual(item['decisionState'], 'review')
             [alert] = self.team_request('GET', 'conflicts')[1]['conflicts']
-            self.assertEqual((alert['cardA']['id'], alert['cardB']['id'], alert['judgement'], alert['reason']),
-                             ('unsure', 'new', UNCERTAIN_JUDGEMENT, UNCERTAIN_REASON))
-            self.assertNotIn('confidence', alert)  # the engine gives no relation or confidence for this pair
+            self.assertEqual((alert['cardA']['id'], alert['cardB']['id'], alert['judgement']),
+                             ('unsure', 'new', UNCERTAIN_JUDGEMENT))
+            self.assertIn("'무관'", alert['reason'])
+            self.assertIn('확신하지 못', alert['reason'])
+            self.assertEqual((alert['aiJudgement'], alert['confidence']), ('무관', .4))
             # The uncertain pair is never asked again on its own.
             self.make_check_due('new')
             self.run_due_checks()

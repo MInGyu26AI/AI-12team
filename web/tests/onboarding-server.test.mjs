@@ -34,6 +34,15 @@ test('writes require the exact origin; missing Origin is not accepted', () => {
   assert.equal(auth.sameOrigin(new Request('http://localhost:3000')), false);
 });
 
+test('one-click login binds its internal return path and needs no caller-supplied display name', () => {
+  const flow = auth.beginFlow(undefined, '/review');
+  const stored = JSON.parse(Buffer.from(flow.value, 'base64url'));
+  assert.equal(stored.name, undefined);
+  assert.equal(auth.readFlow(request(flow.value, stored.state)).next, '/review');
+  stored.next = '//evil.test';
+  assert.throws(() => auth.readFlow(request(Buffer.from(JSON.stringify(stored)).toString('base64url'), stored.state)));
+});
+
 test('bounded body reading also rejects oversized requests without Content-Length', async () => {
   const request = new Request('http://localhost:3000', { method: 'POST', body: JSON.stringify({ name: 'x'.repeat(9000) }) });
   await assert.rejects(auth.smallBody(request));

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Copy, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, timeOf } from "@shared/format";
-import { alertLevel, type AlertLevel } from "@shared/labels";
+import { alertLevel } from "@shared/labels";
 import { branchMatcher, branchNames, repoIndex } from "@shared/repo";
 import type { RelatedCard } from "@shared/types";
 import { BranchFilter } from "@/components/board/branch-filter";
@@ -15,7 +15,6 @@ import { DecisionHistoryList } from "@/components/board/decision-history";
 import { DecisionTimeline, TopicFilter, type Flag } from "@/components/board/decision-timeline";
 import { RepoStatusBar } from "@/components/board/repo-status";
 import { ResearchPanel } from "@/components/board/research-panel";
-import { TeamRecord } from "@/components/board/team-record";
 import { TodoPanel } from "@/components/board/todo-panel";
 import { ConflictDialog } from "@/components/conflict-dialog";
 import { PageTitle } from "@/components/page-title";
@@ -149,7 +148,6 @@ export default function BoardPage() {
         </div>
         <div className="space-y-5">
           <TodoPanel todos={todos} done={done} todoIds={todoIds} onToggle={toggleTodo} />
-          <TeamCriteriaCard criteria={criteria} />
           {research.length > 0 && <ResearchPanel research={research} />}
         </div>
       </div>

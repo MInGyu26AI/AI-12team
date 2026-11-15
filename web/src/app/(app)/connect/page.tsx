@@ -89,7 +89,7 @@ function ConnectPanel({ supabase }: { supabase: string }) {
 function hostProblem(error: unknown): string {
   const detail = error instanceof Error ? error.message : "";
   if (/native messaging host not found|로컬 수집기 연결 실패/i.test(detail)) {
-    return "이 PC의 연결 프로그램(native host)을 찾지 못했어요. docs/running.md의 '확장 연결'대로 native-setup을 --team-api와 함께 한 번 해 주세요.";
+    return "이 PC의 연결 프로그램을 찾지 못했어요. 설치 안내에서 SyncUp 앱을 받아 실행한 뒤 다시 연결해 주세요.";
   }
   return detail || "이 PC의 연결 프로그램에 닿지 못했어요. 확장과 연결 프로그램 설치를 확인하세요.";
 }

@@ -59,7 +59,7 @@ BEGIN
     SELECT u.id, u.name INTO v_user, v_name FROM syncup.onboarding_sessions s JOIN syncup.users u ON u.id=s.user_id
         WHERE s.digest=p_digest AND s.expires_at > clock_timestamp() AND u.active;
     IF NOT FOUND THEN RETURN jsonb_build_object('outcome','unauthorized'); END IF;
-    RETURN jsonb_build_object('outcome','ready','name',v_name,'teams',COALESCE((
+    RETURN jsonb_build_object('outcome','ready','id',v_user,'name',v_name,'teams',COALESCE((
         SELECT jsonb_agg(jsonb_build_object('id',t.id,'name',t.name) ORDER BY t.name,t.id)
         FROM syncup.teams t JOIN syncup.memberships m ON m.team_id=t.id
         WHERE m.user_id=v_user AND m.active), '[]'::jsonb));

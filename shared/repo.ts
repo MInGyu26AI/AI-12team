@@ -1,6 +1,6 @@
 // 팀 상태 파일(SYNCUP.md · syncup.json) GitHub 저장 상태. 웹·확장 공용.
 // 형식: docs/team-server.md 'GitHub 레포 저장'(로컬 수집기 RPC team.repo 의 repo), docs/team-state.md(syncup.json).
-// 레포 연결은 팀 서버 환경 변수로만 정해진다 (화면에서 바꾸지 않음)
+// 팀별 연결은 인증된 팀원이 관리한다. 서버 기본 연결은 읽기 전용이다.
 
 export interface RepoCommit {
   sha: string;
@@ -9,6 +9,9 @@ export interface RepoCommit {
 }
 
 export interface RepoStatus {
+  source?: "team" | "env";
+  private?: boolean;
+  tokenSet?: boolean;
   linked: boolean; // false = 이 팀은 레포에 저장하지 않음 (아래 필드 없음)
   repo?: string; // owner/name
   branch?: string;
@@ -18,6 +21,13 @@ export interface RepoStatus {
   commit?: RepoCommit | null;
   httpStatus?: number | null; // 실패 때
   checkedAt?: number; // epoch 초
+}
+
+export interface RepoLinkResult {
+  ok: boolean;
+  reason?: string;
+  check?: { repo: string; branch: string; private: boolean; canWrite: boolean };
+  repo?: RepoStatus;
 }
 
 export interface SyncupTodo {

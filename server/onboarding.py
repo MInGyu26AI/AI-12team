@@ -47,12 +47,13 @@ def answer(result):
 
 
 def login(issuer, dsn, data):
-    if not isinstance(data, dict) or set(data) != {'code', 'verifier', 'name'}:
+    if not isinstance(data, dict) or not {'code', 'verifier'} <= data.keys() or data.keys() - {'code', 'verifier', 'name'}:
         raise Rejected(400, '로그인을 처음부터 다시 시작해 주세요.')
     if not (isinstance(data['code'], str) and key_issue.CODE.fullmatch(data['code'])
             and isinstance(data['verifier'], str) and key_issue.VERIFIER.fullmatch(data['verifier'])):
         raise Rejected(400, '로그인을 처음부터 다시 시작해 주세요.')
-    name = checked_text(data['name'], 40)
+    # A provider display name is presentation only. Identity always comes from the verified numeric GitHub ID.
+    name = checked_text(data['name'], 40) if 'name' in data else None
     if not issuer.limit.take():
         raise Rejected(*ERRORS['limited'])
     session = issuer._exchange(data['code'], data['verifier'])
@@ -61,6 +62,13 @@ def login(issuer, dsn, data):
         # Never attach by email or editable metadata. Self-service supports GitHub alone.
         if len(identities) != 1 or identities[0]['provider'] != 'github' or not re.fullmatch(r'[0-9]{1,20}', identities[0]['subject']):
             raise Rejected(403, 'GitHub 계정으로 로그인해 주세요.')
+        if name is None:
+            metadata = session.get('user', {}).get('user_metadata', {})
+            metadata = metadata if isinstance(metadata, dict) else {}
+            name = next((value.strip() for key in ('full_name', 'name', 'user_name', 'preferred_username')
+                         if isinstance(value := metadata.get(key), str) and value.strip()
+                         and len(value.strip()) <= 40 and not any(ord(c) < 32 or ord(c) == 127 for c in value)),
+                        'GitHub 사용자')
         token = secrets.token_urlsafe(32)
         with key_issue._connect(dsn) as c:
             result = c.execute('SELECT syncup.open_onboarding(%s,%s,%s,%s) AS v',

@@ -137,6 +137,7 @@ def collection_status(pipeline):
         lastCollectedAt=_iso(last_collected) if last_collected is not None else None,
         teamId=team_id,
         teamName=team['name'] if team else '접근 불가',
+        userId=profile['user_id'],
         userName=profile['name'],
         teams=profile['teams'],
         projectTopic=options['projectTopic'],

@@ -305,7 +305,7 @@ describe('승인 전 미리 알림 (pre-alert-notice)', () => {
     const notify = vi.spyOn(fakeBrowser.notifications, 'create');
     await refreshWith([preAlert]);
     await refreshWith([preAlert]);
-    const ids = notify.mock.calls.map(([id]) => id);
+    const ids = (notify.mock.calls as unknown as [string, unknown][]).map(([id]) => id);
     expect(ids.filter((id) => id === PRE_ALERT_NOTICE_ID)).toHaveLength(1);
     expect(notify).toHaveBeenCalledWith(PRE_ALERT_NOTICE_ID, expect.objectContaining({ message: expect.stringContaining('크롬 우선') }));
     expect(await preAlertsItem.getValue()).toEqual([preAlert]);

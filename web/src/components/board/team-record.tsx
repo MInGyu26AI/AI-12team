@@ -73,6 +73,7 @@ export function TeamRecord({ status, cards, conflicts, done, teamName }: {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/board/notion" className={cn(buttonOutline, "h-10 px-4 py-0 text-[13px]")}>노션 저장 연결</Link>
           <button type="button" className={cn(buttonOutline, "h-10 px-4 py-0 text-[13px]")} onClick={copy} disabled={text === null}>
             <Copy className="size-3.5" />
             복사

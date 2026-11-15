@@ -40,6 +40,7 @@ export interface ExtStatus {
   lastClassifier: "native" | null;
   teamName: string;
   userName: string;
+  userId?: string; // 로그인 계정과 이 PC의 연결 계정을 비교한다. 옛 수집기는 없으므로 갱신 안내.
   recent: BatchRecord[]; // 최근 수집 (새 것부터)
   counts?: Partial<Record<"reviewPending" | "deliveryPending" | "deliveryBlocked" | "classificationPending" | "classificationFailed" | "intakeIssues" | "privacyHeld" | "privacyExcluded", number>>;
   privacy?: { policy: string; model: string | null; available: boolean | null; reason: string | null }; // 로컬 개인정보 검사 상태

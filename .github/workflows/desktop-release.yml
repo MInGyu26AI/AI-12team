@@ -46,7 +46,7 @@ jobs:
       - name: Package desktop setup
         shell: bash
         env:
-          SYNCUP_BUILD_WEB: ${{ inputs.web_url || 'https://syncup-live-murex.vercel.app' }}
+          SYNCUP_BUILD_WEB: ${{ inputs.web_url || 'https://syncup-ashen.vercel.app' }}
           SYNCUP_BUILD_API: ${{ inputs.team_api || 'https://syncup-api-production-36de.up.railway.app' }}
         run: |
           python -m pip install pyinstaller==6.11.1
