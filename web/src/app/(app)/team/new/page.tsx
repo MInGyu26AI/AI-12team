@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cleanCriteria, rulesFromText } from "@shared/criteria";
 import { TEAM_KINDS } from "@shared/mock";
 import { Avatar } from "@/components/avatar";
+import { InvitePanel } from "@/components/invite-panel";
 import { RegisteredTeamNotice } from "@/components/registered-team-notice";
 import { Button } from "@/components/ui/button";
 import { USE_MOCK } from "@/lib/api";
@@ -16,9 +17,14 @@ import { cn } from "@/lib/utils";
 export default function NewTeamPage() {
   if (USE_MOCK) return <NewTeamForm />;
   return (
-    <RegisteredTeamNotice title="등록된 팀으로 연결" linkLabel="팀 연결 확인하기" className="max-w-content py-10">
-      현재 내부 시연은 관리자가 미리 등록한 사용자와 팀으로 연결합니다. 수집 화면에서 소속 팀을 선택하세요.
-    </RegisteredTeamNotice>
+    <div className="mx-auto max-w-content space-y-6 py-10">
+      <RegisteredTeamNotice title="팀원 초대" linkLabel="대화 수집으로 가기" className="">
+        새 팀은 관리자가 만들어요. 이미 등록된 팀에는 아래 초대 링크로 팀원을 직접 초대할 수 있어요.
+      </RegisteredTeamNotice>
+      <div className="px-gutter">
+        <InvitePanel />
+      </div>
+    </div>
   );
 }
 
