@@ -10,10 +10,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* 글꼴은 layout.tsx 에서 next/font 로 불러온 변수: 본문 전체 Noto Sans KR, "SyncUp" 워드마크만 Fredoka Bold */
+  /* 글꼴은 layout.tsx 에서 next/font 로 불러온 변수.
+     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로고 Orbitron 900 */
   --font-sans: var(--font-noto-sans-kr), "Noto Sans KR", -apple-system, system-ui, sans-serif;
-  --font-brand: var(--font-fredoka), Fredoka, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--font-inter-tight), "Inter Tight", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --font-serif: var(--font-instrument-serif), "Instrument Serif", Georgia, serif;
+  --font-brand: var(--font-orbitron), Orbitron, system-ui, sans-serif;
   --font-heading: var(--font-sans);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -31,37 +34,105 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: 1rem; /* 피그마: 패널 16 (행·입력 10 = radius-lg, 버튼 8 = radius-md) */
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
-/* 새 피그마 팔레트. --background 는 흰색 그대로 둔다: bg-background 를 입력창·대화상자·알약처럼 "흰 면"으로 쓰는 곳이 많다.
-   페이지·헤더의 크림 바탕은 bg-canvas (shared/theme.css) */
+/* 시안 "로즈 & 올리브 수채화" (2026-11-16) — 웹 전용 색 토큰.
+   shared/theme.css 는 확장 팝업도 쓰므로 그대로 두고, 같은 이름을 여기서 웹에만 덮어쓴다 (확장은 다시 빌드해도 예전 색 그대로).
+   흑백 각진 구조: 진갈색 #1d1a14 선·글자, 모서리 0, 그림자 없음. 색은 셋으로만: 진갈색 채움 / 테두리 / 연분홍. 충돌은 진갈색 띠 + #f5cdbe 글자 */
+@theme {
+  --color-ink: #1d1a14; /* 글자·선·기본 버튼 */
+  --color-ink-body: #3a342b; /* 본문 */
+  --color-ink-2: #5c5348; /* 보조 글자 */
+  --color-ink-3: #6e6558; /* 보조 글자 (옅게) */
+  --color-faint: #a39a8e; /* 흐린 글자 · 꺼진 항목 */
+  --color-blush: #e9d6cf; /* 연분홍 회색 칩 */
+  --color-blush-deep: #e2c9c4; /* 고리 안쪽 */
+  --color-flare: #f5cdbe; /* 충돌 띠 위 글자 */
+  --color-glass: rgb(255 255 255 / 0.72); /* 카드·패널: 뒤의 번짐이 살짝 비친다 */
+  --color-wash-rose: rgb(233 166 179);
+  --color-wash-olive: rgb(185 196 138);
+  --color-wash-peach: rgb(245 205 190);
+  --color-wash-olive-deep: rgb(160 176 110);
+  --color-wash-apricot: rgb(240 190 175);
+
+  --color-brand: #1d1a14;
+  --color-brand-hover: #3a342b;
+  --color-brand-soft: #e9d6cf;
+  --color-canvas: #fbf8f3;
+  --color-surface-soft: rgb(233 214 207 / 0.45);
+  --color-text-tertiary: #6e6558;
+
+  /* 표시 칩 (모양은 shared/labels.ts TAG_COLOR): 결정 = 진갈색 채움 흰 글씨, 할 일 = 테두리, 조사 = 연분홍, 개인 = 흐린 글자 */
+  --color-tag-decision: #ffffff;
+  --color-tag-decision-soft: #1d1a14;
+  --color-tag-research: #1d1a14;
+  --color-tag-research-soft: #e9d6cf;
+  --color-tag-todo: #1d1a14;
+  --color-tag-todo-soft: transparent;
+  --color-tag-personal: #a39a8e;
+  --color-tag-personal-soft: transparent;
+
+  --color-card-border: #1d1a14;
+  --color-card-border-selected: #1d1a14;
+  --color-card-border-personal: #a39a8e;
+
+  --color-sensitive: #1d1a14;
+  --color-sensitive-soft: #f5cdbe;
+  --color-warn: #5c5348;
+  --color-warn-soft: #e9d6cf;
+  --color-change: #1d1a14;
+  --color-change-soft: #e9d6cf;
+  --color-ok: #4f5a2c; /* 연결됨 · 승인 완료: 진올리브 글자 */
+  --color-ok-soft: rgb(185 196 138 / 0.35);
+
+  /* 충돌 알림 3단계: 충돌 = 진갈색 띠 + 복숭아 글자 / 확인 필요 = 테두리 / 변경 = 연분홍 */
+  --color-alert-conflict: #1d1a14; /* 글자로만 쓰는 곳이 있어 진갈색. 진갈색 띠 + 복숭아 글자는 배너·미리 알림에서 bg-ink text-flare 로 */
+  --color-alert-conflict-soft: #f5cdbe;
+  --color-alert-review: #1d1a14;
+  --color-alert-review-soft: transparent;
+  --color-alert-review-dot: #1d1a14;
+  --color-alert-change: #1d1a14;
+  --color-alert-change-soft: #e9d6cf;
+
+  /* 그림자 없음. 초점 고리(ring)는 그림자 토큰이 아니라 그대로 보인다 */
+  --shadow-card: none;
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
+}
+
+/* --background 는 흰색 그대로 둔다: 입력창·대화상자처럼 "흰 면"으로 쓰는 곳이 많다. 페이지 바탕은 bg-canvas */
 :root {
   --background: #ffffff;
-  --foreground: #18173a; /* 글자 1단계: 남색 */
-  --card: #ffffff;
-  --card-foreground: #18173a;
+  --foreground: #1d1a14;
+  --card: rgb(255 255 255 / 0.72);
+  --card-foreground: #1d1a14;
   --popover: #ffffff;
-  --popover-foreground: #18173a;
-  --primary: #18173a; /* 주요 버튼: 남색 바탕 + 흰 글자 */
+  --popover-foreground: #1d1a14;
+  --primary: #1d1a14;
   --primary-foreground: #ffffff;
-  --secondary: #f7f1ea;
-  --secondary-foreground: #18173a;
-  --muted: #f7f1ea; /* 옅은 베이지 면 */
-  --muted-foreground: #57534e; /* 글자 2단계 */
-  --accent: #efe5d6; /* hover · 선택된 항목 */
-  --accent-foreground: #18173a;
-  --destructive: #d93025; /* 충돌·실패의 빨강 */
-  --border: rgb(24 23 58 / 0.08); /* 카드·헤더 테두리 */
-  --input: #e2d6c3; /* 입력창·행 테두리 */
-  --ring: #18173a;
-  --radius: 0.625rem;
+  --secondary: #f3ece5;
+  --secondary-foreground: #1d1a14;
+  --muted: rgb(233 214 207 / 0.45);
+  --muted-foreground: #5c5348;
+  --accent: #e9d6cf;
+  --accent-foreground: #1d1a14;
+  --destructive: #1d1a14;
+  --border: #1d1a14; /* 구분선 1px · 카드·버튼 1.5px (아래 규칙) */
+  --input: #1d1a14;
+  --ring: #1d1a14;
+  --radius: 0px;
 }
 
 @layer base {
@@ -74,4 +145,110 @@
   html {
     @apply font-sans;
   }
+}
+
+/* 각진 구조: 레이어 밖 규칙이라 Tailwind 의 rounded-[12px] 같은 값보다 이긴다.
+   동그라미는 크기가 정해진 rounded-full(아바타·점, size-*)만 남기고, 칩·버튼·카드 모서리는 모두 0 */
+*:not(.rounded-full),
+.rounded-full:not([class*="size-"]) {
+  border-radius: 0;
+}
+/* 사방 테두리(카드·버튼·입력·칩)는 1.5px. 한쪽만 긋는 border-t·border-b 같은 구분선은 1px 그대로 */
+.border {
+  border-width: 1.5px;
+}
+/* 큰 영역 테두리 3.5px */
+.frame-heavy {
+  border: 3.5px solid var(--color-ink);
+}
+/* 작은 라벨: IBM Plex Mono 대문자 + 넓은 자간 */
+.label-mono {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+}
+/* 영어 큰 제목: Inter Tight 800 */
+.title-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+/* ── 수채화 번짐 배경 (components/ui/watercolor-bg.tsx) ── */
+@keyframes suBloom {
+  0% { opacity: 0; transform: scale(0.25); filter: blur(6px); }
+  55% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); filter: blur(42px); }
+}
+@keyframes suMorph {
+  0% { transform: translate(0, 0) scale(1) rotate(0); }
+  50% { transform: translate(2.5%, -2%) scale(1.1) rotate(8deg); }
+  100% { transform: translate(-2%, 2.5%) scale(1.04) rotate(-6deg); }
+}
+.wash-blob {
+  position: absolute;
+  filter: blur(42px);
+  border-radius: 42% 58% 63% 37% / 41% 44% 56% 59% !important;
+  animation: suBloom 2.8s cubic-bezier(0.2, 0.7, 0.2, 1) both, suMorph 16s ease-in-out 2.8s infinite alternate;
+}
+
+/* ── 첫 화면 "별의 일생" 8초 (components/landing/star-intro.tsx). 무대 위 요소마다 같은 8초 시간축에 % 로 나눈다 ── */
+.star-stage { --star-duration: 8s; }
+.star-stage [data-anim] { animation-duration: var(--star-duration); animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1); animation-fill-mode: both; animation-iteration-count: 1; }
+@keyframes starCore {
+  0% { width: 110px; height: 110px; border-width: 55px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); opacity: 1; }
+  18% { width: 120px; height: 120px; border-width: 60px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); }
+  37% { width: 180px; height: 180px; border-width: 36px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); }
+  56% { width: 250px; height: 250px; border-width: 46px; box-shadow: inset 0 0 0 22px var(--color-blush-deep); opacity: 1; }
+  64% { width: 34px; height: 34px; border-width: 17px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); opacity: 1; }
+  66%, 100% { width: 34px; height: 34px; border-width: 17px; opacity: 0; }
+}
+@keyframes starBurst {
+  0%, 62% { transform: scale(0); opacity: 1; }
+  68% { transform: scale(1.6); opacity: 1; }
+  76%, 100% { transform: scale(9); opacity: 0; }
+}
+@keyframes starFlash {
+  0%, 64% { opacity: 0; }
+  68% { opacity: 1; }
+  79%, 100% { opacity: 0; }
+}
+@keyframes starWordmark {
+  0%, 72% { opacity: 0; transform: translateY(12px); }
+  82%, 100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes starOrbit {
+  0%, 74% { stroke-dashoffset: 1400; }
+  90%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes starSpark {
+  0%, 86% { transform: scale(0); }
+  90% { transform: scale(1.25); }
+  93%, 100% { transform: scale(1); }
+}
+@keyframes starTagline {
+  0%, 88% { opacity: 0; }
+  96%, 100% { opacity: 1; }
+}
+/* 단계 라벨: 각 구간에만 보인다 */
+@keyframes starStage1 { 0%, 17% { opacity: 1; } 18%, 100% { opacity: 0; } }
+@keyframes starStage2 { 0%, 17% { opacity: 0; } 18%, 36% { opacity: 1; } 37%, 100% { opacity: 0; } }
+@keyframes starStage3 { 0%, 36% { opacity: 0; } 37%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+@keyframes starStage4 { 0%, 55% { opacity: 0; } 56%, 63% { opacity: 1; } 64%, 100% { opacity: 0; } }
+
+/* ── 4단계 롤 링크 (components/landing/roll-steps.tsx): 글자마다 같은 글자 2개를 세로로 쌓고 올리면 위로 굴린다 ── */
+.roll-char { display: inline-block; overflow: hidden; height: 1em; line-height: 1; vertical-align: top; }
+.roll-char > span { display: flex; flex-direction: column; transition: transform 640ms cubic-bezier(0.22, 1.25, 0.36, 1); }
+.roll-char > span > span { height: 1em; line-height: 1; }
+.roll-row:hover .roll-char > span,
+.roll-row:focus-visible .roll-char > span,
+.roll-row[data-active="true"] .roll-char > span {
+  transform: translateY(-50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wash-blob { animation: none; opacity: 1; filter: blur(42px); }
+  .star-stage [data-anim] { animation: none !important; }
+  .roll-char > span { transition: none; transform: none !important; }
 }
