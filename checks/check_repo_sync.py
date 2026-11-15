@@ -411,6 +411,108 @@ class GitHubVerify(unittest.TestCase):
         self.assertEqual(verify(self.target), ('no-write', True))
 
 
+class LinkChangeDuringSave(unittest.TestCase):
+    """A save under way for one repository must not report its outcome as another's. The GitHub calls are replaced;
+    the link bookkeeping, the save lock and the status are the real ones."""
+
+    ROW = dict(repo='team/a', branch='main', token=WEB_TOKEN, private=True, linkedBy='u', linkedByName='Dana',
+               linkedAt='2026-11-15T00:00:00+00:00')
+    CHANGES = {
+        'repository': lambda row: dict(row, repo='team/b'),
+        'branch': lambda row: dict(row, branch='feat/sync'),
+        'token': lambda row: dict(row, token=OTHER_TOKEN),
+        'unlink': lambda row: None,
+    }
+
+    def setUp(self):
+        self.team = uuid.uuid4()
+        self.server = Server(None)
+        repo_sync._remember(self.server, self.team, self.ROW)
+        self.saved_to, self.started, self.release = [], threading.Event(), threading.Event()
+
+        def held_save(target, build, message):
+            self.saved_to.append((target.repo, target.branch))
+            if len(self.saved_to) == 1:
+                self.started.set()
+                self.release.wait(5)
+            return dict(sha=f'sha-{target.repo}-{len(self.saved_to)}', html_url=f'https://github.example/{target.repo}',
+                        committer=dict(date='2026-11-15T00:00:00Z'))
+        self.enterContext(patch.object(repo_sync, 'save', held_save))
+
+    def save_in_background(self):
+        job = repo_sync._Job('token')
+        thread = threading.Thread(target=repo_sync._save_and_record,
+                                  args=(self.server, RepoTarget(self.team, 'team/a', 'main', WEB_TOKEN), job))
+        thread.start()
+        self.assertTrue(self.started.wait(5))
+        return thread
+
+    def test_without_a_change_the_save_is_reported(self):  # the checks below would pass vacuously without this
+        thread = self.save_in_background()
+        self.release.set()
+        thread.join(5)
+        self.assertEqual((repo_status(self.server, self.team)['state'], repo_status(self.server, self.team)['commit']['sha']),
+                         ('saved', 'sha-team/a-1'))
+
+    def test_an_old_save_never_reports_on_the_new_link(self):
+        for name, change in self.CHANGES.items():
+            with self.subTest(change=name):
+                self.setUp()
+                thread = self.save_in_background()
+                repo_sync._remember(self.server, self.team, change(self.ROW))
+                self.release.set()
+                thread.join(5)
+                status = repo_status(self.server, self.team)
+                if change(self.ROW) is None:
+                    self.assertEqual(status, dict(linked=False))
+                    continue
+                self.assertEqual((status['state'], status.get('commit')), ('unknown', None), status)
+
+    def test_a_to_b_and_back_to_a_still_drops_the_old_result(self):
+        thread = self.save_in_background()
+        repo_sync._remember(self.server, self.team, dict(self.ROW, repo='team/b'))
+        repo_sync._remember(self.server, self.team, self.ROW)
+        self.release.set()
+        thread.join(5)
+        self.assertEqual(repo_status(self.server, self.team)['state'], 'unknown')
+
+    def test_rereading_the_same_link_keeps_the_status(self):
+        thread = self.save_in_background()
+        repo_sync._remember(self.server, self.team, dict(self.ROW))
+        self.release.set()
+        thread.join(5)
+        self.assertEqual(repo_status(self.server, self.team)['state'], 'saved')
+
+    def test_a_save_waiting_its_turn_goes_to_the_link_of_that_moment(self):
+        first = self.save_in_background()  # holds the save lock
+        second = threading.Thread(target=repo_sync._save_and_record,
+                                  args=(self.server, RepoTarget(self.team, 'team/a', 'main', WEB_TOKEN),
+                                        repo_sync._Job('token')))
+        second.start()
+        time.sleep(.1)  # the second save now waits for the lock, having been asked for team/a
+        repo_sync._remember(self.server, self.team, dict(self.ROW, repo='team/b'))
+        self.release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(self.saved_to, [('team/a', 'main'), ('team/b', 'main')])
+        status = repo_status(self.server, self.team)
+        self.assertEqual((status['repo'], status['state'], status['commit']['sha']), ('team/b', 'saved', 'sha-team/b-2'))
+
+    def test_unlinking_while_a_save_waits_its_turn_sends_nothing_more(self):
+        first = self.save_in_background()
+        second = threading.Thread(target=repo_sync._save_and_record,
+                                  args=(self.server, RepoTarget(self.team, 'team/a', 'main', WEB_TOKEN),
+                                        repo_sync._Job('token')))
+        second.start()
+        time.sleep(.1)
+        repo_sync._remember(self.server, self.team, None)
+        self.release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(self.saved_to, [('team/a', 'main')])  # the save already sent still finishes (documented)
+        self.assertEqual(repo_status(self.server, self.team), dict(linked=False))
+
+
 class RepoLinkTeam(TeamIsolation):
     """Teams link their own repository from the web; team A's members link, team B stays out."""
 
@@ -612,7 +714,8 @@ class RepoLinkTeam(TeamIsolation):
 
 
 def load_tests(loader, tests, pattern):
-    plain = [loader.loadTestsFromTestCase(case) for case in (GitHubSave, SaveScheduling, GitHubVerify)]
+    plain = [loader.loadTestsFromTestCase(case) for case in (GitHubSave, SaveScheduling, GitHubVerify,
+                                                             LinkChangeDuringSave)]
     return unittest.TestSuite([*plain, own_tests(RepoSyncTeam), own_tests(RepoLinkTeam)])
 
 
