@@ -1,31 +1,15 @@
 // 첫 화면(피그마 1번 147:2) 섹션마다 오른쪽에 두는 제품 미리보기 목업. 실제 데이터가 아니라 그림이라 글자는 피그마 예시 그대로 둔다.
 // 공통 모양: 흰 카드 · 테두리 rgba(24,23,58,0.1) · 모서리 16 · 그림자 0 1 2 / 0 8 24
-import Image from "next/image";
 import { ArrowUp, Check, Copy, Lock, Puzzle } from "lucide-react";
+import { LogoMark } from "@/components/brand";
 import { cn } from "@/lib/utils";
 
 const frame = "rounded-2xl border border-foreground/10 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_rgb(0_0_0/0.06)]";
 const hairline = "h-px bg-foreground/8";
 
-// 작은 SyncUp 아이콘. 40px 로고(brand.tsx)와 같은 비율로 줄인다: 모서리 24% · 쉐브론 (26,10) 8×4 · S 글자
+// 작은 SyncUp 아이콘: 새 로고(brand.tsx LogoMark — 진갈색 사각형 + 흰 Orbitron S + 반짝이 별)를 줄여 쓴다
 export function MiniMark({ size = 22 }: { size?: number }) {
-  const k = size / 40;
-  return (
-    <span aria-hidden className="relative block shrink-0 bg-brand" style={{ width: size, height: size, borderRadius: 9.6 * k }}>
-      <Image
-        src="/brand/logo-chevron.svg"
-        alt=""
-        width={10.4 * k}
-        height={6.4 * k}
-        unoptimized
-        className="absolute max-w-none"
-        style={{ left: 24.8 * k, top: 8.8 * k, width: 10.4 * k, height: 6.4 * k }}
-      />
-      <span className="absolute left-0 block text-center font-bold text-white" style={{ top: 3.2 * k, width: 36 * k, fontSize: 28 * k, lineHeight: `${33.3 * k}px` }}>
-        S
-      </span>
-    </span>
-  );
+  return <LogoMark className="" style={{ width: size, height: size }} />;
 }
 
 function Dot({ color }: { color: string }) {

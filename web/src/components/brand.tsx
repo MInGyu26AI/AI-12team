@@ -3,9 +3,9 @@ import Link from "next/link";
 // 로고 (시안 "로즈 & 올리브 수채화"): 진갈색 사각형 + 흰 Orbitron "S" + 오른쪽 위 4각 반짝이 별. 색은 currentColor (토큰을 따른다)
 export const SPARK_PATH = "M 97 14 C 99 28 102 31 114 33 C 102 35 99 38 97 52 C 95 38 92 35 80 33 C 92 31 95 28 97 14 Z";
 
-export function LogoMark({ className = "size-10" }: { className?: string }) {
+export function LogoMark({ className = "size-10", style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg viewBox="0 0 120 120" aria-hidden className={`shrink-0 text-ink ${className}`}>
+    <svg viewBox="0 0 120 120" aria-hidden className={`shrink-0 text-ink ${className}`} style={style}>
       <rect width="120" height="120" rx="14" fill="currentColor" />
       <text x="54" y="88" textAnchor="middle" fill="#ffffff" style={{ fontFamily: "var(--font-brand)", fontWeight: 900, fontSize: 72 }}>
         S
