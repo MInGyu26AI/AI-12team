@@ -22,4 +22,4 @@ with tempfile.TemporaryDirectory(prefix='syncup-desktop-probe-') as folder:
     size=struct.unpack('=I',result.stdout[:4])[0]
     response=json.loads(result.stdout[4:4+size])
     assert response == {'ok':True,'result':{'hostReady':True,'keyPresent':False,'expiresAt':None}}, 'unexpected bundled status'
-print('PASS: bundled runtime → native host → setup.status (no Chrome registration, no key issued)')
+print('PASS: bundled runtime -> native host -> setup.status (no Chrome registration, no key issued)')
