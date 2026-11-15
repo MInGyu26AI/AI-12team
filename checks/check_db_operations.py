@@ -107,6 +107,8 @@ class ServerUpgrade(TeamIntegration):
         self.assertEqual(issued,'issued')
         with psycopg.connect(self.admin_dsn) as c:
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
+            c.execute("INSERT INTO syncup.team_repo_links(team_id,repo,token,actor) VALUES(%s,'team/repo',%s,%s)",
+                      (self.teams['A'],'synthetic-restore-link-token-0001',self.users['Dana']))
         before,_ = self.snapshot(self.admin_dsn)
         self.assertTrue(all(before.values()),'Every table (team_settings included) must contain synthetic records')
         self.admin('migrate-integration')

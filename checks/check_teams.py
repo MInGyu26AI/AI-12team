@@ -188,7 +188,8 @@ class TeamIsolation(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.state = Path(self.tmp.name).resolve()
         with psycopg.connect(self.admin_dsn) as c:
-            for table in ('conflict_events','conflicts','conflict_checks','record_states','todo_states','team_settings'):
+            for table in ('conflict_events','conflicts','conflict_checks','record_states','todo_states','team_settings',
+                          'team_repo_links'):
                 c.execute('DELETE FROM syncup.'+table)
             c.execute('DELETE FROM syncup.shared_cards')
             c.execute('DELETE FROM syncup.tokens')
