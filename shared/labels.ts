@@ -55,7 +55,7 @@ export function alertLevel(x: Pick<Conflict, "judgement" | "confidence">): Alert
 export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; dot: string; card: string; banner: string; text: string; button: string }> = {
   conflict: {
     label: "충돌",
-    badge: "bg-ink text-flare",
+    badge: "bg-alert-conflict text-alert-conflict-soft", // 웹 토큰: 진갈색 채움 + 복숭아 글자
     dot: "bg-ink",
     card: "border border-ink bg-glass",
     banner: "border-ink bg-ink",
@@ -64,7 +64,7 @@ export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; dot
   },
   review: {
     label: "확인 필요",
-    badge: "border border-ink text-ink",
+    badge: "border border-alert-review text-alert-review",
     dot: "border border-ink bg-transparent",
     card: "border border-ink bg-glass",
     banner: "border-ink bg-glass",
@@ -73,7 +73,7 @@ export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; dot
   },
   change: {
     label: "변경",
-    badge: "bg-blush text-ink",
+    badge: "bg-alert-change-soft text-alert-change",
     dot: "bg-blush-deep",
     card: "border border-ink bg-glass",
     banner: "border-ink bg-blush",
