@@ -46,7 +46,7 @@ files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 | `team` | `name`, `goal`, `scope`, `rules[]`, `repo` — 있는 것만 |
 | `updated_at` | 마지막 변경 시각: 승인·충돌 처리·할 일 체크 중 가장 늦은 것 (KST ISO, 예 `2026-11-13T14:02+09:00`). 충돌 검사가 새로 찾은 충돌은 시각이 없어 넣지 않는다 |
 | `summary` | `decisions`(현재 결정 수), `open_conflicts`, `todos`, `todos_done`, `research` |
-| `open_conflicts[]` | `id`, `topic_key`, `judgement`, `reason`, `existing{card_id,content,owner}`, `new{…}`, `status`(open / discuss) |
+| `open_conflicts[]` | `id`, `topic_key`, `judgement`(충돌 / 변경 / 확인 필요 — AI가 확신하지 못한 쌍), `reason`, `existing{card_id,content,owner}`, `new{…}`, `status`(open / discuss) |
 | `decisions[]` | 세부 주제(topic_key)별 하나. `subtopic`, `status`(settled / review), `current[]`(최신이 앞, '둘 다 유효'면 여러 개), `history[]`(바뀜 superseded / 채택 안 됨 rejected) |
 | 결정 한 건 | `card_id`, `content`, `reason`, `owner`, `decided_at`, `state` |
 | `todos[]` | `id`(SU-n), `card_id`, `content`, `owner`, `due`, `topic_key`, `done` |
@@ -67,7 +67,6 @@ files = {"syncup.json": dumps(state), "SYNCUP.md": render_markdown(state)}
 ## 정할 것
 
 - 원문 발췌를 SYNCUP.md 에 넣을지 (지금은 안 넣음 — Public 레포 기준)
-- '확인 필요' 판정(조건부 결정)이 생기면 `open_conflicts[].judgement` 에 그대로 들어감 — 서버 판정 값과 맞추기
 - 브랜치 정보를 어디서 읽을지 (GitHub API 의 브랜치별 커밋·열린 PR, 몇 분마다 / 싱크 맞추기 때)
 
 ## 선택 기능 (2차 최종 회의 10장)

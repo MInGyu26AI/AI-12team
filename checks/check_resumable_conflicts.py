@@ -71,7 +71,7 @@ class ResumableChecks(TeamIsolation):
             old = req['existing'][0]
             calls.append(old['id'])
             if len(calls) == 8 and blocked[0]:
-                return dict(ok=False, failureReason='low-confidence')
+                return dict(ok=False, failureReason='check-failed')
             return checked(req, [dict(id='pair-'+old['id'], cardA=old, cardB=req['newCards'][0],
                                      judgement='충돌', reason='합성 충돌', topic_key='DB')])
         self.api.conflict_engine = engine
@@ -80,7 +80,7 @@ class ResumableChecks(TeamIsolation):
         self.assertEqual(self.job()['state'], 'failed')
         self.assertEqual(len(self.team_request('GET', 'conflicts')[1]['conflicts']), 7)
         self.run_due_checks()
-        self.assertEqual(len(calls), 8)  # uncertainty is not retried automatically
+        self.assertEqual(len(calls), 8)  # a failed check is not retried automatically
         self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
         blocked[0] = False
         self.run_due_checks()
@@ -88,6 +88,23 @@ class ResumableChecks(TeamIsolation):
         self.assertEqual(len(calls), 36)
         self.assertEqual(len(set(calls)), 35)
         self.assertEqual(len(self.team_request('GET', 'conflicts')[1]['conflicts']), 35)
+
+    def test_uncertain_pair_becomes_alert_and_the_rest_are_still_compared(self):
+        self.seed(35)
+        calls = []
+        def engine(req):
+            calls.append(req['existing'][0]['id'])
+            return dict(ok=False, failureReason='low-confidence') if len(calls) == 8 else checked(req)
+        self.api.conflict_engine = engine
+        self.run_due_checks()
+        self.assertEqual((self.job()['state'], self.job()['progress']['cursor']), ('pending', 30))
+        self.run_due_checks()
+        self.assertEqual((self.job()['state'], self.job()['progress']['cursor']), ('complete', 35))
+        # Every pair, the uncertain one included, is asked exactly once and no member retry is needed.
+        self.assertEqual(len(calls), 35)
+        self.assertEqual(len(set(calls)), 35)
+        [alert] = self.team_request('GET', 'conflicts')[1]['conflicts']
+        self.assertEqual((alert['cardA']['id'], alert['cardB']['id'], alert['judgement']), (calls[7], 'new', '확인 필요'))
 
     def test_review_included_inactive_skipped_and_revoked_access_stops(self):
         self.seed(35)
