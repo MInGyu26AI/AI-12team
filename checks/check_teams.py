@@ -190,6 +190,7 @@ class TeamIsolation(unittest.TestCase):
         with psycopg.connect(self.admin_dsn) as c:
             for table in ('conflict_events','conflicts','conflict_checks','record_states','todo_states','team_settings'):
                 c.execute('DELETE FROM syncup.'+table)
+            c.execute('DELETE FROM syncup.team_repo_links')  # 7-1 팀 GitHub 레포 연결
             c.execute('DELETE FROM syncup.shared_cards')
             c.execute('DELETE FROM syncup.tokens')
             c.execute('DELETE FROM syncup.memberships')

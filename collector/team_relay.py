@@ -64,3 +64,24 @@ def _notion_request(method, params):
     if set(params) - set(fields):
         raise ValueError('노션 연결 필드 오류')
     return path, {k: params[k] for k in fields if k in params}
+
+
+# --- 7-1 팀 GitHub 레포 연결 (feat/team-repo-link) ---
+# The web's team.verifyRepo / team.linkRepo / team.unlinkRepo (server/repo_sync.py link_request): (path, allowed
+# fields). Kept as its own block so other team writes can be added beside it. The token passes through to the team
+# server only; nothing here stores or logs it.
+REPO_WRITES = {'team.verifyRepo': ('repo/verify', ('repo', 'branch', 'token')),
+               'team.linkRepo': ('repo', ('repo', 'branch', 'token', 'acceptPublic')),
+               'team.unlinkRepo': ('repo/unlink', ())}
+WRITE_METHODS += tuple(REPO_WRITES)
+_write_request_without_repo = _write_request
+
+
+def _write_request(method, params):  # noqa: F811  relay() looks this name up when it runs
+    """(path, body) of a repository link write; every other write as before."""
+    if method not in REPO_WRITES:
+        return _write_request_without_repo(method, params)
+    path, fields = REPO_WRITES[method]
+    if set(params) - set(fields):
+        raise ValueError('레포 연결 필드 오류')
+    return path, {k: params[k] for k in fields if k in params}

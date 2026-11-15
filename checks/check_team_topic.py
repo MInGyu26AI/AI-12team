@@ -101,6 +101,22 @@ class TeamTopic(PipelineFixture):
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, '팀 설정 필드 오류'):
                 team_relay.relay(self.pipeline, 'team.updateSettings', bad)
 
+    def test_relay_links_the_team_repository_with_only_its_fields(self):
+        sent, token = [], 'synthetic-relay-token-0001'
+        self.client.request = lambda path, data=None: sent.append((path, data)) or dict(team_id='a', ok=True)
+        team_relay.relay(self.pipeline, 'team.verifyRepo', dict(repo='team/repo', token=token))
+        team_relay.relay(self.pipeline, 'team.linkRepo', dict(repo='team/repo', branch='main', token=token, acceptPublic=True))
+        team_relay.relay(self.pipeline, 'team.unlinkRepo', {})
+        self.assertEqual(sent, [('teams/a/repo/verify', dict(repo='team/repo', token=token)),
+                                ('teams/a/repo', dict(repo='team/repo', branch='main', token=token, acceptPublic=True)),
+                                ('teams/a/repo/unlink', {})])
+        for method, bad in (('team.verifyRepo', dict(repo='team/repo', acceptPublic=True)),
+                            ('team.unlinkRepo', dict(token=token)), ('team.linkRepo', dict(id='card', token=token))):
+            with self.subTest(method=method), self.assertRaisesRegex(ValueError, '레포 연결 필드 오류') as caught:
+                team_relay.relay(self.pipeline, method, bad)
+            self.assertNotIn(token, str(caught.exception))
+        self.assertEqual(len(sent), 3)
+
 
 if __name__ == '__main__':
     unittest.main()

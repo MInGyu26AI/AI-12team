@@ -162,14 +162,15 @@ docker build -f Dockerfile.cloud .
 | `GET …/repo` | 팀 상태 파일의 GitHub 저장 상태 ([아래](#github-레포-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | `GET …/notion` | 팀 기록의 노션 페이지 저장 상태 ([아래](#노션-페이지-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | `POST …/notion/verify` · `POST …/notion` · `POST …/notion/unlink` | 팀이 웹에서 노션 페이지를 확인 · 연결 · 해제 ([아래](#팀별-연결-웹)). 거절도 200 + `{"ok": false, "reason"}` |
+| `POST …/repo/verify` · `POST …/repo` · `POST …/repo/unlink` | 웹에서 팀 레포 확인 · 연결 · 해제 ([아래](#웹에서-연결)). 거절도 200 `{"ok": false, "reason"}` |
 | `GET …/settings` · `POST …/settings` | 팀이 함께 쓰는 설정 ([아래](#팀-설정)). POST는 보낸 칸만 바꾸고 나머지는 둔다 |
 | `POST /keys` | 웹 GitHub 로그인으로 이 PC의 키 등록. 연결 키 대신 로그인으로 인증한다([아래](#웹-로그인으로-연결-키-받기)) |
 | 공통 | 401 키 없음·틀림·만료·폐기, 사용자 비활성 · 403 그 팀 소속 아님 · 503 DB에 닿지 못함 |
 
 ## GitHub 레포 저장
 
-팀 하나의 상태 파일([SYNCUP.md·syncup.json](team-state.md))을 GitHub 레포 루트에 커밋한다. 코드는 `server/repo_sync.py`(언제·무엇을), `server/github_repo.py`(GitHub API 호출).
-어느 팀을 어느 레포에 저장할지는 서버 환경 변수로만 정한다. 요청으로는 바꿀 수 없다.
+팀의 상태 파일([SYNCUP.md·syncup.json](team-state.md))을 GitHub 레포 루트에 커밋한다. 코드는 `server/repo_sync.py`(언제·무엇을), `server/github_repo.py`(GitHub API 호출).
+어느 레포에 저장할지는 두 가지로 정한다. 팀원이 웹에서 연결한 레포([아래](#웹에서-연결))가 먼저이고, 없으면 서버 환경 변수가 정한 한 팀의 레포를 쓴다.
 레포가 Public이면 결정·할 일 내용, 결정 이유, 충돌 처리 이유, 팀 이름, 요청한 사람 이름이 공개 커밋 기록에 영구히 남는다. 원문 발췌·출처·승인자 ID·AI가 쓴 충돌 이유는 넣지 않는다.
 
 | 환경 변수 | 내용 |
@@ -186,6 +187,25 @@ docker build -f Dockerfile.cloud .
 - GitHub 오류는 팀 API 응답에 영향을 주지 않는다. 진단 로그에는 단계·오류 종류·HTTP 상태만 남고, 다음 변경 때 다시 저장한다. GitHub가 다른 곳으로 리다이렉트하면 토큰은 따라가지 않는다.
 - `GET …/repo` 응답의 `repo`: `linked`, `repo`, `branch`, `files`, `state`(`unknown` 시작 뒤 아직 확인 안 함 / `saved` / `unchanged` / `failed`), `pending`(저장 대기·진행 중), `commit`(`sha`, `url`, `at`), `httpStatus`(실패 때), `checkedAt`(epoch 초). 로컬 수집기 RPC `team.repo`가 같은 응답을 준다.
 - 상태는 메모리에만 있다. 서버를 다시 켜면 `unknown`이고, 그 팀의 첫 요청(보드 조회 등 무엇이든)이 바로 한 번 저장해 연결을 확인한다. 재시작 때문에 기다리던 저장이 끊겼어도 그때 다시 맞춰진다.
+- 응답에는 어디서 정한 연결인지도 들어 있다: `source`(`team` 웹 연결 / `env` 서버 설정), `tokenSet`(토큰이 저장돼 있음. 토큰 자체는 어떤 응답에도 없다), `private`(웹 연결 때 GitHub가 알려 준 공개 여부. 서버 설정은 `null`), `linkedBy`(사용자 ID), `linkedByName`(연결할 때의 이름. 팀원은 서로의 사용자 행을 읽을 수 없어서 따로 남긴다), `linkedAt`.
+
+### 웹에서 연결
+
+활성 팀원 누구나 팀 레포를 연결·해제한다(역할 구분 없음). 마지막으로 바꾼 사람과 시각이 남는다. 표는 `syncup.team_repo_links`(팀당 한 행, `team_upgrades.sql`, 팀 범위 RLS와 '바꾼 사람 = 요청한 사람' 정책), 코드는 `server/repo_sync.py` `link_request`.
+로컬 수집기 RPC는 `team.verifyRepo`·`team.linkRepo`·`team.unlinkRepo`이고, 정한 칸만 팀 서버로 넘긴다(`collector/team_relay.py`).
+
+| 요청 | 본문 | 응답 |
+|---|---|---|
+| `POST …/repo/verify` | `repo`(`owner/name` 또는 `https://github.com/owner/name(.git)`), `branch`(없으면 `main`), `token`(없으면 같은 레포에 저장된 토큰) | `ok`, `check`(`repo`, `branch`, `private`, `canWrite`), 거절이면 `reason`. 저장하지 않는다 |
+| `POST …/repo` | 위와 같고 `acceptPublic`(불리언) | 확인을 통과하면 저장하고 `repo`(위 `GET …/repo`와 같은 상태). 거절이면 `reason`, 아무것도 바꾸지 않는다 |
+| `POST …/repo/unlink` | `{}` | `ok`와 `repo`. 토큰을 지운다. 서버 설정이 그 팀을 가리키면 그쪽으로 돌아간다 |
+
+- `reason`: `bad-format`(주소·브랜치·토큰 형식), `token-needed`(토큰 없이 다른 레포), `bad-token`(401), `not-found`(레포가 없거나 토큰에 안 보임), `no-branch`(브랜치 없음. 빈 레포 포함), `no-write`(쓰기 권한 없음·보관된 레포), `rate-limited`, `unreachable`(GitHub 응답 없음), `public-needs-consent`.
+- **Public 레포:** 확인 응답의 `check.private`이 `false`이면 웹은 "공개 레포라 결정 내용이 외부에 보일 수 있어요"라고 알리고, 동의(`acceptPublic: true`)한 요청만 연결한다. 그때 응답의 `alternative: "notion"`은 원하지 않는 팀에게 노션 페이지 저장을 권하라는 뜻이다(노션 저장 설정은 따로).
+- **확인 순서:** GitHub 호출 세 번 이내(각 2초 제한). ① 레포 정보(공개 여부, 보관 여부, `permissions.push`가 `false`이면 바로 `no-write`) ② 브랜치 ③ 빈 blob 만들기로 쓰기 확인. 레포 정보의 권한은 사람의 권한이라 Fine-grained 토큰이 받은 권한과 다를 수 있어서 ③은 늘 한다. ③은 레포에 참조 없는 빈 객체 하나를 남기고 브랜치는 바꾸지 않는다.
+- GitHub 호출은 DB 트랜잭션 밖에서 한다(읽기 트랜잭션 → GitHub 확인 → 쓰기 트랜잭션). 토큰은 응답·로그·진단·예외 어디에도 나오지 않고, 다시 읽어 주는 요청도 없다. 표에는 평문으로 저장되므로 DB 백업과 관리자 계정에는 보인다. 토큰은 그 레포 하나만 고른 Fine-grained 토큰(Contents: Read and write)을 쓰게 안내한다.
+- 연결이 바뀌면 상태가 `unknown`으로 돌아가고, 기다리던 저장은 저장할 때의 연결로 간다. 다른 서버 인스턴스의 변경은 60초 안에 보인다(요청마다 그 팀의 연결을 60초에 한 번 다시 읽음).
+- **배포 순서:** 새 표 때문에 먼저 `server/team_admin.py migrate-integration`(관리자 DSN)을 돌리고 나서 서버를 다시 배포한다. 거꾸로 하면 새 서버가 '행 접근 정책 설정을 확인하세요'로 시작하지 않는다.
 
 ## 노션 페이지 저장
 

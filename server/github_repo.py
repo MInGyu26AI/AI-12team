@@ -11,32 +11,37 @@ import urllib.parse
 import urllib.request
 
 REQUEST_TIMEOUT_SECONDS = 15
+# A link check makes up to three calls while the collector waits 8 seconds for the team server (team_client.py).
+VERIFY_TIMEOUT_SECONDS = 2
 MOVED_BRANCH_RETRIES = 2  # the branch moved between reading and updating it: build the files again on the new head
 
 
 class GitHubError(Exception):
     """A GitHub API failure; `code` is the HTTP status when GitHub answered."""
 
-    def __init__(self, message, code=None):
+    def __init__(self, message, code=None, limited=False):
         super().__init__(message)
         self.code = code
+        self.limited = limited  # GitHub's rate limit, not the token or the repository
 
 
-def call(target, method, path, body=None):
-    """One request to `{api}/repos/{repo}/{path}` with `target.token`; the JSON answer."""
+def call(target, method, path, body=None, timeout=REQUEST_TIMEOUT_SECONDS):
+    """One request to `{api}/repos/{repo}/{path}` (the repository itself when path is empty) with `target.token`;
+    the JSON answer."""
     request = urllib.request.Request(
-        f'{target.api}/repos/{target.repo}/{path}', method=method,
+        f'{target.api}/repos/{target.repo}' + (f'/{path}' if path else ''), method=method,
         data=None if body is None else json.dumps(body).encode(),
         headers={'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
                  'User-Agent': 'SyncUp-team-server', 'Content-Type': 'application/json'})
     # urllib copies ordinary headers to wherever a redirect points; an unredirected one is never sent there
     request.add_unredirected_header('Authorization', 'Bearer ' + target.token)
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as error:
+        limited = error.code == 429 or (error.headers or {}).get('x-ratelimit-remaining') == '0'
         error.close()
-        raise GitHubError(f'GitHub {method} 실패', code=error.code) from None
+        raise GitHubError(f'GitHub {method} 실패', code=error.code, limited=limited) from None
     except (OSError, ValueError, http.client.HTTPException):  # no connection, timeout, broken reply or not JSON
         raise GitHubError('GitHub 응답을 받지 못했습니다.') from None
 
@@ -99,3 +104,35 @@ def _previous_state(target, current):
     except (KeyError, TypeError, ValueError):
         return {}
     return previous if isinstance(previous, dict) else {}
+
+
+def verify(target, timeout=VERIFY_TIMEOUT_SECONDS):
+    """Whether `target.token` can commit to `target.branch`: (None, private) when it can, else (reason, private).
+
+    private is None until GitHub has said. Three calls at most: the repository, the branch, and an empty blob as the
+    write probe. The probe always runs, because the repository's `permissions` describe the person, not what a
+    fine-grained token was granted. It adds an unreferenced object and moves no branch."""
+    try:
+        repo = call(target, 'GET', '', timeout=timeout)
+    except GitHubError as error:
+        return _refusal(error, {401: 'bad-token', 403: 'not-found', 404: 'not-found'}), None
+    if not isinstance(repo, dict) or not isinstance(repo.get('private'), bool):
+        return 'unreachable', None
+    private = repo['private']
+    if repo.get('archived') or (repo.get('permissions') or {}).get('push') is False:
+        return 'no-write', private
+    try:
+        call(target, 'GET', f"git/ref/heads/{urllib.parse.quote(target.branch, safe='/')}", timeout=timeout)
+    except GitHubError as error:  # 409: the repository has no commit yet, so no branch either
+        return _refusal(error, {401: 'bad-token', 404: 'no-branch', 409: 'no-branch'}), private
+    try:
+        call(target, 'POST', 'git/blobs', dict(content='', encoding='utf-8'), timeout=timeout)
+    except GitHubError as error:
+        return _refusal(error, {401: 'bad-token', 403: 'no-write', 404: 'no-write'}), private
+    return None, private
+
+
+def _refusal(error, reasons):
+    if error.limited:
+        return 'rate-limited'
+    return reasons.get(error.code, 'unreachable')

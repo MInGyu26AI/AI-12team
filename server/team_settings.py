@@ -58,3 +58,33 @@ def state_team(c, team_id):
     """The goal, scope and rules syncup.json carries in its team block (empty values are dropped there)."""
     s = read_settings(c, team_id)
     return dict(goal=s['goal'], scope=s['scope'], rules=s['rules'])
+
+
+# The GitHub repository a team links from the web (syncup.team_repo_links). Only repo_sync.py reads the token, to
+# save the team state files; nothing here returns it to a client.
+def read_repo_link(c, team_id):
+    """The team's active link as {repo, branch, token, private, linkedBy, linkedByName, linkedAt}, or None."""
+    row = c.execute('''SELECT repo,branch,token,private,actor,actor_name,at FROM syncup.team_repo_links
+        WHERE team_id=%s AND active''', (team_id,)).fetchone()
+    if not row:
+        return None
+    return dict(repo=row['repo'], branch=row['branch'], token=row['token'], private=row['private'],
+                linkedBy=str(row['actor']), linkedByName=row['actor_name'], linkedAt=row['at'].isoformat())
+
+
+def save_repo_link(c, team_id, user_id, repo, branch, token, private):
+    """Link (or relink) the team; the caller holds the team write lock and has checked the repository."""
+    name = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
+    c.execute('''INSERT INTO syncup.team_repo_links(team_id,repo,branch,token,private,active,actor,actor_name)
+        VALUES(%s,%s,%s,%s,%s,true,%s,%s)
+        ON CONFLICT(team_id) DO UPDATE SET repo=excluded.repo,branch=excluded.branch,token=excluded.token,
+            private=excluded.private,active=true,actor=excluded.actor,actor_name=excluded.actor_name,at=clock_timestamp()''',
+        (team_id, repo, branch, token, private, user_id, name[:200]))
+    return read_repo_link(c, team_id)
+
+
+def clear_repo_link(c, team_id, user_id):
+    """Unlink the team and drop its token; True when a link was active. The caller holds the team write lock."""
+    name = c.execute('SELECT name FROM syncup.users').fetchone()['name']
+    return c.execute('''UPDATE syncup.team_repo_links SET active=false,token='',actor=%s,actor_name=%s,at=clock_timestamp()
+        WHERE team_id=%s AND active''', (user_id, name[:200], team_id)).rowcount == 1

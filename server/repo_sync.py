@@ -1,11 +1,13 @@
 """Saving the team state files (SYNCUP.md, syncup.json) to the linked GitHub repository.
 
-The server's environment links one team to one repository; no request can choose the repository:
-SYNCUP_GITHUB_TEAM (team id), SYNCUP_GITHUB_REPO (owner/name), SYNCUP_GITHUB_BRANCH (default main) and
-SYNCUP_GITHUB_TOKEN, a fine-grained token for that repository only (Contents: read and write).
+A team links its repository from the web (link_request: POST /teams/{id}/repo, …/repo/verify, …/repo/unlink): any
+active member gives owner/name, the branch and a fine-grained token for that repository only (Contents: read and
+write). The server checks that the token can commit there and stores the link in syncup.team_repo_links.
+The server's environment can still link one team: SYNCUP_GITHUB_TEAM (team id), SYNCUP_GITHUB_REPO (owner/name),
+SYNCUP_GITHUB_BRANCH (default main) and SYNCUP_GITHUB_TOKEN. A team's own web link wins over it.
 After a team change the files are rebuilt from the database. Changes less than SAVE_DELAY_SECONDS apart
 go into one commit, and nothing is committed when the branch already holds the same files.
-The token is sent only to the GitHub API (github_repo.py); it is never stored, logged or returned.
+The token is sent only to the GitHub API (github_repo.py); it is never logged or returned to any client.
 """
 import os
 import re
@@ -17,10 +19,10 @@ from dataclasses import dataclass, field
 
 from ai.syncup_ai.team_state import build_state, dumps, render_markdown
 from diagnostics import failure
-from github_repo import GitHubError, last_commit, save
-from team_access import authorized
+from github_repo import GitHubError, last_commit, save, verify
+from team_access import AccessError, authorized, team_lock
 from team_board import board, conflicts, done_todos
-from team_settings import state_team
+from team_settings import clear_repo_link, read_repo_link, save_repo_link, state_team
 
 GITHUB_API = 'https://api.github.com'
 FILES = ('SYNCUP.md', 'syncup.json')
@@ -29,6 +31,12 @@ SAVE_MAX_WAIT_SECONDS = 60  # while changes keep coming, still save at least thi
 REPO_NAME = re.compile(r'[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}')
 # Names git accepts for a branch: no empty or dot-led part, no '..' and no '.lock' ending.
 BRANCH_NAME = re.compile(r'(?![./])(?!.*(?:\.\.|//|/\.|/$|\.lock$))[A-Za-z0-9._/-]{1,200}')
+TOKEN_TEXT = re.compile(r'[\x21-\x7e]{20,255}')  # any GitHub token: printable ASCII without spaces
+LINK_CACHE_SECONDS = 60  # another server instance's link change is seen within this time
+# POST /teams/{id}/repo<tail>: the action and the fields its JSON body may have.
+LINK_ACTIONS = {(): ('link', ('repo', 'branch', 'token', 'acceptPublic')),
+                ('verify',): ('verify', ('repo', 'branch', 'token')),
+                ('unlink',): ('unlink', ())}
 
 
 @dataclass(frozen=True)
@@ -142,10 +150,54 @@ def _credit(people, more):
         people[name] = people.get(name, False) or approved
 
 
+@dataclass(frozen=True)
+class _Link:
+    """A team's web link as last read from the database; target None when it has none."""
+    target: RepoTarget | None
+    meta: dict
+    loaded: float
+
+
+_links = weakref.WeakKeyDictionary()  # server -> {team id: _Link}; guarded by _lock
+
+
 def linked(server, team_id):
-    """The repository linked to this team (an id as uuid or text), or None."""
+    """The repository linked to this team (an id as uuid or text), or None. The team's web link comes first,
+    then the server's environment link."""
+    link = _cached_link(server, team_id)
+    if link is not None and link.target is not None:
+        return link.target
     target = getattr(server, 'repo_target', None)
     return target if target is not None and str(target.team_id) == str(team_id) else None
+
+
+def _cached_link(server, team_id):
+    if server is None:
+        return None
+    with _lock:
+        return _links.get(server, {}).get(str(team_id))
+
+
+def load_link(c, server, team_id):
+    """Read the team's web link inside the request's transaction when it is not known or older than
+    LINK_CACHE_SECONDS. Saves and status reads, which have no transaction, use what this keeps."""
+    link = _cached_link(server, team_id)
+    if server is not None and (link is None or time.monotonic() - link.loaded >= LINK_CACHE_SECONDS):
+        _remember(server, team_id, read_repo_link(c, team_id))
+
+
+def _remember(server, team_id, row):
+    """Keep the team's link (row from team_settings.read_repo_link, or None); a changed link forgets the last
+    save outcome, so the status reads 'unknown' until the next save to the new repository."""
+    target = None if row is None else RepoTarget(uuid.UUID(str(team_id)), row['repo'], row['branch'], row['token'],
+                                                 api=getattr(server, 'github_api', GITHUB_API))
+    meta = {} if row is None else {k: row[k] for k in ('private', 'linkedBy', 'linkedByName', 'linkedAt')}
+    with _lock:
+        links = _links.setdefault(server, {})
+        before = links.get(str(team_id))
+        links[str(team_id)] = _Link(target, meta, time.monotonic())
+        if before is None or before.target != target:
+            _saves(server).status.pop(uuid.UUID(str(team_id)), None)
 
 
 def first_check_due(server, team_id):
@@ -182,6 +234,8 @@ def schedule_save(server, token, team_id, actor=None, approved=False, delay=None
 
 
 def _wait_then_save(server, target, job):
+    """Wait for the batch to settle, then save to the repository linked at that moment (a team may have linked
+    another one meanwhile, or unlinked)."""
     team_id = target.team_id
     while True:
         with _lock:
@@ -194,8 +248,9 @@ def _wait_then_save(server, target, job):
             job.wake.clear()
         job.wake.wait(wait)
     try:
-        if not server.checks_stop.is_set():
-            _save_and_record(server, target, job)
+        current = linked(server, team_id)
+        if current is not None and not server.checks_stop.is_set():
+            _save_and_record(server, current, job)
     finally:
         with _lock:
             running = _saves(server).running
@@ -235,12 +290,85 @@ def _save_and_record(server, target, job):
 
 
 def repo_status(server, team_id):
-    """What the web shows about the linked repository; {'linked': False} for every other team."""
+    """What the web shows about the linked repository; {'linked': False} for every other team.
+
+    source is 'team' for the team's web link and 'env' for the server's environment link. tokenSet only says
+    that a token is stored; the token itself is never part of any answer."""
     target = linked(server, team_id)
     if target is None:
         return dict(linked=False)
+    link = _cached_link(server, team_id)
+    if link is not None and link.target == target:
+        about = dict(source='team', **link.meta)
+    else:
+        about = dict(source='env', private=None, linkedBy=None, linkedByName=None, linkedAt=None)
     with _lock:
         saves = _saves(server)
         busy = target.team_id in saves.waiting or target.team_id in saves.running
         status = dict(saves.status.get(target.team_id) or dict(state='unknown'), pending=busy)
-    return dict(linked=True, repo=target.repo, branch=target.branch, files=list(FILES), **status)
+    return dict(linked=True, repo=target.repo, branch=target.branch, files=list(FILES), tokenSet=True,
+                **about, **status)
+
+
+def link_request(server, token, team_id, tail, data):
+    """POST /teams/{id}/repo (link), …/repo/verify (check only) and …/repo/unlink, for any active member.
+
+    GitHub is called between two database transactions, never inside one. A refusal answers HTTP 200 with
+    {ok: False, reason}, because the collector turns every 4xx into a 503 and the web could not say why.
+    reason: bad-format, token-needed, bad-token, not-found, no-branch, no-write, rate-limited, unreachable,
+    public-needs-consent. A public repository is linked only with acceptPublic true; until then the answer
+    points to the Notion page instead (alternative 'notion')."""
+    action, fields = LINK_ACTIONS.get(tuple(tail), (None, ()))
+    if action is None:
+        raise AccessError(404)
+    if not isinstance(data, dict) or set(data) - set(fields):
+        raise ValueError('레포 연결 필드 오류')
+    answer = dict(team_id=str(team_id))
+    if action == 'unlink':
+        with authorized(server.dsn, token, team_id) as (c, user_id):
+            team_lock(c, team_id)
+            clear_repo_link(c, team_id, user_id)
+        _remember(server, team_id, None)
+        return dict(answer, ok=True, repo=repo_status(server, team_id))
+    with authorized(server.dsn, token, team_id) as (c, _user):
+        stored = read_repo_link(c, team_id)
+    wanted = _link_input(data, stored)
+    if isinstance(wanted, str):
+        return dict(answer, ok=False, reason=wanted)
+    repo, branch, secret = wanted
+    reason, private = verify(RepoTarget(uuid.UUID(str(team_id)), repo, branch, secret,
+                                        api=getattr(server, 'github_api', GITHUB_API)))
+    answer['check'] = dict(repo=repo, branch=branch, private=private, canWrite=reason is None)
+    if private is False:
+        answer['alternative'] = 'notion'  # the web suggests the Notion page to a team that does not want it public
+    if reason is None and action == 'link' and private is False and data.get('acceptPublic') is not True:
+        reason = 'public-needs-consent'
+    if reason is not None or action == 'verify':
+        return dict(answer, ok=reason is None, **({'reason': reason} if reason else {}))
+    with authorized(server.dsn, token, team_id) as (c, user_id):
+        team_lock(c, team_id)
+        row = save_repo_link(c, team_id, user_id, repo, branch, secret, private)
+    _remember(server, team_id, row)
+    return dict(answer, ok=True, repo=repo_status(server, team_id))
+
+
+def _link_input(data, stored):
+    """(repo, branch, token) from a link or verify body, or the refusal reason. A missing token reuses the stored
+    one only for the same repository, so nobody can point the team's token at another repository."""
+    repo, branch, secret = data.get('repo'), data.get('branch', 'main'), data.get('token')
+    accept = data.get('acceptPublic', False)
+    if not isinstance(repo, str) or not isinstance(branch, str) or not isinstance(accept, bool) \
+            or not (secret is None or isinstance(secret, str)):
+        raise ValueError('레포 연결 필드 형식 오류')
+    repo = re.sub(r'^(?:https?://)?(?:www\.)?github\.com/', '', repo.strip()).removesuffix('/').removesuffix('.git')
+    branch = branch.strip() or 'main'
+    if not REPO_NAME.fullmatch(repo) or not BRANCH_NAME.fullmatch(branch):
+        return 'bad-format'
+    secret = (secret or '').strip()
+    if not secret:
+        if stored is None or stored['repo'].lower() != repo.lower():
+            return 'token-needed'
+        secret = stored['token']
+    elif not TOKEN_TEXT.fullmatch(secret):
+        return 'bad-format'
+    return repo, branch, secret
