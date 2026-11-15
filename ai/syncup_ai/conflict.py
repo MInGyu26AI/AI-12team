@@ -3,9 +3,11 @@
 1) 후보: 유효한 승인 결정을 같은 topic_key·유사도 순으로 정렬한다. 키나 유사도로 빼지 않는다.
 2) 판정: CONFLICT_TOP_K 쌍씩 Decisions 로 묻는다. Decisions 가 없거나 통신 실패(RetryableLLMError)면 그 묶음을 chat 모델로 묻는다.
    Decisions 확신도가 낮으면 chat 모델과 Decisions 가 따로 한 번 더 본다(독립 검토).
-3) allow_rules=False(팀 worker): 누락·낮은 확신도·한도 초과는 검사 실패다.
+3) allow_rules=False(팀 worker): 누락·한도 초과는 검사 실패다.
    allow_rules=True(CLI·오프라인): AI 가 없거나 빠뜨린 답을 규칙(같은 topic_key + 다른 내용)으로 채우고 degraded 로 끝난다.
-4) 충돌(설정에 따라 변경도) → shared/types.ts Conflict 객체
+   독립 검토 뒤에도 확신도가 낮은 쌍은 '확인 필요' 판정으로 돌려주고 다음 쌍을 계속 본다. AI 가 고른 관계와 확신도는
+   aiJudgement·confidence 로 남긴다 (팀이 정하도록 알림으로 보냄, server/conflict_checks.py).
+4) 충돌(설정에 따라 변경도)·확인 필요 → shared/types.ts Conflict 객체
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from .mask import mask_text
 from .schema import norm_key
 
 JUDGEMENTS = ("같음", "변경", "충돌", "무관")
+UNCERTAIN = "확인 필요"  # 확신도가 부족한 쌍의 판정 (JUDGEMENTS 와 달리 AI 가 고르지 않는다)
 
 
 class LowConfidenceError(ValueError):
@@ -155,10 +158,21 @@ def check_new_decision(
             result = [_independent_review(new, c, j, llm, decider, deadline)
                       if j["method"] == "decisions" and not _confident(j) else j
                       for c, j in zip(batch, result)]
-        if any(j["method"] != "rule" and not _confident(j) for j in result):
-            raise LowConfidenceError("확인 필요: AI 판정의 확신도가 부족합니다. 검사 미완료입니다.")
-        judged.extend(result)
+        judged.extend(_uncertain(j) if j["method"] != "rule" and not _confident(j) else j for j in result)
     return judged, _conflicts(new, candidates, judged)
+
+
+def _uncertain(judgement: dict) -> dict:
+    """확신도가 부족한 판정 → '확인 필요'. 다시 묻지 않고 팀이 정한다."""
+    chosen = judgement.get("judgement")
+    value = judgement.get("confidence")
+    return {
+        **judgement,
+        "judgement": UNCERTAIN,
+        "aiJudgement": chosen,
+        "confidence": value if type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1 else None,
+        "reason": f"AI는 '{chosen}'(으)로 봤지만 확신하지 못했어요. 함께 성립하는지 팀이 확인해 주세요.",
+    }
 
 
 def _judge_batch(new: dict, batch: list[dict], llm: LLM | None, decider: Decider | None,
@@ -213,7 +227,7 @@ def _independent_review(new: dict, candidate: dict, judgement: dict, llm: LLM, d
 
 def alert_judgements() -> set[str]:
     """경고(Conflict)로 내보내는 판정. 평가 스크립트도 같은 기준으로 채점한다."""
-    return {"충돌", "변경"} if config.CONFLICT_ON_CHANGE else {"충돌"}
+    return {"충돌", "변경", UNCERTAIN} if config.CONFLICT_ON_CHANGE else {"충돌", UNCERTAIN}
 
 
 def _conflicts(new: dict, candidates: list[dict], judged: list[dict]) -> list[dict]:
@@ -233,8 +247,9 @@ def _conflict(old: dict, new: dict, judgement: dict) -> dict:
         "confidence": judgement["confidence"],
         "method": judgement["method"],
     }
-    if "reviewedBy" in judgement:
-        conflict["reviewedBy"] = judgement["reviewedBy"]
+    for key in ("reviewedBy", "aiJudgement"):
+        if key in judgement:
+            conflict[key] = judgement[key]
     return conflict
 
 

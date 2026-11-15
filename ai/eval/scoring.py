@@ -36,7 +36,11 @@ def judge(new: dict, existing: list[dict], llm, decider) -> tuple[list[dict], li
     result = conflict.handle_request({"newCards": [new], "existing": existing}, llm, decider, allow_rules=rule_only)
     if not result["ok"]:
         return [], [], result["failureReason"]
-    return result["results"][0]["judgements"], result["conflicts"], None
+    judged = result["results"][0]["judgements"]
+    # 서비스는 확신도가 부족한 쌍을 '확인 필요' 알림으로 남기지만, 평가는 전처럼 미완료로 센다 (지난 측정과 같은 기준).
+    if any(j["judgement"] == conflict.UNCERTAIN for j in judged):
+        return [], [], "low-confidence"
+    return judged, result["conflicts"], None
 
 
 def alert_rates(outcomes: list[tuple[bool, bool]]) -> dict:

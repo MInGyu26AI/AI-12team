@@ -96,6 +96,11 @@ class StateTest(unittest.TestCase):
         st = build_state(board(), quoted)
         self.assertEqual(st["open_conflicts"][0]["reason"], "다른 사람이 합의 없이 양립할 수 없는 값을 정함")
         self.assertNotIn("로고 이름은", dumps(st) + render_markdown(st))
+        # '확인 필요'도 고정 문구로만 나가고, AI 가 고른 관계·확신도는 나가지 않는다
+        unsure = [dict(conflicts()[1], judgement="확인 필요", aiJudgement="충돌", confidence=0.41, reason="AI 이유")]
+        st = build_state(board(), unsure)
+        self.assertEqual(st["open_conflicts"][0]["reason"], "AI가 두 결정의 관계를 확신하지 못함, 팀 확인 필요")
+        self.assertNotIn("0.41", dumps(st) + render_markdown(st))
 
     def test_updated_at_counts_later_changes(self):
         # 충돌 처리·할 일 체크가 마지막 승인보다 늦으면 그 시각, 이르면 승인 시각
