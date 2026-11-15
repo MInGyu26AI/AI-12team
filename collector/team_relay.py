@@ -34,7 +34,9 @@ def _write_request(method, params):
 def relay(pipeline, method, params):
     with connect(pipeline.db) as c:
         team_id = bound_team(c)
-    if method in NOTION_WRITES:
+    if method in INVITE_METHODS:
+        path, data = _invite_request(method, params)
+    elif method in NOTION_WRITES:
         path, data = _notion_request(method, params)
     elif method in WRITE_METHODS:
         path, data = _write_request(method, params)
@@ -85,3 +87,18 @@ def _write_request(method, params):  # noqa: F811  relay() looks this name up wh
     if set(params) - set(fields):
         raise ValueError('레포 연결 필드 오류')
     return path, {k: params[k] for k in fields if k in params}
+
+
+# ── 초대 링크 (server/team_invites.py): list, make and revoke the bound team's links ──
+INVITE_METHODS = ('team.invites', 'team.createInvite', 'team.revokeInvite')
+
+
+def _invite_request(method, params):
+    """(path, body or None for a read) of one invite request."""
+    if method == 'team.invites':
+        return 'invites', None
+    if method == 'team.createInvite':
+        return 'invites', {}
+    if not (isinstance(params.get('id'), str) and params['id']):
+        raise ValueError('팀 요청 대상 id가 없습니다.')
+    return f"invites/{quote(params['id'], safe='')}/revoke", {}
