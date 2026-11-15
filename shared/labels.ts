@@ -50,35 +50,35 @@ export function alertLevel(x: Pick<Conflict, "judgement" | "confidence">): Alert
   return x.judgement === "변경" ? "change" : "conflict";
 }
 
-// 피그마 '충돌 알림 3단계'(226:976): 빨강은 충돌에만. 노랑·파랑은 작은 점(dot) + 글자색(text)으로만 쓰고 면을 칠하지 않는다.
-// 보드 결정 카드(card)는 세 단계 모두 흰 면 + 카드 테두리 #e2d6c3 · 모서리 10 (6번 노드 182:84)
+// 충돌 알림 3단계 모양 (시안 "로즈 & 올리브 수채화"): 충돌 = 진갈색 채움 + 복숭아 글자, 확인 필요 = 진갈색 테두리, 변경 = 연분홍 채움.
+// 보드 결정 카드(card)는 세 단계 모두 진갈색 1.5px 테두리 + 반투명 흰 바탕
 export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; dot: string; card: string; banner: string; text: string; button: string }> = {
   conflict: {
     label: "충돌",
-    badge: "bg-alert-conflict-soft text-alert-conflict",
-    dot: "bg-alert-conflict",
-    card: "rounded-[10px] border border-card-border bg-white",
-    banner: "border-alert-conflict/40 bg-alert-conflict-soft",
-    text: "text-alert-conflict",
-    button: "bg-alert-conflict hover:bg-alert-conflict/90",
+    badge: "bg-ink text-flare",
+    dot: "bg-ink",
+    card: "border border-ink bg-glass",
+    banner: "border-ink bg-ink",
+    text: "text-flare",
+    button: "bg-flare text-ink hover:bg-flare/85",
   },
   review: {
     label: "확인 필요",
-    badge: "bg-alert-review-soft text-alert-review",
-    dot: "bg-alert-review-dot",
-    card: "rounded-[10px] border border-card-border bg-white",
-    banner: "border-alert-review-dot/50 bg-alert-review-soft",
-    text: "text-alert-review",
-    button: "bg-alert-review hover:bg-alert-review/90",
+    badge: "border border-ink text-ink",
+    dot: "border border-ink bg-transparent",
+    card: "border border-ink bg-glass",
+    banner: "border-ink bg-glass",
+    text: "text-ink",
+    button: "bg-ink text-white hover:bg-ink/85",
   },
   change: {
     label: "변경",
-    badge: "bg-alert-change-soft text-alert-change",
-    dot: "bg-alert-change",
-    card: "rounded-[10px] border border-card-border bg-white",
-    banner: "border-alert-change/40 bg-alert-change-soft",
-    text: "text-alert-change",
-    button: "bg-alert-change hover:bg-alert-change/90",
+    badge: "bg-blush text-ink",
+    dot: "bg-blush-deep",
+    card: "border border-ink bg-glass",
+    banner: "border-ink bg-blush",
+    text: "text-ink",
+    button: "bg-ink text-white hover:bg-ink/85",
   },
 };
 

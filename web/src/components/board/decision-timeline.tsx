@@ -105,7 +105,7 @@ function DecisionItem({ card: c, flag, saved, repoLinked, onOpen }: {
             {[c.owner, src.label].filter(Boolean).join(" · ")}
           </p>
           {repoLinked && (saved || level) && (
-            <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
+            <span className="flex items-center gap-1 border border-ink px-1.5 py-0.5 text-[11px] text-ink">
               <Image src="/brand/github.svg" alt="" width={12} height={12} unoptimized className="opacity-60" />
               {saved ? "레포 반영" : "충돌 해결 후 레포에 저장"}
             </span>

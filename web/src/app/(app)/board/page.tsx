@@ -18,6 +18,7 @@ import { ResearchPanel } from "@/components/board/research-panel";
 import { TodoPanel } from "@/components/board/todo-panel";
 import { ConflictDialog } from "@/components/conflict-dialog";
 import { PageTitle } from "@/components/page-title";
+import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { buttonPrimary } from "@/components/ui/surface";
 import { USE_MOCK, api } from "@/lib/api";
@@ -93,6 +94,7 @@ export default function BoardPage() {
   return (
     <Shell>
       <PageTitle
+        display="What we decided."
         title="팀 결정 기록"
         actions={
           <>
@@ -170,7 +172,12 @@ export default function BoardPage() {
 
 // 피그마 본문: 폭 1280 화면에서 좌우 40 · 위 32 (내용 폭 1200)
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-[1280px] space-y-5 px-gutter py-8 sm:px-10">{children}</div>;
+  return (
+    <div className="relative min-h-[calc(100dvh-4rem)] overflow-hidden">
+      <WatercolorBg />
+      <div className="relative mx-auto max-w-[1280px] space-y-5 px-gutter py-8 sm:px-10">{children}</div>
+    </div>
+  );
 }
 
 const topicOf = (c: RelatedCard) => c.topic_key ?? "기타";
