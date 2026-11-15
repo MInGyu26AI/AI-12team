@@ -164,7 +164,20 @@ class SetupServer(http.server.ThreadingHTTPServer):
         self.secret = secrets.token_urlsafe(32)
         self.cookie_name = 'syncup_setup_' + secrets.token_hex(8)
         self.bootstrap = secrets.token_urlsafe(32)
+        self.bootstrap_lock = threading.Lock()
         self.origin = f'http://127.0.0.1:{self.server_port}'
+
+    def browser_url(self):
+        with self.bootstrap_lock:
+            self.bootstrap = secrets.token_urlsafe(32)
+            return self.origin + '/open/' + self.bootstrap
+
+    def consume_bootstrap(self, path):
+        with self.bootstrap_lock:
+            if self.bootstrap and secrets.compare_digest(path.encode('utf-8'), ('/open/' + self.bootstrap).encode('ascii')):
+                self.bootstrap = None
+                return True
+        return False
 
 
 class SetupHandler(http.server.BaseHTTPRequestHandler):
@@ -202,8 +215,7 @@ class SetupHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.valid_host():
             return self.reply(403, {})
-        if self.server.bootstrap and self.path == '/open/' + self.server.bootstrap:
-            self.server.bootstrap = None
+        if self.server.consume_bootstrap(self.path):
             return self.reply(303, b'', headers={'Location': '/', 'Set-Cookie':
                 f'{self.server.cookie_name}={self.server.secret}; HttpOnly; SameSite=Strict; Path=/'})
         if not self.authorized():
@@ -274,8 +286,12 @@ def main():
         source, relative = executable.parent, Path(executable.name)
     state = DesktopState(resources, source, relative)
     with SetupServer(state) as server:
-        webbrowser.open(server.origin + '/open/' + server.bootstrap)
         try:
-            server.serve_forever()
+            if sys.platform == 'darwin':
+                from desktop_macos import run
+                run(server)
+            else:
+                webbrowser.open(server.browser_url())
+                server.serve_forever()
         finally:
             state.stop()

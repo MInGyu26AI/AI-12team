@@ -137,5 +137,25 @@ class SetupHttp(unittest.TestCase):
                          {'Cookie':cookie,'Origin':self.server.origin,'Host':'evil.example'} ]:
             self.assertEqual(self.call('POST','/install',headers,'{}')[0],403)
 
+    def test_reopen_renews_one_use_link_without_revoking_existing_tab(self):
+        first = self.server.browser_url().removeprefix(self.server.origin)
+        status, headers, _ = self.call('GET', first)
+        self.assertEqual(status, 303)
+        cookie = headers['Set-Cookie'].split(';')[0]
+        second = self.server.browser_url().removeprefix(self.server.origin)
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.call('GET', first)[0], 403)
+        self.assertEqual(self.call('GET', second)[0], 303)
+        self.assertEqual(self.call('GET', second)[0], 403)
+        self.assertEqual(self.call('GET', '/status', {'Cookie': cookie})[0], 200)
+
+    def test_bootstrap_can_only_be_consumed_once_concurrently(self):
+        from concurrent.futures import ThreadPoolExecutor
+        path = self.server.browser_url().removeprefix(self.server.origin)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            statuses = list(pool.map(lambda _: self.call('GET', path)[0], range(8)))
+        self.assertEqual(statuses.count(303), 1)
+        self.assertEqual(statuses.count(403), 7)
+
 
 if __name__=='__main__': unittest.main(verbosity=2)
