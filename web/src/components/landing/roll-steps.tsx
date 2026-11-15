@@ -15,15 +15,15 @@ export interface RollStep {
   body: string; // 한국어 설명
 }
 
-// 단계 아이콘: 점 / 고리 / 이중 고리(안쪽 연분홍) / 초신성 — 첫 화면 히어로의 별 단계와 같은 모양
-const RING: React.CSSProperties = { display: "block", width: 96, height: 96, borderRadius: "50%", borderStyle: "solid", borderColor: "var(--color-ink)" };
+// 단계 아이콘: 점 96 / 고리 118(테두리 20) / 이중 고리 136(테두리 24 + 안쪽 연분홍 12) / 초신성 136 — 히어로의 별 단계와 같은 모양
+const RING: React.CSSProperties = { display: "block", borderRadius: "50%", borderStyle: "solid", borderColor: "var(--color-ink)" };
 
 function StepIcon({ index }: { index: number }) {
-  if (index === 0) return <span aria-hidden style={{ ...RING, width: 64, height: 64, borderWidth: 32 }} />;
-  if (index === 1) return <span aria-hidden style={{ ...RING, borderWidth: 18 }} />;
-  if (index === 2) return <span aria-hidden style={{ ...RING, borderWidth: 22, boxShadow: "inset 0 0 0 11px var(--color-blush-deep)" }} />;
+  if (index === 0) return <span aria-hidden style={{ ...RING, width: 96, height: 96, borderWidth: 48 }} />;
+  if (index === 1) return <span aria-hidden style={{ ...RING, width: 118, height: 118, borderWidth: 20 }} />;
+  if (index === 2) return <span aria-hidden style={{ ...RING, width: 136, height: 136, borderWidth: 24, boxShadow: "inset 0 0 0 12px var(--color-blush-deep)" }} />;
   return (
-    <svg viewBox="0 0 100 100" aria-hidden className="size-24 text-ink">
+    <svg viewBox="0 0 100 100" aria-hidden className="size-[136px] text-ink">
       <path d={BURST_PATH} fill="currentColor" />
     </svg>
   );
@@ -49,8 +49,8 @@ export function RollSteps({ steps }: { steps: RollStep[] }) {
   const [active, setActive] = useState(0);
   const current = steps[active]!;
   return (
-    <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-stretch">
-      <ul className="divide-y divide-ink/80 border-y border-ink">
+    <div className="grid w-full gap-6 border-t border-ink pt-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-stretch">
+      <ul className="divide-y divide-ink/80 border-b border-ink">
         {steps.map((s, i) => (
           <li key={s.id}>
             <a
@@ -72,12 +72,11 @@ export function RollSteps({ steps }: { steps: RollStep[] }) {
       <div className="flex flex-col justify-between gap-6 border bg-glass p-6 sm:p-8" aria-live="polite">
         <StepIcon index={active} />
         <div className="space-y-2">
-          <p className="label-mono text-[11px] text-ink-3">
-            {current.no} · {current.word}
+          <p className="font-mono text-[12px] tracking-[0.22em] text-ink-3">
+            NO. {current.no} · {current.word.toUpperCase()}
           </p>
-          <p className="title-display text-3xl sm:text-4xl">{current.line}</p>
-          <p className="font-medium text-ink">{current.title}</p>
-          <p className="text-[15px] text-ink-2 break-keep">{current.body}</p>
+          <p className="font-display text-[26px] leading-tight font-bold tracking-[-0.04em] text-ink sm:text-[32px]">{current.line}</p>
+          <p className="text-[15px] text-ink-body break-keep">{current.body}</p>
         </div>
       </div>
     </div>

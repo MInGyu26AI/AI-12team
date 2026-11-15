@@ -35,8 +35,9 @@ const INSTALL_STEPS = [
   { title: "팀 연결 확인", body: "확장 팝업에 우리 팀 이름이 보이면 연결된 거예요. 이제 ChatGPT를 열면 돼요." },
 ];
 
+const heroPrimary = "button-mono inline-flex h-12 items-center justify-center gap-2 border border-ink bg-ink px-6 text-[14px] text-white hover:bg-brand-hover";
+const heroOutline = "button-mono inline-flex h-12 items-center justify-center gap-2 border border-ink px-6 text-[14px] text-ink hover:bg-white";
 const primaryLg = "button-mono inline-flex h-12 items-center justify-center gap-2 border border-ink bg-ink px-6 text-[15px] text-white hover:bg-brand-hover";
-const outlineLg = "button-mono inline-flex h-12 items-center justify-center border border-ink bg-glass px-6 text-[15px] text-ink hover:bg-blush";
 
 export default function LandingPage() {
   return (
@@ -101,23 +102,36 @@ function Hero() {
       <div className="relative mx-auto flex max-w-[1280px] flex-col gap-12 px-gutter pt-10 pb-14 sm:px-10 lg:px-20 lg:pt-12">
         <StarIntro />
 
-        <div className="max-w-[880px] space-y-5">
-          <h1 className="title-display text-[clamp(44px,7vw,96px)] text-ink">
-            Scattered chats, one <span className="font-serif font-normal tracking-normal italic">decision.</span>
-          </h1>
-          <p className="text-xl font-bold break-keep text-ink sm:text-2xl">각자 쓴 ChatGPT, 팀의 결정은 하나로</p>
-          <p className="text-base leading-[1.7] text-ink-body break-keep sm:text-lg">
-            프로젝트 대화에서 결정·할 일·조사만 골라 모아요.
+        {/* 제목 영역: 왼쪽 영어 큰 제목 / 오른쪽 이름 뜻·설명·버튼 (아래 정렬, 좁으면 줄바꿈) */}
+        <div className="flex flex-wrap items-end gap-x-12 gap-y-8">
+          <h1
+            className="min-w-0 font-display font-extrabold text-ink"
+            style={{ flex: "1 1 560px", fontSize: "clamp(52px, 7.2vw, 108px)", lineHeight: 0.96, letterSpacing: "-0.055em" }}
+          >
+            Scattered chats,
             <br />
-            내가 승인한 것만 팀과 나누고, 어긋나면 먼저 알려드려요.
-          </p>
-          <div className="flex flex-col gap-3 pt-3 sm:flex-row">
-            <Link href={START.href} className={primaryLg}>
-              {START.label}
-            </Link>
-            <Link href="/install" className={outlineLg}>
-              브라우저 확장 설치
-            </Link>
+            one <span className="font-serif font-normal tracking-normal italic">decision.</span>
+          </h1>
+          <div className="min-w-0 space-y-4" style={{ flex: "1 1 340px" }}>
+            <p className="flex items-center gap-3 text-ink">
+              <span className="font-mono text-[12px] tracking-[0.24em]">SYNC UP</span>
+              <span aria-hidden className="font-serif text-[22px] italic">⟶</span>
+              <span className="font-mono text-[12px] tracking-[0.24em]">THINK UP</span>
+            </p>
+            <p className="text-[17px] leading-[1.65] font-medium break-keep text-ink">
+              ‘싱크’는 맞추다(Sync)이면서 떠올리다(Think)예요. 흩어진 대화가 모여 결정이 되고, 그 결정이 터져 다음 생각이 돼요.
+            </p>
+            <p className="text-[17px] leading-[1.65] break-keep text-ink-body">
+              프로젝트 대화에서 결정 · 할 일 · 조사만 골라 모아요. 내가 승인한 것만 팀과 나누고, 결정이 엇갈리면 먼저 알려드려요.
+            </p>
+            <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+              <Link href={START.href} className={heroPrimary}>
+                {START.label} <span aria-hidden>→</span>
+              </Link>
+              <Link href="/install" className={heroOutline} style={{ background: "rgb(255 255 255 / 0.55)" }}>
+                확장 설치 <span aria-hidden>↓</span>
+              </Link>
+            </div>
           </div>
         </div>
 
