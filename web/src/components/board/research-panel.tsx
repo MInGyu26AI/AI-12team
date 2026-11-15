@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export function ResearchPanel({ research }: { research: RelatedCard[] }) {
   return (
     <section className={cn(card, "p-5")} aria-label="조사">
-      <h2 className="flex items-center gap-2 text-lg leading-[1.5] font-medium">
+      <h2 className="flex items-center gap-2 text-lg leading-[1.5] font-bold">
         조사·참고 <span className={cn(chip, "bg-tag-research-soft text-tag-research")}>{research.length}</span>
       </h2>
       <ul className="mt-3 space-y-3">

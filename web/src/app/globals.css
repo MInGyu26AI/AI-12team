@@ -56,6 +56,7 @@
   --color-blush-deep: #e2c9c4; /* 고리 안쪽 */
   --color-flare: #f5cdbe; /* 충돌 띠 위 글자 */
   --color-glass: rgb(255 255 255 / 0.72); /* 카드·패널: 뒤의 번짐이 살짝 비친다 */
+  --color-paper: #fbf8f3; /* 화면 바탕과 같은 색 (아바타 겹침 테두리 등) */
   --color-wash-rose: rgb(233 166 179);
   --color-wash-olive: rgb(185 196 138);
   --color-wash-peach: rgb(245 205 190);
@@ -236,24 +237,8 @@
   0%, 88% { opacity: 0; }
   96%, 100% { opacity: 1; }
 }
-/* 단계 라벨: 각 구간에만 보인다 */
-@keyframes starStage1 { 0%, 17% { opacity: 1; } 18%, 100% { opacity: 0; } }
-@keyframes starStage2 { 0%, 17% { opacity: 0; } 18%, 36% { opacity: 1; } 37%, 100% { opacity: 0; } }
-@keyframes starStage3 { 0%, 36% { opacity: 0; } 37%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
-@keyframes starStage4 { 0%, 55% { opacity: 0; } 56%, 63% { opacity: 1; } 64%, 100% { opacity: 0; } }
-
-/* ── 4단계 롤 링크 (components/landing/roll-steps.tsx): 글자마다 같은 글자 2개를 세로로 쌓고 올리면 위로 굴린다 ── */
-.roll-char { display: inline-block; overflow: hidden; height: 1.18em; line-height: 1.18; vertical-align: top; }
-.roll-char > span { display: flex; flex-direction: column; transition: transform 640ms cubic-bezier(0.22, 1.25, 0.36, 1); }
-.roll-char > span > span { height: 1.18em; line-height: 1.18; } /* 아래로 내려가는 글자(p·y)도 칸 안에 들게 1em 보다 크게 */
-.roll-row:hover .roll-char > span,
-.roll-row:focus-visible .roll-char > span,
-.roll-row[data-active="true"] .roll-char > span {
-  transform: translateY(-50%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wash-blob { animation: none; opacity: 1; filter: blur(42px); }
-  .star-stage [data-anim] { animation: none !important; }
-  .roll-char > span { transition: none; transform: none !important; }
-}
+/* 단계 문구: 각 구간에서 8px 아래에서 올라오며(margin-top) 나타났다 사라진다. 가운데 정렬은 요소의 -translate-x-1/2 가 맡는다 */
+@keyframes starStage1 { 0% { opacity: 0; margin-top: 8px; } 3%, 15% { opacity: 1; margin-top: 0; } 18%, 100% { opacity: 0; margin-top: -4px; } }
+@keyframes starStage2 { 0%, 18% { opacity: 0; margin-top: 8px; } 21%, 34% { opacity: 1; margin-top: 0; } 37%, 100% { opacity: 0; margin-top: -4px; } }
+@keyframes starStage3 { 0%, 37% { opacity: 0; margin-top: 8px; } 40%, 53% { opacity: 1; margin-top: 0; } 56%, 100% { opacity: 0; margin-top: -4px; } }
+@keyframes starStage4 { 0%, 56% { opacity: 0; margin-top: 8px; } 58%, 62% { opacity: 1; margin-top: 0; } 64%, 100% { opacity: 0; margin-top: -4px; } }

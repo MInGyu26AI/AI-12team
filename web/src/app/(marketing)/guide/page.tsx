@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { USE_MOCK } from "@/lib/api";
 import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
+import { EnTitle } from "@/components/page-title";
 
 export const metadata: Metadata = {
   title: "이용 방법 · Sync up",
@@ -92,7 +93,7 @@ export default function GuidePage() {
       <section className="bg-gradient-to-b from-brand-soft/80 to-background">
         <div className="mx-auto max-w-content px-gutter pt-16 pb-12 text-center">
           <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-brand shadow-xs">이용 방법</span>
-          <h1 className="mt-5 text-3xl font-bold break-keep sm:text-4xl">6단계면 팀 결정이 하나로 모여요</h1>
+          <EnTitle>How it works.</EnTitle><h1 className="mt-5 text-3xl font-bold break-keep sm:text-4xl">6단계면 팀 결정이 하나로 모여요</h1>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground break-keep">
             한 번 설정해 두면 평소처럼 AI와 대화하기만 하면 돼요. 단계마다 버튼을 누르면 해당 화면으로 바로 가요.
           </p>

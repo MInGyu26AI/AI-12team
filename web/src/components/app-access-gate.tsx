@@ -13,6 +13,7 @@ import { connectionProblem, loginUrl, readAccount, type Account } from "@/lib/au
 import { WebAccountContext } from "@/lib/account-context";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
 import { cn } from "@/lib/utils";
+import { EnTitle } from "@/components/page-title";
 
 type View = { kind: "checking" } | { kind: "ready"; account: Account } | { kind: "blocked"; message: string; account?: Account };
 
@@ -68,7 +69,7 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
   return <><PublicHeader /><main className="mx-auto w-full max-w-xl px-gutter py-14">
     <section className={cn(card, "space-y-5 p-7")}>
       {view.kind === "checking" ? <p role="status">로그인과 PC 연결을 확인하고 있어요…</p> : <>
-        <h1 className="text-xl font-medium">{view.account ? `${view.account.name}님, PC 연결을 확인해 주세요` : "연결을 확인해 주세요"}</h1>
+        <EnTitle>Check your connection.</EnTitle><h1 className="text-xl font-bold">{view.account ? `${view.account.name}님, PC 연결을 확인해 주세요` : "연결을 확인해 주세요"}</h1>
         <p role="alert" className="text-sm leading-relaxed text-muted-foreground">{view.message}</p>
         <div className="flex flex-wrap gap-2">
           {view.account && <><Link href="/install" className={buttonPrimary}>내 PC 연결하기</Link><Link href="/connect" className={buttonOutline}>연결 계정 바꾸기</Link><Link href="/start" className={buttonOutline}>내 팀 확인</Link></>}

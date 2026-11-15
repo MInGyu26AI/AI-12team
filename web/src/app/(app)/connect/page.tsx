@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { USE_MOCK } from "@/lib/api";
 import { authorizeUrl, expiryText, supabaseOrigin, type SetupStatus } from "@/lib/github-login";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
+import { EnTitle } from "@/components/page-title";
 
 const SUPABASE = supabaseOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
@@ -50,7 +51,7 @@ function ConnectPanel({ supabase }: { supabase: string }) {
   return (
     <div className="mx-auto max-w-md space-y-6 px-gutter py-16">
       <div className="space-y-2">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
+        <EnTitle>Link this PC.</EnTitle><h1 className="flex items-center gap-2 text-2xl font-bold">
           <KeyRound className="size-6 text-brand" />
           팀 연결 키 받기
         </h1>
@@ -97,7 +98,7 @@ function hostProblem(error: unknown): string {
 function Notice({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-md space-y-4 px-gutter py-16">
-      <h1 className="text-2xl font-bold">팀 연결 키 받기</h1>
+      <EnTitle>Link this PC.</EnTitle><h1 className="text-2xl font-bold">팀 연결 키 받기</h1>
       <p className="break-keep">{children}</p>
     </div>
   );

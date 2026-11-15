@@ -15,6 +15,7 @@ import { boardTopicKeys, USE_MOCK } from "@/lib/api";
 import { appendToCollector, intakeNotice } from "@/lib/collector-intake";
 import { useMockCandidates } from "@/lib/mock-candidates";
 import { knownNamesOf, useTeam } from "@/lib/team";
+import { EnTitle } from "@/components/page-title";
 
 // 확장 없이 쓰는 백업 입력: 대화 붙여넣기 · ChatGPT 내보내기 파일
 // 실제 모드는 로컬 수집기로 보내 개인정보 검사와 외부 AI 분류를 거친다. 목업 모드만 이 브라우저 안에서 분류한다
@@ -61,7 +62,7 @@ export default function PastePage() {
         대화 수집
       </Link>
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">대화 직접 넣기</h1>
+        <EnTitle>Paste a conversation.</EnTitle><h1 className="text-3xl font-bold">대화 직접 넣기</h1>
         <p className="text-muted-foreground break-keep">
           대화를 붙여넣거나 내보내기 파일에서 필요한 대화를 선택하세요. 선택한 발화는 로컬에 보관하고 민감정보를 가린 뒤 AI 분류에 보냅니다. 팀에는 승인한 카드만 공유합니다.
         </p>

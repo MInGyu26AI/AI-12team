@@ -11,6 +11,7 @@ import type { Conflict, RelatedCard } from "@shared/types";
 import { LoadingState } from "@/components/states";
 import { buttonOutline, buttonPrimary, card } from "@/components/ui/surface";
 import { boardToMarkdown } from "@/lib/board-markdown";
+import { EnTitle } from "@/components/page-title";
 import { cn } from "@/lib/utils";
 
 type FileName = "SYNCUP.md" | "syncup.json";
@@ -65,7 +66,8 @@ export function TeamRecord({ status, cards, conflicts, done, teamName }: {
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-medium sm:text-[28px]">팀 상태 파일</h1>
+          <EnTitle>Team state file.</EnTitle>
+          <h1 className="text-2xl font-bold sm:text-[28px]">팀 상태 파일</h1>
           <p className="text-[13px] text-muted-foreground break-keep">
             {saved
               ? "레포의 SYNCUP.md에 저장된 내용이에요. 새 AI 대화나 코딩 AI에 그대로 붙여 넣을 수 있어요."

@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { loginDestination, readAccount, type Account } from "@/lib/auth-navigation";
 import { card, chip } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+import { EnTitle } from "@/components/page-title";
 
 // GitHub account login works before installing the extension; PC connection is a separate step after signup.
 
@@ -50,7 +51,7 @@ export default function LoginPage() {
     <div className="flex justify-center px-gutter pt-12 pb-24 sm:pt-[72px]">
       <section className={cn(card, "w-full max-w-[460px] space-y-5 rounded-2xl px-6 pt-10 pb-9 sm:px-10")} aria-labelledby="login-title">
         <div className="space-y-1.5">
-          <h1 id="login-title" className="text-2xl leading-[1.5] font-medium">
+          <EnTitle>Welcome back.</EnTitle><h1 id="login-title" className="text-2xl leading-[1.5] font-bold">
             로그인
           </h1>
           <p className="text-sm leading-[1.5] text-muted-foreground break-keep">팀 프로젝트 대화에서 결정만 모아, 내가 승인한 것만 나눠요.</p>

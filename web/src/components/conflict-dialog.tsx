@@ -83,7 +83,7 @@ export function ConflictDialog({
             <TriangleAlert className={cn("size-[22px]", tone.text)} />
           </span>
           <div className="min-w-0 space-y-0.5 leading-[1.5]">
-            <h2 id="conflict-title" className="text-lg font-medium break-keep sm:text-[22px]">
+            <h2 id="conflict-title" className="text-lg font-bold break-keep sm:text-[22px]">
               {isChange ? "기존 결정에서 변경되었습니다. 변경안으로 진행할까요?" : "기존 팀 결정과 충돌하는 내용이 있어요"}
             </h2>
             <p className="text-sm text-muted-foreground break-keep">

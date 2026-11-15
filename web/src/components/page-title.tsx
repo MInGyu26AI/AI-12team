@@ -19,11 +19,20 @@ export function PageTitle({ title, display, children, actions, className }: {
             <p className="text-lg leading-[1.5] font-bold break-keep text-ink sm:text-xl">{title}</p>
           </>
         ) : (
-          <h1 className="text-2xl leading-[1.5] font-medium break-keep sm:text-[28px]">{title}</h1>
+          <h1 className="text-2xl leading-[1.5] font-bold break-keep sm:text-[28px]">{title}</h1>
         )}
         {children && <p className="text-[15px] leading-[1.5] text-ink-body break-keep">{children}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
+  );
+}
+
+/** 영어 큰 제목 한 줄 (Inter Tight 800). 화면마다 한국어 h1 바로 위에 둔다. 읽어 주는 화면에는 한국어 제목만 들리게 aria-hidden */
+export function EnTitle({ children }: { children: ReactNode }) {
+  return (
+    <p aria-hidden className="title-display mb-3 text-[clamp(34px,5vw,56px)] text-ink">
+      {children}
+    </p>
   );
 }

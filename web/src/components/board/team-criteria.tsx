@@ -9,7 +9,7 @@ export function TeamCriteriaCard({ criteria }: { criteria?: TeamCriteria }) {
   const { teamGoal, teamScope, teamRules } = criteria;
   return (
     <section className={cn(card, "space-y-2 p-5 text-sm leading-[1.5]")} aria-label="팀 기준">
-      <h2 className="text-lg font-medium">팀 목표·범위·규칙</h2>
+      <h2 className="text-lg font-bold">팀 목표·범위·규칙</h2>
       {teamGoal && (
         <p className="break-keep">
           <span className="text-muted-foreground">목표</span> · {teamGoal}
