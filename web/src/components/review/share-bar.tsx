@@ -1,6 +1,6 @@
 "use client";
 
-import { buttonOutline, buttonPrimary, card } from "@/components/ui/surface";
+import { buttonOutline, buttonPrimary } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
 // 승인함 맨 아래 바 (피그마 4번 Action Bar 152:306: "4개 선택됨 · 개인 1개 제외 [전체 해제] [선택한 4개 팀에 올리기]").
@@ -16,15 +16,15 @@ export function ShareBar({ selected, personal, canSelect, allSelected, sharing, 
 }) {
   return (
     <div className="sticky bottom-4 z-20">
-      <div className={cn(card, "flex flex-wrap items-center gap-3 px-5 py-3.5 shadow-card")}>
-        <p className="text-sm leading-[1.5] font-medium text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 border border-ink bg-ink px-5 py-3.5 text-white">
+        <p className="text-sm leading-[1.5] font-medium text-white/80">
           {selected}개 선택됨{personal > 0 && ` · 개인 ${personal}개 제외`}
         </p>
         <div className="ml-auto flex gap-2.5">
-          <button type="button" className={buttonOutline} disabled={!canSelect} onClick={onToggleAll}>
+          <button type="button" className={cn(buttonOutline, "border-white bg-transparent text-white hover:bg-white/10")} disabled={!canSelect} onClick={onToggleAll}>
             {allSelected ? "전체 해제" : "전체 선택"}
           </button>
-          <button type="button" className={buttonPrimary} disabled={!selected || sharing} onClick={onShare}>
+          <button type="button" className={cn(buttonPrimary, "border-white bg-white text-ink hover:bg-blush")} disabled={!selected || sharing} onClick={onShare}>
             {sharing ? "올리는 중…" : `선택한 ${selected}개 팀에 올리기`}
           </button>
         </div>

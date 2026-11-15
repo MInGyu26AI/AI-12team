@@ -35,8 +35,8 @@ const INSTALL_STEPS = [
   { title: "팀 연결 확인", body: "확장 팝업에 우리 팀 이름이 보이면 연결된 거예요. 이제 ChatGPT를 열면 돼요." },
 ];
 
-const primaryLg = "label-mono inline-flex h-12 items-center justify-center gap-2 border border-ink bg-ink px-6 text-[13px] text-white hover:bg-brand-hover";
-const outlineLg = "label-mono inline-flex h-12 items-center justify-center border border-ink bg-glass px-6 text-[13px] text-ink hover:bg-blush";
+const primaryLg = "button-mono inline-flex h-12 items-center justify-center gap-2 border border-ink bg-ink px-6 text-[15px] text-white hover:bg-brand-hover";
+const outlineLg = "button-mono inline-flex h-12 items-center justify-center border border-ink bg-glass px-6 text-[15px] text-ink hover:bg-blush";
 
 export default function LandingPage() {
   return (
@@ -117,7 +117,9 @@ function Hero() {
         </div>
 
         <div className="space-y-4">
-          <p className="label-mono text-[11px] text-ink-3">What SyncUp does · 누르면 바로 그 부분으로 이동해요</p>
+          <p className="text-[13px] text-ink-3">
+            <span className="label-mono text-[11px]">What SyncUp does</span> · 누르면 바로 그 부분으로 이동해요
+          </p>
           <RollSteps steps={STEPS} />
         </div>
         <p className="flex items-center gap-2 text-[13px] text-ink-3">

@@ -167,6 +167,11 @@
   text-transform: uppercase;
   letter-spacing: 0.22em;
 }
+/* 한국어가 섞인 버튼 라벨: IBM Plex Mono 글꼴만 (한글은 대체 글꼴이라 넓은 자간·대문자는 쓰지 않는다) */
+.button-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
 /* 영어 큰 제목: Inter Tight 800 */
 .title-display {
   font-family: var(--font-display);
@@ -238,9 +243,9 @@
 @keyframes starStage4 { 0%, 55% { opacity: 0; } 56%, 63% { opacity: 1; } 64%, 100% { opacity: 0; } }
 
 /* ── 4단계 롤 링크 (components/landing/roll-steps.tsx): 글자마다 같은 글자 2개를 세로로 쌓고 올리면 위로 굴린다 ── */
-.roll-char { display: inline-block; overflow: hidden; height: 1em; line-height: 1; vertical-align: top; }
+.roll-char { display: inline-block; overflow: hidden; height: 1.18em; line-height: 1.18; vertical-align: top; }
 .roll-char > span { display: flex; flex-direction: column; transition: transform 640ms cubic-bezier(0.22, 1.25, 0.36, 1); }
-.roll-char > span > span { height: 1em; line-height: 1; }
+.roll-char > span > span { height: 1.18em; line-height: 1.18; } /* 아래로 내려가는 글자(p·y)도 칸 안에 들게 1em 보다 크게 */
 .roll-row:hover .roll-char > span,
 .roll-row:focus-visible .roll-char > span,
 .roll-row[data-active="true"] .roll-char > span {

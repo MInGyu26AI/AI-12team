@@ -17,7 +17,7 @@ export const PERSONAL_COLOR = "bg-tag-personal-soft text-tag-personal border-tra
 // 피그마 칩에는 테두리가 없다 (노드 152:255)
 export const TAG_COLOR: Record<Tag, string> = {
   decision: "bg-tag-decision-soft text-tag-decision border-transparent",
-  todo: "bg-tag-todo-soft text-tag-todo border-transparent",
+  todo: "bg-tag-todo-soft text-tag-todo border border-tag-todo",
   research: "bg-tag-research-soft text-tag-research border-transparent",
   none: PERSONAL_COLOR,
 };

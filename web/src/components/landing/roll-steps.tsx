@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BURST_PATH } from "./star-intro";
+import { BURST_PATH } from "@/components/ui/burst-icon";
 
 // 첫 화면 4단계 "롤 링크": 왼쪽 큰 영어 단어(Approve·Alert·Resolve·Record), 마우스를 올리거나 키보드로 포커스하면
 // 글자가 한 자씩 위로 굴러 바뀌고(globals.css .roll-char) 오른쪽 패널에 그 단계 아이콘·영어 한 줄·한국어 설명이 나온다.

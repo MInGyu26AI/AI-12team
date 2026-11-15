@@ -3,12 +3,11 @@
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { BigWordmark } from "@/components/brand";
+import { BURST_PATH } from "@/components/ui/burst-icon";
 
 // 첫 화면 히어로의 8초 "별의 일생" (시안 "로즈 & 올리브 수채화"). 점 → 고리 → 이중 고리 → 수축 → 초신성 → 로고.
 // 시간표는 globals.css 의 star* keyframes (모두 같은 8초 위의 %). 각 요소의 기본 스타일은 '끝난 상태'라서
 // 움직임 줄이기 설정(애니메이션 없음)에서는 마지막 로고 화면만 보인다. ↻ REPLAY 는 무대를 다시 그려 처음부터 재생한다
-export const BURST_PATH =
-  "M50 2 C54 34 60 40 72 44 C80 34 88 22 96 10 C84 26 76 40 70 50 C80 54 90 54 98 54 C88 56 78 58 70 60 C76 70 84 80 92 92 C80 82 68 72 58 66 C56 76 52 88 50 98 C48 88 44 76 42 66 C32 72 20 82 8 92 C16 80 24 70 30 60 C22 58 12 56 2 54 C10 54 20 54 30 50 C24 40 16 26 4 10 C12 22 20 34 28 44 C40 40 46 34 50 2 Z";
 
 const STAGES = [
   { no: "01", name: "APPROVE", line: "Only what you approve.", anim: "starStage1" },
