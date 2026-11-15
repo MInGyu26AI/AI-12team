@@ -174,6 +174,7 @@ def render_review_page(server, client, pipeline):
     retry_team = binding['team_id'] if binding else ''
     state = session_state(cfg)
     board_link = '<a href="/team-board">팀 보드 열기 ↗</a>' if client else ''
+    board_link += '<a href="/connectors">외부 서비스 연결</a>' if pipeline else ''
     body = (f'<nav><b>싱크업</b>{board_link}</nav>'
             f'<header><h1>개인 검토함</h1><span class="state">{STATE_LABELS[state]}</span></header>')
     team = TeamChoice()

@@ -1,6 +1,22 @@
 import type { Metadata } from "next";
+import { Fredoka, Noto_Sans_KR } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+
+// 새 피그마 글꼴: 본문 전체 Noto Sans KR (400/500/700), "SyncUp" 워드마크만 Fredoka Bold.
+// 한글 글리프는 구글이 쪼갠 조각(unicode-range)으로 필요한 만큼만 내려받고, 미리 불러오는 것은 라틴 조각뿐이다.
+const notoSansKr = Noto_Sans_KR({
+  weight: ["400", "500", "700"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-noto-sans-kr",
+});
+const fredoka = Fredoka({
+  weight: "700",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-fredoka",
+});
 
 export const metadata: Metadata = {
   title: "Sync up · 싱크업",
@@ -9,14 +25,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ko" className="h-full antialiased">
-      <head>
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
-        />
-      </head>
-      <body className="flex min-h-full flex-col bg-background">
+    <html lang="ko" className={`${notoSansKr.variable} ${fredoka.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col bg-canvas">
+        {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <div className="border-b bg-amber-50 px-4 py-2 text-center text-sm text-amber-950">시험용 SyncUp · 이 Mac의 별도 팀 데이터로 진행합니다.</div>}
         {children}
         <Toaster richColors position="top-center" />
       </body>

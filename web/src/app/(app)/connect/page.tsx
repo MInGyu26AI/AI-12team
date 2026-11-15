@@ -56,7 +56,7 @@ function ConnectPanel({ supabase }: { supabase: string }) {
         </h1>
         <p className="text-sm text-muted-foreground break-keep">
           GitHub로 로그인하면 이 PC의 연결 프로그램이 연결 키를 만들어 저장해요. 키는 이 PC 밖으로 나가지 않고, 이 페이지도 보지 않아요.
-          팀 관리자가 미리 등록한 GitHub 계정만 받을 수 있어요.
+          가입할 때 사용한 GitHub 계정으로 연결하세요. 처음이라면 <Link href="/start" className="underline">가입하고 팀 만들기</Link>부터 시작해 주세요.
         </p>
       </div>
       <div className="space-y-3 rounded-xl border bg-card p-6 text-sm">
@@ -89,7 +89,7 @@ function ConnectPanel({ supabase }: { supabase: string }) {
 function hostProblem(error: unknown): string {
   const detail = error instanceof Error ? error.message : "";
   if (/native messaging host not found|로컬 수집기 연결 실패/i.test(detail)) {
-    return "이 PC의 연결 프로그램(native host)을 찾지 못했어요. docs/running.md의 '확장 연결'대로 native-setup을 --team-api와 함께 한 번 해 주세요.";
+    return "이 PC의 연결 프로그램을 찾지 못했어요. 설치 안내에서 SyncUp 앱을 받아 실행한 뒤 다시 연결해 주세요.";
   }
   return detail || "이 PC의 연결 프로그램에 닿지 못했어요. 확장과 연결 프로그램 설치를 확인하세요.";
 }

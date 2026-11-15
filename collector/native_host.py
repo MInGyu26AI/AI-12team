@@ -29,6 +29,11 @@ EXTENSION_ID = re.compile('[a-p]{32}')
 # connection.json, as app.py writes it: {url, token} for the local RPC endpoint.
 CONNECTION_LIMIT = 4096
 RPC_URL = re.compile(r'http://127\.0\.0\.1:\d+/rpc')
+COLLECTOR_TIMEOUT = 20
+# Requests that legitimately run long: files.ocr reads page images with the local vision model (the first page also
+# loads the model, about 13 s on an M-series Mac), connectors.sync waits for a Notion/Google read. Same values as
+# web/src/app/api/local/route.ts SLOW_METHOD_TIMEOUT_MS.
+SLOW_METHOD_TIMEOUT = {'files.ocr': 180, 'connectors.sync': 180}
 
 
 def read_connection(path):
@@ -51,8 +56,9 @@ def request(connection, payload):
     headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token}
     req = urllib.request.Request(url, json.dumps(payload).encode(), headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    method = payload.get('method') if isinstance(payload, dict) else None
     try:
-        with opener.open(req, timeout=20) as response:
+        with opener.open(req, timeout=SLOW_METHOD_TIMEOUT.get(method, COLLECTOR_TIMEOUT)) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
         return json.load(error)

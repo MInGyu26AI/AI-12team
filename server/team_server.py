@@ -82,6 +82,9 @@ class TeamHandler(SecureHandler):
         self.handle_api()
 
     def handle_api(self):
+        if self.path in ('/onboarding', '/onboarding/login', '/onboarding/teams'):
+            import onboarding
+            return onboarding.handle(self)
         if self.path == '/keys':  # web login → key; authenticated by the login itself, not a key
             return key_issue.handle(self)
         if self.path == '/invites/preview':  # 초대 링크: the join page's look before the login (team_invites.py)

@@ -3,6 +3,7 @@
 import type { Browser } from 'wxt/browser';
 import { EXT_SYNC_NOW, type SyncNowParams } from '@shared/bridge';
 import { appendTurns } from '@/lib/append-turns';
+import { configureCollection } from '@/lib/collection-boundary';
 import { listenNoticeClick } from '@/lib/candidate-notice';
 import { runSyncPass } from '@/lib/chatgpt-sync/pass';
 import {
@@ -19,6 +20,7 @@ import { errorText, rpc } from '@/lib/collector-rpc';
 import { clearError, clearErrorAndRefresh, recordFailure, refreshStatus, refreshStatusOrRecordFailure } from '@/lib/collector-status';
 import { CONFLICT_ALARM, checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
 import { collectResultToast, type BgRequest, type BgResponse, type CollectResult, type TabToast, type TeamRecordRaw } from '@/lib/messages';
+import { listenPreAlertClick } from '@/lib/pre-alert-notice';
 import { selectionMessage } from '@/lib/selection';
 import { clearLegacyPendingCards, sendBlockedReason, settingsItem } from '@/lib/settings';
 import { CHAT_PAGE_MATCHES, siteForUrl } from '@/lib/sites';
@@ -77,6 +79,8 @@ async function handleRequest(message: BgRequest, sender: Browser.runtime.Message
       if (setsAccountSync(message.method, message.params)) return { ok: false, error: SYNC_SET_POPUP_ONLY };
       try {
         const sync = message.method === EXT_SYNC_NOW;
+        if (message.method === 'collection.pause') return { ok: true, result: await configureCollection({ autoCollect: false }) };
+        if (message.method === 'collection.configure') return { ok: true, result: await configureCollection(message.params as Record<string, unknown>) };
         return { ok: true, result: sync ? await syncNow(message.params as SyncNowParams) : await rpc(message.method, message.params) };
       } catch (error) {
         return { ok: false, error: errorText(error) };
@@ -99,7 +103,7 @@ async function handleRequest(message: BgRequest, sender: Browser.runtime.Message
     case 'updateSettings':
       // 동기화 켬·끔은 syncSet 만 바꾼다 (확장 상태·켬 시각 규칙을 거치지 않는 길을 막는다)
       if (setsAccountSync('collection.configure', message.patch)) return { ok: false, error: SYNC_SET_POPUP_ONLY };
-      await rpc('collection.configure', message.patch);
+      await configureCollection(message.patch);
       await clearError();
       // flush 와 달리 뒤따르는 새로 고침의 실패도 실패로 돌려준다: 처음 설정 화면은 팝업 오류를 보여 주지 않으므로 저장 화면이 알려야 한다
       await refreshStatus();
@@ -142,6 +146,7 @@ async function sendSelection(info: Browser.contextMenus.OnClickData, tab?: Brows
 
 export default defineBackground(() => {
   listenNoticeClick(); // 알림을 누르면 서비스 워커가 깨어나므로, 리스너는 비동기 작업 앞 동기 구간에서 붙인다
+  listenPreAlertClick(); // 미리 알림도 개인 검토함으로 (id 로 구분)
   browser.notifications.onClicked.addListener((id) => void openBoardFromNotification(id)); // 충돌 알림만 처리 (id 로 구분)
   void refreshStatusOrRecordFailure();
   void checkConflicts();

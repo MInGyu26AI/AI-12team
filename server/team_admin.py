@@ -38,14 +38,16 @@ def init(c, password_file):
     apply_sql(c, 'team_schema.sql')
     apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
+    apply_sql(c, 'team_onboarding.sql')
 
 
 def migrate_integration(c):
-    # team_decisions.sql creates its tables once, so it runs only where they are missing. Every later
-    # change goes into team_upgrades.sql, which must stay safe to apply again on any database.
+    c.execute("SET LOCAL lock_timeout = '5s'")
+    # team_decisions.sql runs only where its tables are missing. The other scripts are repeatable.
     if not c.execute("SELECT to_regclass('syncup.conflict_checks')").fetchone()[0]:
         apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
+    apply_sql(c, 'team_onboarding.sql')
 
 
 def issue_token(c, user_id, path, days):
@@ -72,7 +74,10 @@ def run(c, args):
     if args.command == 'init':
         init(c, args.api_password_file)
     elif args.command == 'migrate-integration':
-        migrate_integration(c)
+        try:
+            migrate_integration(c)
+        except psycopg.errors.LockNotAvailable:
+            raise AdminInputError('DB 잠금을 5초 안에 얻지 못했습니다. 잠금을 잡은 작업이 끝난 뒤 다시 실행하세요.') from None
     elif args.command in ('user', 'team'):
         identifier = uuid.uuid4()
         table = 'users' if args.command == 'user' else 'teams'

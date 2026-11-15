@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { cleanCriteria, rulesFromText } from '@shared/criteria';
-import { isConfigured, type Settings } from '@/lib/settings';
+import { isConfigured, settingsItem, type Settings } from '@/lib/settings';
 import { normalizeWebUrl, webUrlOf } from '@/lib/web-url';
 import { Notice } from './Notice';
 import { saveSetup } from './save-setup';
@@ -23,23 +22,20 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
   const [projectTopic, setProjectTopic] = useState(initial.projectTopic);
   const [subtopics, setSubtopics] = useState(initial.enabledSubtopics);
   const [webUrlInput, setWebUrlInput] = useState(webUrlOf(initial));
-  const [goal, setGoal] = useState(initial.teamCriteria?.teamGoal ?? '');
-  const [scope, setScope] = useState(initial.teamCriteria?.teamScope ?? '');
-  const [rules, setRules] = useState((initial.teamCriteria?.teamRules ?? []).join('\n'));
+  const [addressStatus, setAddressStatus] = useState('');
   const webUrl = normalizeWebUrl(webUrlInput);
   const canSave = isConfigured({ ...initial, teamName, userName, projectTopic }) && !!webUrl;
 
   const submit = async () => {
     if (!canSave) return;
-    const teamCriteria = cleanCriteria({ teamGoal: goal, teamScope: scope, teamRules: rulesFromText(rules) });
-    const result = await saveSetup({ projectTopic: projectTopic.trim(), enabledSubtopics: subtopics, webUrl, teamCriteria });
+    const result = await saveSetup({ projectTopic: projectTopic.trim(), enabledSubtopics: subtopics, webUrl });
     if (result.ok) onSaved();
     else alert(result.error);
   };
 
   return (
     <form
-      className="w-[340px] space-y-3 p-4 font-sans text-sm text-gray-900"
+      className="w-[340px] space-y-3 p-4 font-sans text-sm text-foreground"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -54,30 +50,23 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
 
       <SubtopicPicker value={subtopics} onChange={setSubtopics} />
 
-      {/* 프로젝트 방향성 기준 (선택). AI 가 프로젝트 대화를 고르는 기준 (shared/criteria.ts) */}
-      <fieldset className="space-y-2 rounded-lg border p-3">
-        <legend className="px-1 font-medium">팀 목표·범위·규칙 (선택)</legend>
-        <TextField label="팀 목표" value={goal} onChange={setGoal} placeholder="예: 11/16까지 시연 가능한 MVP 제출" />
-        <TextField label="범위" value={scope} onChange={setScope} placeholder="예: ChatGPT 웹 + 팀 보드까지, 결제는 제외" />
-        <label className="block space-y-1">
-          <span className="font-medium">규칙 (한 줄에 하나)</span>
-          <textarea
-            value={rules}
-            onChange={(e) => setRules(e.target.value)}
-            rows={2}
-            placeholder={'예: 결정은 팀장 승인 후 확정\n개인 일정은 올리지 않기'}
-            className="w-full resize-none rounded-md border px-2.5 py-1.5 outline-none focus:border-tag-decision"
-          />
-        </label>
-        <p className="text-xs text-gray-500">AI가 프로젝트 대화를 고르는 기준이 돼요. 지금은 이 확장에 저장돼요.</p>
-      </fieldset>
-
       <WebUrlField value={webUrlInput} normalized={webUrl} onChange={setWebUrlInput} />
+      <button type="button" disabled={!webUrl} className="w-full rounded-lg border px-3 py-2 disabled:opacity-40"
+        onClick={async () => {
+          if (!webUrl) return;
+          try {
+            await settingsItem.setValue({ ...(await settingsItem.getValue()), webUrl });
+            setAddressStatus('주소를 저장했어요. 웹의 PC 연결 페이지를 새로고침해 주세요.');
+          } catch {
+            setAddressStatus('주소를 저장하지 못했어요. 다시 시도해 주세요.');
+          }
+        }}>연결 주소만 저장</button>
+      {addressStatus && <p role="status" className="text-xs text-gray-600">{addressStatus}</p>}
 
       {/* 최초 설정에서 자동 수집 범위와 외부 AI 전송을 알려야 한다 (CLAUDE.md 9장 개인정보·보안 원칙) */}
       <div className="space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
         <p className="font-medium text-gray-800">프로젝트 대화만 가져오고, 내가 승인한 것만 팀에 공유합니다</p>
-        <p>· 자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화(내 말·AI 답변)를 읽어요. 프로젝트 대화를 할 때만 켜 주세요.</p>
+        <p>· 자동 수집을 켠 동안 chatgpt.com 에서 새로 끝난 대화(내 말·AI 답변)를 읽어요.</p>
         <p>· 프로젝트 주제와 관련된 내용만 후보로 골라 내 검토함에 보여 줘요. 고르기 위해 민감정보를 가린 발췌를 외부 AI로 보냅니다.</p>
         <p>· 팀에는 내가 승인한 카드만 공유하고, 원본 대화 전체는 보내지 않아요.</p>
       </div>
@@ -91,7 +80,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
         <button
           type="submit"
           disabled={!canSave}
-          className="flex-1 rounded-lg bg-gray-900 px-3 py-2 font-medium text-white disabled:opacity-40"
+          className="flex-1 rounded-lg bg-brand px-3 py-2 font-medium text-white disabled:opacity-40"
         >
           저장
         </button>

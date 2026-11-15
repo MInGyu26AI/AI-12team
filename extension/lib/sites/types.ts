@@ -5,7 +5,13 @@ export interface ExtractResult {
   messages: CollectedMessage[];
   selector: string | null; // 성공한 전략 이름 (없으면 못 읽음)
   tried: { name: string; count: number }[]; // 시도한 전략별로 잡힌 요소 수 (진단용)
-  guessedRoles: number; // 화자를 순서로 추정한 메시지 수
+  guessedRoles: number;
+  /** Local-only boundary metadata; never included in stored conversation bodies. */
+  capture?: {
+    observed: { id: string; role: CollectedMessage['role']; replyTo?: string }[];
+    streaming: boolean;
+    pendingReplyTo?: string;
+  }; // 화자를 순서로 추정한 메시지 수
 }
 
 export interface SiteAdapter {

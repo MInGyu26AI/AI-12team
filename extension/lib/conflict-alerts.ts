@@ -20,7 +20,7 @@ export async function updateBadge() {
   const conflicts = await openConflictCountItem.getValue();
   const pending = await pendingCountItem.getValue();
   try {
-    await browser.action.setBadgeBackgroundColor({ color: conflicts ? '#c62828' : '#4f46e5' });
+    await browser.action.setBadgeBackgroundColor({ color: conflicts ? '#d93025' : '#18173a' }); // 충돌 빨강 · 그 밖은 남색 (shared/theme.css)
   } catch {
     // 색을 못 바꾸는 환경이어도 숫자는 띄운다
   }

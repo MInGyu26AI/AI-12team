@@ -81,7 +81,7 @@ function JoinPanel({ code, supabase }: { code: string; supabase: string }) {
               참여하려면 이 PC에 SyncUp 확장 프로그램과 연결 프로그램이 먼저 있어야 해요. 팀 연결 키를 이 PC에 저장하기 때문이에요.
             </p>
             {view.detail && <p className="break-keep text-muted-foreground">{view.detail}</p>}
-            <Link href="/install" className="inline-block font-semibold text-brand underline">
+            <Link href={`/install?next=${encodeURIComponent(`/join/${code}`)}`} className="inline-block font-semibold text-brand underline">
               설치 안내로 가기
             </Link>
             <p className="break-keep text-muted-foreground">설치를 마친 뒤 이 초대 링크를 다시 여세요.</p>

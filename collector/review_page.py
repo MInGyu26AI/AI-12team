@@ -7,6 +7,7 @@ import urllib.parse
 
 from collection_settings import cache_profile
 from collection_session import active, bind_sharing, set_paused
+from connectors import page as connectors_page
 from standalone_classifier import FAILED_PREFIX
 from delivery import approve, reset_blocked
 from diagnostics import failure
@@ -92,6 +93,8 @@ class Review(SecureHandler):
     def do_GET(self):
         if self.valid_host() and self.path == '/team-board' and self.team_client:
             return self.reply(*render_team_board(self.server.db, self.team_client))
+        if self.valid_host() and self.pipeline and self.path.split('?')[0].startswith('/connectors'):
+            return self.reply(*connectors_page.get(self.server, self.pipeline, self.path))
         if not self.valid_host() or self.path != "/":
             return self.reply(404, "페이지를 찾을 수 없습니다.")
         self.reply(200, render_review_page(self.server, self.team_client, self.pipeline))
@@ -133,6 +136,8 @@ class Review(SecureHandler):
         get = lambda k: fields[k][0]
         if not hmac.compare_digest(get("csrf"), self.server.csrf):
             return 403, "거절됨"
+        if self.pipeline and self.path.startswith('/connectors/'):  # its own transactions: see connectors/page.py
+            return connectors_page.submit(self.server, self.pipeline, self.path, fields)
         retry = self.path in ('/retry', '/retry-delivery')
         if retry:
             _check_retry_fields(fields, needs_team=bool(self.pipeline or self.team_client))

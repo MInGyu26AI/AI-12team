@@ -13,7 +13,8 @@ from storage import connect
 CONFIGURABLE = {'teamId', 'projectTopic', 'enabledSubtopics', 'turnsPerBatch', 'endsAt', 'autoCollect', 'accountSync'}
 MAX_TOPIC = 1200
 MAX_BATCH_TURNS = 50
-MAX_COLLECTION_SECONDS = 86400
+MAX_COLLECTION_DAYS = 7
+MAX_COLLECTION_SECONDS = MAX_COLLECTION_DAYS * 24 * 60 * 60
 # The ChatGPT account hash the extension sends: sha256 of the user id, lower-case hex (sync-contract.md 4).
 SYNC_ACCOUNT = re.compile('[0-9a-f]{64}')
 
@@ -114,14 +115,15 @@ def sync_windows(c, session):
 
 
 def _set_end(c, value):
-    """New end time within 24 hours; time spent after an earlier end is recorded as a pause."""
+    """Save a deadline within the allowed window. An expired session needs an explicit resume."""
     end = datetime.fromisoformat(str(value).replace('Z', '+00:00')).timestamp()
     now = time.time()
     if not math.isfinite(end) or not now < end <= now + MAX_COLLECTION_SECONDS:
-        raise ValueError('종료는 현재부터 24시간 이내로 설정하세요.')
+        raise ValueError(f'종료 시각은 현재부터 {MAX_COLLECTION_DAYS}일 이내로 설정하세요.')
     previous = c.execute('SELECT end FROM settings').fetchone()[0]
-    if previous <= time.time():
-        c.execute('INSERT INTO pauses(start,end) VALUES(?,?)', (previous, time.time()))
+    if previous <= now:
+        set_paused(c, True)
+        c.execute('UPDATE pauses SET start=MIN(start, ?) WHERE end IS NULL', (previous,))
     c.execute('UPDATE settings SET end=?', (end,))
 
 

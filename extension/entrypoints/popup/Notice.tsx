@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 const TONE_COLOR = {
-  info: 'bg-gray-50 text-gray-600',
+  info: 'bg-surface-soft text-muted-foreground',
   ok: 'bg-tag-todo-soft text-tag-todo',
   error: 'bg-sensitive-soft text-sensitive',
 };

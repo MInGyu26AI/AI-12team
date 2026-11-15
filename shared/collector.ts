@@ -8,7 +8,9 @@ export const LOCAL_RPC_VERSION = 1;
 // 수집한 발화 한 건 (turns.append). site 는 turn_intake.clean_message 가 받는 값 (INTAKE_SITES)
 export interface CollectedMessage {
   id: string; // 사이트의 메시지 id (없으면 내용 해시)
-  site: "chatgpt" | "manual" | "chatgpt-export"; // manual = 붙여넣기·고친 입력(intake.retry), chatgpt-export = 내보내기 파일
+  // manual = 붙여넣기·고친 입력(intake.retry), chatgpt-export = 내보내기 파일, file-upload = 올린 파일(PDF·이미지·문서),
+  // notion·google-docs = 수집기 커넥터가 읽은 문서 (docs/connectors.md). 문서 출처는 절마다 turnId 를 보낸다
+  site: "chatgpt" | "manual" | "chatgpt-export" | "file-upload" | "notion" | "google-docs";
   role: "user" | "assistant";
   roleGuessed?: boolean; // 화면에서 화자를 못 읽어 순서로 추정했거나, 드래그 선택이라 사용자로 간주한 경우
   text: string;
@@ -16,10 +18,13 @@ export interface CollectedMessage {
   conversationTitle?: string;
   url?: string;
   collectedAt: string; // ISO
-  // 아래 셋은 계정 동기화(docs/sync-contract.md 2장)가 붙인다. 화면 경로는 보내지 않는다(없으면 screen 으로 본다)
+  // 아래 셋은 계정 동기화(docs/sync-contract.md 2장)가 붙인다. ChatGPT 화면 경로는 보내지 않는다(없으면 screen 으로 본다).
+  // 예외: 웹 카톡 붙여넣기는 origin 없이 turnId(대화 덩어리)만 보낸다 (shared/kakaotalk.ts)
   createdAt?: string; // ChatGPT 서버의 메시지 작성 시각 (ISO, 시간대 포함). origin='sync' 이면 필수
   origin?: MessageOrigin;
-  turnId?: string; // 그 턴의 사용자 메시지 id (접두사 없음). 같은 turnId 끼리 한 턴. origin='sync' 이면 필수
+  // 그 턴의 사용자 메시지 id (접두사 없음). 같은 turnId 끼리 한 턴. origin='sync' 이면 필수.
+  // 화면 경로(origin 없음)에서는 문서 출처(file-upload·notion·google-docs)가 보낸다: 절 하나가 한 턴이고, 그 절을 쪼갠 조각은 같은 turnId
+  turnId?: string;
 }
 
 // 발화가 들어온 경로: screen = 화면 수집(auto-collect·수동·선택), sync = 계정 동기화 패스

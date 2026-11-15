@@ -90,7 +90,7 @@ export function HeldBatches({ items, teamId, modelAvailable, onAction, onRefresh
   };
 
   const notices = finished.map((kind, i) => (
-    <p key={i} role="status" className="rounded-xl border bg-muted/40 px-4 py-3 text-sm">
+    <p key={i} role="status" className="rounded-[12px] border border-card-border bg-surface-soft px-4 py-3 text-sm">
       {kind === "exclude" ? "제외를 반영했어요. 남은 발화는 승인 대기에서 확인하세요." : "다시 검사를 마쳤어요. 결과는 승인 대기나 제외됨에서 확인하세요."}
     </p>
   ));
@@ -106,7 +106,7 @@ export function HeldBatches({ items, teamId, modelAvailable, onAction, onRefresh
     <div className="space-y-4">
       {notices}
       {modelAvailable === false && (
-        <p role="status" className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p role="status" className="rounded-[12px] border border-alert-review-dot/50 bg-alert-review-soft px-4 py-3 text-sm text-alert-review">
           이 기기의 로컬 검사 모델에 연결할 수 없어요. 모델을 실행한 뒤 다시 검사하세요. 그전까지는 외부 AI로 보내지 않아요.
         </p>
       )}
@@ -138,9 +138,9 @@ function HeldBatchCard({ item, busy, stillHeld, open, onToggle, onRun }: {
   const disabled = !!waiting || busy !== null;
   const held = item.messages.filter((m) => m.decision !== "allow");
   return (
-    <article className="space-y-3 rounded-xl border p-5" aria-busy={!!waiting}>
+    <article className="space-y-3 rounded-[12px] border border-card-border bg-card p-5" aria-busy={!!waiting}>
       <div className="flex flex-wrap items-center gap-2">
-        <ShieldAlert className="size-4 text-amber-600" aria-hidden />
+        <ShieldAlert className="size-4 text-alert-review" aria-hidden />
         <Badge variant="outline">{waiting ? "검사 대기 중" : reasonLabel(item.reason)}</Badge>
         <span className="text-xs text-muted-foreground">{time(item.decidedAt)} 판정 · 발화 {item.messages.length}개</span>
       </div>
@@ -210,7 +210,7 @@ export function ExcludedMessages({ items, total }: { items: PrivacyExcluded[]; t
         {items.map((e) => {
           const key = e.jobId + ":" + e.messageId;
           return (
-            <li key={key} className="space-y-2 rounded-xl border bg-muted/30 p-4">
+            <li key={key} className="space-y-2 rounded-[12px] border border-dashed border-card-border-personal bg-card p-4">
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <EyeOff className="size-4 text-muted-foreground" aria-hidden />
                 <Badge variant="outline">{reasonLabel(e.reason)}</Badge>

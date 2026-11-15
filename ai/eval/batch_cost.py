@@ -8,7 +8,9 @@
    수집이 끝나면 남은 발화를 flush 로 보낸다 (수동 보내기·종료 직전과 같음).
 2) 묶음마다 실제 분류 프롬프트(시스템 + 사용자, 앞 묶음 참고용 턴 포함)를 만들어 글자 수를 센다.
 3) 기다림: 사용자 발화가 들어온 뒤 그 발화가 담긴 묶음이 나갈 때까지 들어온 턴 수. 마지막 flush 로만 나간 비율도 센다.
-4) --ai: 묶음마다 분류를 실제로 부르고 걸린 시간의 중간값을 잰다. 정확도는 합성 정답표로 sheet_eval 과 같이 채점한다 (2차 최종 회의 3.3).
+4) --ai: 묶음마다 분류를 실제로 부르고 걸린 시간의 중간값을 잰다. 정확도는 sheet_eval 과 같이 채점한다 (2차 최종 회의 3.3).
+   이때는 민규 님 샘플 대화(한 팀 4명이 각자 10턴)를 팀원마다 한 사람의 수집 기록으로 흘려 넣는다. 1) 처럼 여러 팀을
+   이어 붙이면 프로젝트 주제가 첫 팀 것 하나뿐이라 다른 팀 대화가 '무관'으로 분류된다 (11/14 측정에서 재현율 0.46).
 """
 from __future__ import annotations
 
@@ -23,7 +25,8 @@ from syncup_ai.config import load_env
 from syncup_ai.llm import LLMNotConfigured, decider_from_env, from_env
 
 from .scoring import classify_positions, save_result
-from .sheet_eval import score_classify
+from .sheet_eval import CONTEXT, score_classify
+from .sheet_eval import load as load_sheet
 from .synth_eval import load
 
 SIZES = (3, 5, 10)
@@ -39,6 +42,19 @@ def _streams() -> list[tuple[dict, list[dict], list[dict]]]:
     for convs in by_type.values():
         msgs = sorted((m for c in convs for m in c["msgs"]), key=lambda m: (m["_at"], m["id"]))
         out.append(({**convs[0]["context"], "userName": "팀원"}, msgs, [g for c in convs for g in c["gold"]]))
+    return out
+
+
+def _sheet_streams() -> list[tuple[dict, list[dict], list[dict]]]:
+    """민규 님 샘플 대화를 팀원마다 (팀 정보, 발화 순서, 정답 문장)으로. 모두 같은 팀이라 팀 정보가 맞는다."""
+    msgs, gold, _ = load_sheet()
+    by_member = defaultdict(list)
+    for m in msgs:
+        by_member[m["member"]].append(m)
+    out = []
+    for member, member_msgs in by_member.items():
+        ids = {m["id"] for m in member_msgs}
+        out.append(({**CONTEXT, "userName": member}, member_msgs, [g for g in gold if g["message_id"] in ids]))
     return out
 
 
@@ -70,7 +86,8 @@ def simulate(size: int, llm=None, decider=None) -> dict:
     calls = chars = turns = user_msgs = sent_at_end = failed = 0
     waits, seconds, preds = [], [], []
     all_msgs, all_gold = [], []
-    for context, msgs, gold in _streams():
+    streams = _sheet_streams() if llm is not None else _streams()
+    for context, msgs, gold in streams:
         all_msgs += msgs
         all_gold += gold
         turns += len(group_turns([_clean(m) for m in msgs]))

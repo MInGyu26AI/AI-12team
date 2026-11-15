@@ -6,6 +6,7 @@ import type { CollectedMessage } from '@shared/collector';
 import background from '@/entrypoints/background';
 import { NOTICE_ID, noticeBaselineItem } from '@/lib/candidate-notice';
 import { checkConflicts, openBoardFromNotification } from '@/lib/conflict-alerts';
+import { PRE_ALERT_NOTICE_ID, preAlertsItem } from '@/lib/pre-alert-notice';
 import { collectStateItem, pendingCountItem, settingsItem } from '@/lib/settings';
 import { DEFAULT_WEB_URL, LOCAL_WEB_URL, PRODUCTION_WEB_URL } from '@/lib/web-url';
 
@@ -290,6 +291,34 @@ describe('검토할 카드 알림 (candidate-notice)', () => {
     expect(open).not.toHaveBeenCalled();
     await fakeBrowser.notifications.onClicked.trigger(NOTICE_ID);
     await vi.waitFor(() => expect(open).toHaveBeenCalledWith({ url: `${DEFAULT_WEB_URL}/review` }));
+  });
+});
+
+describe('승인 전 미리 알림 (pre-alert-notice)', () => {
+  const preAlert = { key: 'k1', topicKey: '확장 지원', decisions: [{ id: 't1', topic_key: '확장 지원', content: '확장 지원 = 크롬 우선' }], candidates: 1 };
+  const refreshWith = async (preAlerts: unknown[]) => {
+    overrides['collection.status'] = { ok: true, result: { ...STATUS, counts: { reviewPending: 1 }, preAlerts } };
+    await send({ type: 'refresh' }, fromPopup());
+  };
+
+  it('상태의 미리 알림을 팝업 목록에 옮기고 처음 보는 것만 시스템 알림으로 띄운다', async () => {
+    const notify = vi.spyOn(fakeBrowser.notifications, 'create');
+    await refreshWith([preAlert]);
+    await refreshWith([preAlert]);
+    const ids = (notify.mock.calls as unknown as [string, unknown][]).map(([id]) => id);
+    expect(ids.filter((id) => id === PRE_ALERT_NOTICE_ID)).toHaveLength(1);
+    expect(notify).toHaveBeenCalledWith(PRE_ALERT_NOTICE_ID, expect.objectContaining({ message: expect.stringContaining('크롬 우선') }));
+    expect(await preAlertsItem.getValue()).toEqual([preAlert]);
+    expect(nativeCalls.some((c) => c.method.startsWith('team.'))).toBe(false); // 팀에는 아무 요청도 보내지 않는다
+    await refreshWith([]);
+    expect(await preAlertsItem.getValue()).toEqual([]);
+  });
+
+  it('미리 알림을 누르면 개인 검토함(/review)을 연다', async () => {
+    const open = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as never);
+    await fakeBrowser.notifications.onClicked.trigger(PRE_ALERT_NOTICE_ID);
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith({ url: `${DEFAULT_WEB_URL}/review` }));
+    expect(open).toHaveBeenCalledTimes(1); // 새 후보 알림 · 충돌 알림 처리기는 이 id 를 무시한다
   });
 });
 

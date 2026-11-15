@@ -41,8 +41,8 @@ Mac 로컬 수집기 (개인 DB <상태 폴더>/private.sqlite)
 | 받기 | 검사·가림(`ai/syncup_ai/mask.py`) 뒤 저장. 형식 오류·같은 ID의 바뀐 내용은 따로 보관 | `turn_intake` |
 | 묶기 | 대화마다 N턴(기본 10, 1~50)을 작업 하나로. `flush`는 덜 찬 묶음도 ([턴 세기](../ai/README.md#2-대화-횟수-기준-묶기)) | `batch_queue` |
 | 개인정보 검사 | 허용·제외·보류로 나눔 | `local_privacy` |
-| 분류 | 허용된 문장만 외부 AI로. 직전에 `outbound_guard`와 수집 세션을 다시 확인 | `batch_classification` |
-| 후보 | 관련(related)이고 표시가 제안(none)이 아닌 카드만 후보로. 실패하면 `failed_new`, 원문 보존 | `batch_classification` |
+| 분류 | 허용된 문장만 외부 AI로. 직전에 `outbound_guard`와 수집 세션을 다시 확인. 팀 보드의 현재 결정(최대 30줄)을 함께 넣음 | `batch_classification`, `team_decisions` |
+| 후보 | 관련(related)이고 표시가 제안(none)이 아닌 카드만 후보로. 실패하면 `failed_new`, 원문 보존. 같은 세부 주제의 팀 결정을 바꾸는 결정은 미리 알림(본인만, [privacy.md 1-2절](privacy.md#1-2-승인-전-미리-알림-확장-0216)) | `batch_classification`, `team_decisions` |
 | 승인 | 소속 재확인, 내용·목적지(서버·사용자·팀)를 고정해 `outbox`에 | `candidate_review`, `delivery.approve` |
 | 전송 | 1초마다 한 건씩 ([재시도](running.md#실패와-중단)) | `delivery.deliver` |
 | 정리 | 기간 지난 원문·백업 ([보존](privacy.md#6-보존-7일)) | `retention` |
@@ -51,6 +51,7 @@ Mac 로컬 수집기 (개인 DB <상태 폴더>/private.sqlite)
 
 - `collection_loop.watch`는 한 번 처리하고 2초 쉰다. 수집 중일 때만 스캔·받기·분류한다.
 - 분류는 한 번에 하나만 돈다. AI를 기다리는 동안 잠금을 잡지 않아 설정 변경·일시중지를 받는다.
+- 외부 서비스 커넥터(`connectors.base.watch`)는 전송 스레드처럼 따로 돈다. 수집 중일 때만 5분마다 켜 둔 범위를 읽어 `turns.append`와 같은 입구로 넣는다 ([connectors.md](connectors.md)).
 
 ## 4. 로컬 RPC
 
@@ -77,6 +78,11 @@ Mac 로컬 수집기 (개인 DB <상태 폴더>/private.sqlite)
 | `jobs.retry` | 분류 실패 묶음을 지금 세션에서 다시 대기로 |
 | `delivery.retry` | 멈춘(`blocked`) 전송을 같은 내용·목적지로 다시 넣음. 시도 횟수는 새로 셈 |
 | `team.*` (`board`·`history`·`conflicts`·`conflictHistory`·`done`·`resolve`·`setDone`·`retryCheck`) | 연결된 팀의 팀 서버 API(`/teams/{팀}/…`)로 중계. 응답의 `team_id`가 다르면 오류 ([API 요청](team-server.md#api-요청)) |
+| `connectors.list` | 연결 서비스와 상태(`connected`·`tokenSet`·`needs`, 토큰은 없음), 현재 팀의 읽을 범위 ([connectors.md](connectors.md)) |
+| `connectors.setScope` | `{site, scopeId, title?, enabled}` 읽을 범위를 만들거나 켜고 끔 |
+| `connectors.sync` | `{site?, scopeId?}` 지금 읽어서 `turns.append`와 같은 입구로 넣음. 수집 중일 때만 됨 |
+| `connectors.disconnect` | `{site}` 이 PC의 연결 정보 파일을 지움 |
+| `files.ocr` | `{pages: [{page, image}], name?}` 쪽 이미지(base64 PNG·JPEG)를 이 PC의 Ollama로 읽어 글로 돌려줌. 쪽마다 `ok`·`reason` |
 
 - 목록은 현재 팀 것만 돌려준다. `intake.retry`·`intake.dismiss`·`privacy.exclude`·`privacy.recheck`·`candidates.approve`는 요청의 `teamId`가 현재 팀과 같아야 하고, `jobs.retry`·`delivery.retry`는 `teamId`를 주면 확인한다. `collection.configure`의 `teamId`는 팀 변경이고, 나머지는 `teamId`를 보지 않고 연결된 팀에 대해 처리한다.
 - `collection.flush`·`turns.append`·`intake.retry`·`jobs.retry`는 수집 중일 때만 된다.
@@ -90,7 +96,8 @@ v2 결정 카드(tag=decision)만 검사 대기(`conflict_checks`)에 들어간�
 - 상시 작업자는 없다. 팀 경로 요청이 성공하면 팀마다 작업자 하나를 띄우거나 깨운다. 남은 검사가 없으면 끝난다.
 - 새 결정을 그보다 먼저 저장된 유효(`active`·`review`) 결정과 한 쌍씩 비교한다. 경고는 두 결정이 모두 유효할 때만 저장하고 새 결정을 `review`로 바꾼다. 검사 중에도 보드에 나온다.
 - 진행 위치를 `conflict_checks.progress`에 저장해서, 서버를 다시 켜도 그 위치부터 이어 한다. 진행 중인 검사는 정책 지문(`contract/diagnostics.py`)이 바뀌면 첫 쌍부터 다시 하고, 끝난 검사는 다시 돌지 않는다.
-- 통신 실패는 몇 번 저절로 다시 한다. 그래도 안 되거나, 확신도가 낮거나, 그 밖의 실패면 `failed`가 된다. 팀원이 `team.retryCheck`로 진행 위치부터 다시 시작한다.
+- AI가 한 쌍을 확신하지 못하면(`failureReason=low-confidence`) 그 쌍을 판정 `확인 필요` 경고로 저장하고 다음 쌍으로 넘어간다. 그 쌍은 AI에게 다시 묻지 않고 팀이 충돌 처리로 정한다. AI가 쌍을 `확인 필요` 판정으로 돌려주면(11/15부터) 다른 경고처럼 그대로 저장되고, AI가 고른 관계(`aiJudgement`)와 확신도가 함께 남는다. 독립 검토 시간 초과처럼 `low-confidence` 실패로 오면 둘 다 없다.
+- 통신 실패는 몇 번 저절로 다시 한다. 그래도 안 되거나 그 밖의 실패면 `failed`가 된다. 팀원이 `team.retryCheck`로 진행 위치부터 다시 시작한다.
 
 ### 결정 상태와 충돌 처리
 

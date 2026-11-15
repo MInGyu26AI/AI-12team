@@ -48,6 +48,13 @@ describe('countEmptyBodies', () => {
     expect(empty).toBe(0);
   });
 
+  it('숨겨 둔 이전 대화는 빈 본문으로 오인하지 않는다', () => {
+    const { summary, empty } = read(`<main>${user('u1', '현재 질문')}${assistant('a1', '<p>현재 답변</p>')}<section style="display:none">${user('old-u', '지난 질문')}${assistant('old-a', '<p>지난 답변</p>')}</section><section hidden>${assistant('hidden-a', '')}</section></main>`);
+    expect(summary.messageCount).toBe(2);
+    expect(empty).toBe(0);
+    expect(assessExtractHealth(summary).status).toBe('ok');
+  });
+
   it('못 읽었거나 셀렉터가 없는 전략(repeated-blocks)이 먹었으면 모른다(undefined)', () => {
     expect(read('<main></main>').empty).toBeUndefined();
     const blocks = Array.from({ length: 5 }, (_, i) => `<section>문단 ${i}</section>`).join('');

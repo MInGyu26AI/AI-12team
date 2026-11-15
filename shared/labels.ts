@@ -1,6 +1,7 @@
 // CLAUDE.md §6 화면 규칙: 표시 이름, 배지 색, 배지 판정. 웹·확장 공용.
 // 색 값은 shared/theme.css 토큰. Tailwind 가 이 파일의 클래스를 읽도록 각 프로젝트 CSS 에 @source 로 등록.
 import type { MessageSite } from "./bridge";
+import { PRE_ALERT_HINT, PRE_ALERT_LABEL } from "./pre-alert";
 import type { Card, Conflict, RelatedCard, Resolution, Tag } from "./types";
 
 export const TAG_LABEL: Record<Tag, string> = {
@@ -13,19 +14,20 @@ export const TAG_LABEL: Record<Tag, string> = {
 // 개인·제안 배지 색. 문자열로 따로 둬서 isShareable 만 쓰는 확장 번들에 TAG_COLOR 표가 남지 않게 한다
 export const PERSONAL_COLOR = "bg-tag-personal-soft text-tag-personal border-transparent";
 
+// 피그마 칩에는 테두리가 없다 (노드 152:255)
 export const TAG_COLOR: Record<Tag, string> = {
-  decision: "bg-tag-decision-soft text-tag-decision border-tag-decision/20",
-  todo: "bg-tag-todo-soft text-tag-todo border-tag-todo/20",
-  research: "bg-tag-research-soft text-tag-research border-tag-research/20",
+  decision: "bg-tag-decision-soft text-tag-decision border-transparent",
+  todo: "bg-tag-todo-soft text-tag-todo border-transparent",
+  research: "bg-tag-research-soft text-tag-research border-transparent",
   none: PERSONAL_COLOR,
 };
 
-// 승인함 카드 테두리 (피그마 4번: 결정 남색 · 할 일 주황 · 조사 초록)
+// 승인함에서 체크된 카드 테두리. 새 피그마 4번은 표시와 상관없이 #57534e 1.5px (노드 152:281)
 export const TAG_BORDER: Record<Tag, string> = {
-  decision: "border-tag-decision/70",
-  todo: "border-tag-todo/70",
-  research: "border-tag-research/70",
-  none: "border-border",
+  decision: "border-card-border-selected",
+  todo: "border-card-border-selected",
+  research: "border-card-border-selected",
+  none: "border-card-border-selected",
 };
 
 // 발화 출처 (최근 수집 묶음·분석에서 제외된 발화). 카드 출처 이름(ai/syncup_ai/classify.py SITE_LABEL)과 같다
@@ -33,6 +35,9 @@ export const SITE_LABEL: Record<MessageSite, string> = {
   chatgpt: "ChatGPT",
   manual: "직접 입력",
   "chatgpt-export": "ChatGPT 내보내기",
+  "file-upload": "파일 올리기",
+  notion: "노션",
+  "google-docs": "구글 문서",
   codex: "Codex",
   "claude-code": "Claude Code",
 };
@@ -45,11 +50,14 @@ export function alertLevel(x: Pick<Conflict, "judgement" | "confidence">): Alert
   return x.judgement === "변경" ? "change" : "conflict";
 }
 
-export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; card: string; banner: string; text: string; button: string }> = {
+// 피그마 '충돌 알림 3단계'(226:976): 빨강은 충돌에만. 노랑·파랑은 작은 점(dot) + 글자색(text)으로만 쓰고 면을 칠하지 않는다.
+// 보드 결정 카드(card)는 세 단계 모두 흰 면 + 카드 테두리 #e2d6c3 · 모서리 10 (6번 노드 182:84)
+export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; dot: string; card: string; banner: string; text: string; button: string }> = {
   conflict: {
     label: "충돌",
     badge: "bg-alert-conflict-soft text-alert-conflict",
-    card: "border border-alert-conflict/50 bg-alert-conflict-soft/40",
+    dot: "bg-alert-conflict",
+    card: "rounded-[10px] border border-card-border bg-white",
     banner: "border-alert-conflict/40 bg-alert-conflict-soft",
     text: "text-alert-conflict",
     button: "bg-alert-conflict hover:bg-alert-conflict/90",
@@ -57,15 +65,17 @@ export const ALERT_LEVEL: Record<AlertLevel, { label: string; badge: string; car
   review: {
     label: "확인 필요",
     badge: "bg-alert-review-soft text-alert-review",
-    card: "border border-alert-review/50 bg-alert-review-soft/40",
-    banner: "border-alert-review/40 bg-alert-review-soft",
+    dot: "bg-alert-review-dot",
+    card: "rounded-[10px] border border-card-border bg-white",
+    banner: "border-alert-review-dot/50 bg-alert-review-soft",
     text: "text-alert-review",
     button: "bg-alert-review hover:bg-alert-review/90",
   },
   change: {
     label: "변경",
     badge: "bg-alert-change-soft text-alert-change",
-    card: "border border-alert-change/50 bg-alert-change-soft/40",
+    dot: "bg-alert-change",
+    card: "rounded-[10px] border border-card-border bg-white",
     banner: "border-alert-change/40 bg-alert-change-soft",
     text: "text-alert-change",
     button: "bg-alert-change hover:bg-alert-change/90",
@@ -101,6 +111,7 @@ const BADGE_COLOR = {
   masked: "bg-sensitive-soft text-sensitive border-sensitive/20", // 민감정보=빨강
   lowConfidence: "bg-warn-soft text-warn border-warn/20",
   change: "bg-change-soft text-change border-change/20",
+  preAlert: "bg-alert-conflict-soft text-alert-conflict border-alert-conflict/20",
 } as const;
 
 export const LOW_CONFIDENCE = 0.6;
@@ -108,11 +119,17 @@ export const LOW_CONFIDENCE = 0.6;
 // 팀 보드·공유 후보에 올라갈 수 있는 카드 (관련 + 제안 아님)
 export const isShareable = (c: Card): c is RelatedCard => c.relevance === "related" && c.tag !== "none";
 
-// 상태 배지 목록 (순서 = 표시 순서)
+// 상태 배지 목록 (순서 = 표시 순서). title 은 마우스를 올리면 보이는 설명
 export function statusBadges(c: Card) {
-  const badges: { label: string; color: string }[] = [];
+  const badges: { label: string; color: string; title?: string }[] = [];
   if (c.confidence < LOW_CONFIDENCE) badges.push({ label: "확인 필요", color: BADGE_COLOR.lowConfidence });
   if (c.masked) badges.push({ label: "민감정보 가림", color: BADGE_COLOR.masked });
-  if (c.relevance === "related" && c.is_change && c.tag === "decision") badges.push({ label: "변경", color: BADGE_COLOR.change });
+  // 같은 세부 주제의 팀 결정과 어긋나면 미리 알림 배지만 단다. 그 밖의 is_change 는 AI 가 본 '바꾸는 결정'이라 '변경 표현'
+  // (팀 보드의 '변경'은 서버 충돌 판정이라 이름을 나눈다)
+  if (c.relevance === "related" && c.preAlert) {
+    badges.push({ label: PRE_ALERT_LABEL, color: BADGE_COLOR.preAlert, title: PRE_ALERT_HINT });
+  } else if (c.relevance === "related" && c.is_change && c.tag === "decision") {
+    badges.push({ label: "변경 표현", color: BADGE_COLOR.change, title: "AI가 기존 안을 바꾸는 결정으로 봤어요. 같은 세부 주제의 팀 결정과 어긋나면 '팀 결정과 어긋남'으로 따로 알려요." });
+  }
   return badges;
 }

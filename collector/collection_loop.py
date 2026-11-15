@@ -65,11 +65,12 @@ def _set_status(db, status):
 
 def _collect_once(db, sources, pipeline):
     scan_status = ""
-    try:
-        scan(db, *sources)
-    except (ValueError, OSError, subprocess.SubprocessError) as error:
-        failure('collection_scan', error, detail=getattr(error, 'detail', None))
-        scan_status = "대화 기록 확인 실패 · " + getattr(error, 'summary', type(error).__name__)
+    if not getattr(pipeline, 'browser_only', False):
+        try:
+            scan(db, *sources)
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            failure('collection_scan', error, detail=getattr(error, 'detail', None))
+            scan_status = "대화 기록 확인 실패 · " + getattr(error, 'summary', type(error).__name__)
     if pipeline:
         scan_status = run_integrated(db, pipeline) or scan_status
     else:

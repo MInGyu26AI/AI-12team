@@ -14,6 +14,7 @@ import psycopg
 import local_rpc
 import repo_sync
 import team_relay
+import team_server
 from ai.syncup_ai.team_state import build_state
 from check_team_integration import checked
 from check_teams import TeamIsolation, own_tests, request
@@ -214,9 +215,51 @@ class RepoSyncTeam(TeamIsolation):
             for private in (PRIVATE_SENTENCE, PRIVATE_SOURCE, self.users['Dana'], self.users['Alice'], TOKEN):
                 self.assertNotIn(private, text)
 
+    def scheduled(self):
+        """Count the team server's save requests. The HTTP reply goes out before the save is scheduled, so a returned
+        request is not yet a scheduled one; tests wait on this count instead."""
+        calls = []
+        real = team_server.schedule_save
+
+        def counting(*args, **kwargs):
+            real(*args, **kwargs)
+            calls.append(kwargs.get('actor'))
+        self.enterContext(patch.object(team_server, 'schedule_save', counting))
+        return calls
+
+    def waiting(self):
+        """True while a save job for team A waits for changes to settle."""
+        with repo_sync._lock:
+            return uuid.UUID(self.teams['A']) in repo_sync._saves(self.api).waiting
+
+    def hold_snapshot(self, after_read):
+        """Stop the first save while it builds the files: before it reads the database, or right after.
+        Returns (started, release) events."""
+        started, release, real, calls = threading.Event(), threading.Event(), repo_sync.state_files, []
+
+        def held(c, target):
+            calls.append(1)
+            first = len(calls) == 1
+            if first and not after_read:
+                started.set()
+                release.wait(10)
+            result = real(c, target)
+            if first and after_read:
+                started.set()
+                release.wait(10)
+            return result
+        self.enterContext(patch.object(repo_sync, 'state_files', held))
+        return started, release
+
     def test_a_burst_of_approvals_is_one_public_commit(self):
-        self.share('d1', 'DB = PostgreSQL')
-        self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+        """Both approvals are scheduled before the save starts: one job, one commit with both."""
+        calls = self.scheduled()
+        with patch.object(repo_sync, 'SAVE_DELAY_SECONDS', 5):  # long enough that nothing saves on its own
+            self.share('d1', 'DB = PostgreSQL')
+            self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+            wait_until(lambda: len(calls) == 2)
+        self.assertEqual(self.fake.commits(), ['init'])
+        schedule_save(self.api, self.tokens['Dana'], self.teams['A'], delay=0)  # the batch is complete: save now
         status = self.settled()
         self.assertEqual(self.fake.commits(), ['SyncUp: DB 결정 추가 외 1건 (Dana 승인)', 'init'])
         self.assertEqual((status['state'], status['commit']['sha']), ('saved', self.fake.head))
@@ -224,6 +267,40 @@ class RepoSyncTeam(TeamIsolation):
         self.assertIn('**DB**: DB = PostgreSQL', files['SYNCUP.md'])
         self.assertIn('`SU-1` 배포 페이지 만들기', files['SYNCUP.md'])
         self.assertEqual(json.loads(files['syncup.json'])['team'], dict(name='A팀', repo='team/repo'))
+        self.assert_public()
+
+    def test_a_second_job_whose_changes_the_first_already_saved_is_unchanged(self):
+        """The second approval is scheduled as its own job while the first save waits to read the database;
+        the first save then reads both, so the second finds nothing new. Not a failure: the web shows both
+        'saved' and 'unchanged' as saved."""
+        calls, (started, release) = self.scheduled(), self.hold_snapshot(after_read=False)
+        self.share('d1', 'DB = PostgreSQL')
+        started.wait(5)
+        self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+        wait_until(lambda: len(calls) == 2 and self.waiting())
+        release.set()
+        wait_until(lambda: not self.waiting())
+        status = self.settled()
+        self.assertEqual(self.fake.commits(), ['SyncUp: DB 결정 추가 외 1건 (Dana 승인)', 'init'])
+        self.assertEqual((status['state'], status['commit']['sha']), ('unchanged', self.fake.head))
+        self.assertIn('`SU-1` 배포 페이지 만들기', self.fake.files()['SYNCUP.md'])
+        self.assert_public()
+
+    def test_an_approval_after_the_first_snapshot_gets_its_own_commit(self):
+        """The second approval lands after the first save has read the database: the next save must add it."""
+        calls, (started, release) = self.scheduled(), self.hold_snapshot(after_read=True)
+        self.share('d1', 'DB = PostgreSQL')
+        started.wait(5)
+        self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+        wait_until(lambda: len(calls) == 2 and self.waiting())
+        release.set()
+        wait_until(lambda: not self.waiting())
+        status = self.settled()
+        self.assertEqual(self.fake.commits(), ['SyncUp: SU-1 할 일 추가 (Dana 승인)', 'SyncUp: DB 결정 추가 (Dana 승인)', 'init'])
+        self.assertEqual((status['state'], status['commit']['sha']), ('saved', self.fake.head))
+        files = self.fake.files()['SYNCUP.md']
+        self.assertIn('**DB**: DB = PostgreSQL', files)
+        self.assertIn('`SU-1` 배포 페이지 만들기', files)
         self.assert_public()
 
     def test_todo_checks_are_saved_and_unlinked_teams_never(self):
@@ -332,6 +409,108 @@ class GitHubVerify(unittest.TestCase):
         del self.fake.info['permissions']  # what a fine-grained token may see; the person's role is not the token's
         self.fake.refuse_blobs = 403
         self.assertEqual(verify(self.target), ('no-write', True))
+
+
+class LinkChangeDuringSave(unittest.TestCase):
+    """A save under way for one repository must not report its outcome as another's. The GitHub calls are replaced;
+    the link bookkeeping, the save lock and the status are the real ones."""
+
+    ROW = dict(repo='team/a', branch='main', token=WEB_TOKEN, private=True, linkedBy='u', linkedByName='Dana',
+               linkedAt='2026-11-15T00:00:00+00:00')
+    CHANGES = {
+        'repository': lambda row: dict(row, repo='team/b'),
+        'branch': lambda row: dict(row, branch='feat/sync'),
+        'token': lambda row: dict(row, token=OTHER_TOKEN),
+        'unlink': lambda row: None,
+    }
+
+    def setUp(self):
+        self.team = uuid.uuid4()
+        self.server = Server(None)
+        repo_sync._remember(self.server, self.team, self.ROW)
+        self.saved_to, self.started, self.release = [], threading.Event(), threading.Event()
+
+        def held_save(target, build, message):
+            self.saved_to.append((target.repo, target.branch))
+            if len(self.saved_to) == 1:
+                self.started.set()
+                self.release.wait(5)
+            return dict(sha=f'sha-{target.repo}-{len(self.saved_to)}', html_url=f'https://github.example/{target.repo}',
+                        committer=dict(date='2026-11-15T00:00:00Z'))
+        self.enterContext(patch.object(repo_sync, 'save', held_save))
+
+    def save_in_background(self):
+        job = repo_sync._Job('token')
+        thread = threading.Thread(target=repo_sync._save_and_record,
+                                  args=(self.server, RepoTarget(self.team, 'team/a', 'main', WEB_TOKEN), job))
+        thread.start()
+        self.assertTrue(self.started.wait(5))
+        return thread
+
+    def test_without_a_change_the_save_is_reported(self):  # the checks below would pass vacuously without this
+        thread = self.save_in_background()
+        self.release.set()
+        thread.join(5)
+        self.assertEqual((repo_status(self.server, self.team)['state'], repo_status(self.server, self.team)['commit']['sha']),
+                         ('saved', 'sha-team/a-1'))
+
+    def test_an_old_save_never_reports_on_the_new_link(self):
+        for name, change in self.CHANGES.items():
+            with self.subTest(change=name):
+                self.setUp()
+                thread = self.save_in_background()
+                repo_sync._remember(self.server, self.team, change(self.ROW))
+                self.release.set()
+                thread.join(5)
+                status = repo_status(self.server, self.team)
+                if change(self.ROW) is None:
+                    self.assertEqual(status, dict(linked=False))
+                    continue
+                self.assertEqual((status['state'], status.get('commit')), ('unknown', None), status)
+
+    def test_a_to_b_and_back_to_a_still_drops_the_old_result(self):
+        thread = self.save_in_background()
+        repo_sync._remember(self.server, self.team, dict(self.ROW, repo='team/b'))
+        repo_sync._remember(self.server, self.team, self.ROW)
+        self.release.set()
+        thread.join(5)
+        self.assertEqual(repo_status(self.server, self.team)['state'], 'unknown')
+
+    def test_rereading_the_same_link_keeps_the_status(self):
+        thread = self.save_in_background()
+        repo_sync._remember(self.server, self.team, dict(self.ROW))
+        self.release.set()
+        thread.join(5)
+        self.assertEqual(repo_status(self.server, self.team)['state'], 'saved')
+
+    def test_a_save_waiting_its_turn_goes_to_the_link_of_that_moment(self):
+        first = self.save_in_background()  # holds the save lock
+        second = threading.Thread(target=repo_sync._save_and_record,
+                                  args=(self.server, RepoTarget(self.team, 'team/a', 'main', WEB_TOKEN),
+                                        repo_sync._Job('token')))
+        second.start()
+        time.sleep(.1)  # the second save now waits for the lock, having been asked for team/a
+        repo_sync._remember(self.server, self.team, dict(self.ROW, repo='team/b'))
+        self.release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(self.saved_to, [('team/a', 'main'), ('team/b', 'main')])
+        status = repo_status(self.server, self.team)
+        self.assertEqual((status['repo'], status['state'], status['commit']['sha']), ('team/b', 'saved', 'sha-team/b-2'))
+
+    def test_unlinking_while_a_save_waits_its_turn_sends_nothing_more(self):
+        first = self.save_in_background()
+        second = threading.Thread(target=repo_sync._save_and_record,
+                                  args=(self.server, RepoTarget(self.team, 'team/a', 'main', WEB_TOKEN),
+                                        repo_sync._Job('token')))
+        second.start()
+        time.sleep(.1)
+        repo_sync._remember(self.server, self.team, None)
+        self.release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(self.saved_to, [('team/a', 'main')])  # the save already sent still finishes (documented)
+        self.assertEqual(repo_status(self.server, self.team), dict(linked=False))
 
 
 class RepoLinkTeam(TeamIsolation):
@@ -535,7 +714,8 @@ class RepoLinkTeam(TeamIsolation):
 
 
 def load_tests(loader, tests, pattern):
-    plain = [loader.loadTestsFromTestCase(case) for case in (GitHubSave, SaveScheduling, GitHubVerify)]
+    plain = [loader.loadTestsFromTestCase(case) for case in (GitHubSave, SaveScheduling, GitHubVerify,
+                                                             LinkChangeDuringSave)]
     return unittest.TestSuite([*plain, own_tests(RepoSyncTeam), own_tests(RepoLinkTeam)])
 
 

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, EyeOff } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { TURNS_PER_BATCH } from "@shared/batch";
 import { PERSONAL_COLOR, TAG_COLOR } from "@shared/labels";
 import type { RelatedCard } from "@shared/types";
 import { CandidateCard } from "@/components/review/candidate-card";
 import { EmptyState } from "@/components/states";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonOutline, buttonPrimary, card, chip } from "@/components/ui/surface";
 import { collectorLink, type CollectorLink } from "@/lib/local-collector";
 import type { useReviewCandidates, useReviewSelection } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
@@ -63,10 +63,10 @@ function NoCandidates({ link }: { link: CollectorLink }) {
     <EmptyState title="승인할 후보가 없어요">
       <p className="break-keep">{NO_CANDIDATE_TEXT[link]}</p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
-        <Link href="/collect" className={cn(buttonVariants({ variant: "outline" }))}>
+        <Link href="/collect" className={buttonOutline}>
           대화 수집 상태
         </Link>
-        <Link href="/collect/paste" className={cn(buttonVariants(), "bg-brand hover:bg-brand-hover")}>
+        <Link href="/collect/paste" className={buttonPrimary}>
           대화 직접 붙여넣기
         </Link>
       </div>
@@ -76,12 +76,13 @@ function NoCandidates({ link }: { link: CollectorLink }) {
 
 function PersonalNote({ count }: { count: number }) {
   return (
-    <article className="flex gap-4 rounded-xl border bg-muted/40 p-5 text-muted-foreground">
-      <EyeOff className="mt-0.5 size-5 shrink-0" />
-      <div className="space-y-1.5">
-        <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", PERSONAL_COLOR)}>개인</span>
-        <p className="text-[17px]">개인 내용 {count}개</p>
-        <p className="text-sm">개인 내용은 팀에 올리지 않아요.</p>
+    // 피그마 4번 개인 카드 (152:299): 흰 면 · 점선 테두리 · 고를 수 없는 빈 체크 칸
+    <article className="flex gap-3.5 rounded-[12px] border border-dashed border-card-border-personal bg-card p-[18px] text-muted-foreground">
+      <span aria-hidden className="mt-0.5 size-5 shrink-0 rounded-[5px] border-[1.5px] border-foreground/25 bg-white" />
+      <div className="space-y-1.5 leading-[1.5]">
+        <span className={cn(chip, PERSONAL_COLOR)}>개인</span>
+        <p className="text-base font-medium">개인 내용 {count}개</p>
+        <p className="text-[13px]">개인 내용이라 팀에 공유되지 않아요.</p>
       </div>
     </article>
   );
@@ -95,7 +96,7 @@ function OtherContent({ cards, open, onToggle, onDismiss }: {
   onDismiss: (id: string) => void;
 }) {
   return (
-    <div className="rounded-xl border bg-card">
+    <div className={card}>
       <button
         className="flex w-full items-center justify-between px-5 py-3 text-sm text-muted-foreground"
         onClick={onToggle}
@@ -105,10 +106,10 @@ function OtherContent({ cards, open, onToggle, onDismiss }: {
         <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <ul className="divide-y border-t">
+        <ul className="divide-y divide-card-border border-t border-card-border">
           {cards.map((c) => (
             <li key={c.id} className="flex items-center gap-3 px-5 py-3 text-sm text-muted-foreground">
-              <span className={cn("rounded-full px-2 py-0.5 text-xs", TAG_COLOR.none)}>제안</span>
+              <span className={cn(chip, TAG_COLOR.none)}>제안</span>
               <span className="min-w-0 flex-1 break-keep">{c.content}</span>
               <button className="text-xs underline" onClick={() => onDismiss(c.id)}>
                 지우기

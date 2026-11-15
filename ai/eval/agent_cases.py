@@ -2,12 +2,15 @@
 
   python3 -m eval.agent_cases split                      # 개발용 / 최종 측정용 개수
   python3 -m eval.agent_cases run --split dev --tag v1   # 판정 실행 (외부 AI 필요)
+  python3 -m eval.agent_cases run --split dev --tag v1 --judge decisions   # 서버의 1순위인 Decisions 로
   python3 -m eval.agent_cases run --split final --tag v2 # 최종 측정은 마지막에 한 번만
 
 1) 입력: eval/syntitan/package/agent_questions.csv (케이스 133개 + 다른 표현 31개). 정답: eval/syntitan/labels.csv
    패키지에는 정답이 없어서 우리 규칙 문서 기준으로 정했다. review=검수 는 사람이 다시 볼 것.
 2) 나누기: 정답 종류마다 번호 순으로 번갈아 개발용·최종 측정용. 다른 표현(C-012-1)은 원래 케이스를 따라간다.
-3) 판정: 서비스와 같은 prompts/conflict_system.md 로 묻는다. SynTitan 안내대로 전후 비교 동안 모델·설정은 그대로 두고 자료만 바꾼다.
+3) 판정: 기본은 서비스의 chat 경로와 같은 prompts/conflict_system.md 로 묻는다. --judge decisions 면 서버가 먼저 쓰는
+   Decisions 질문(decide.JUDGE_QUESTION)으로 묻는다. 케이스가 카드가 아니라 상황 글이라 서버 경로 전체(후보 고르기, 독립 검토)는
+   거치지 않는다. SynTitan 안내대로 전후 비교 동안 모델·설정은 그대로 두고 자료만 바꾼다.
 4) 채점: 화면에 보이는 알림(없음·변경·충돌·확인 필요)으로 맞았는지 센다. 확신도 0.6 미만은 판정과 상관없이 확인 필요.
    정답이 같음·무관·비교 없음이면 알림 없음, 변경은 CONFLICT_ON_CHANGE 에 따라 변경 알림.
 """
@@ -21,7 +24,8 @@ from pathlib import Path
 
 from syncup_ai import config
 from syncup_ai.config import LOW_CONFIDENCE, load_env
-from syncup_ai.llm import LLMNotConfigured, from_env
+from syncup_ai.decide import JUDGE_CHOICES, JUDGE_QUESTION, _conf
+from syncup_ai.llm import LLMNotConfigured, choice_q, decider_from_env, from_env
 
 from .scoring import save_result
 
@@ -96,23 +100,39 @@ def _ask(llm, text: str) -> dict | None:
     return results[0] if isinstance(results, list) and results and isinstance(results[0], dict) else None
 
 
-def run(split: str, tag: str) -> dict:
+def _ask_decisions(decider, text: str) -> dict | None:
+    """서버의 1순위 경로와 같은 Decisions 판정 질문·보기로 묻는다 (decide.judge_pairs). 이유 글은 없다."""
+    question = choice_q("case", JUDGE_QUESTION.format(name="case"), JUDGE_CHOICES)
+    answer = decider.decide(text, [question]).get("case")
+    if not answer or answer.get("choice") not in JUDGE_CHOICES:
+        return None
+    return {"id": "case", "judgement": answer["choice"], "confidence": _conf(answer)}
+
+
+def run(split: str, tag: str, judge: str = "chat") -> dict:
+    """judge: chat (conflict_system.md 프롬프트) | decisions (서버가 먼저 쓰는 Decisions 질문)"""
     load_env()
     try:
         llm = from_env()
     except LLMNotConfigured as e:
         sys.exit(f"외부 AI 설정이 없습니다: {e}")
+    decider = decider_from_env() if judge == "decisions" else None
+    if judge == "decisions" and decider is None:
+        sys.exit("Decisions 설정이 없습니다 (OPENAI_API_KEY).")
     rows = []
     for item in inputs(split):
         try:
-            answer = _ask(llm, item["input"])
+            if decider is not None:
+                answer = _ask_decisions(decider, item["input"])
+            else:
+                answer = _ask(llm, item["input"])
         except Exception as e:  # 한 건 실패로 전체를 멈추지 않는다
             answer = None
             print(f"{item['case_id']} 실패: {e}", file=sys.stderr)
         want = EXPECTED_ALERT[item["expected"]]
         got = shown_alert(answer)
         rows.append({**item, "answer": answer, "want": want, "got": got, "ok": want == got})
-    return _summary(split, tag, rows)
+    return {**_summary(split, tag, rows), "judge": judge}
 
 
 def _summary(split: str, tag: str, rows: list[dict]) -> dict:
@@ -139,6 +159,7 @@ def main() -> None:
     parser.add_argument("command", choices=("split", "run"))
     parser.add_argument("--split", choices=("dev", "final"), default="dev")
     parser.add_argument("--tag", default="v1")
+    parser.add_argument("--judge", choices=("chat", "decisions"), default="chat")
     args = parser.parse_args()
     if args.command == "split":
         for split in ("dev", "final"):
@@ -147,8 +168,8 @@ def main() -> None:
             kinds = Counter(r["expected"] for r in rows)
             print(f"{split}: 케이스 {len(cases)}개, 입력 {len(rows)}개, 정답 {dict(kinds)}")
         return
-    result = run(args.split, args.tag)
-    print(save_result(f"agent-{args.tag}-{args.split}", result))
+    result = run(args.split, args.tag, args.judge)
+    print(save_result(f"agent-{args.tag}-{args.judge}-{args.split}", result))
 
 
 if __name__ == "__main__":

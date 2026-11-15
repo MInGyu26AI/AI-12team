@@ -45,13 +45,83 @@ const mount = (fetchTeamRecord?: OverlayActions['fetchTeamRecord']) => {
   document.body.append(overlay.host);
 };
 
+describe('아이콘 도구의 접근성과 범위 안내', () => {
+  it('각 아이콘에 이름과 범위를 설명하는 툴팁을 연결한다', () => {
+    mount();
+    for (const button of [overlay.recordButton, overlay.syncButton, overlay.sendSelectionButton, overlay.sendAllButton]) {
+      expect(button.querySelector('[animate="none"]')?.getAttribute('aria-hidden')).toBe('true');
+      expect(button.getAttribute('aria-label')).toBeTruthy();
+      const tip = overlay.host.shadowRoot!.getElementById(button.getAttribute('aria-describedby')!);
+      expect(tip).not.toBeNull();
+      if (button !== overlay.syncButton) expect(tip?.textContent).toContain(button.getAttribute('aria-label'));
+    }
+    expect(overlay.syncButton.getAttribute('aria-label')).toBe('지금까지 모은 대화 넣기');
+    expect(overlay.sendAllButton.getAttribute('aria-label')).toBe('이 대화 넣기');
+  });
+
+  it('마우스 진입에만 한 번 재생하며 클릭·포커스·터치와 비활성 상태는 재생하지 않는다', () => {
+    mount();
+    for (const control of [overlay.recordButton, overlay.sendAllButton, overlay.sendSelectionButton, overlay.syncButton, overlay.host.shadowRoot!.querySelector('summary')!]) {
+      const glyph = control.querySelector('[animate="none"]') as HTMLElement & { play(): boolean };
+      const play = vi.spyOn(glyph, 'play').mockReturnValue(true);
+      control.dispatchEvent(new FocusEvent('focusin'));
+      control.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch' }));
+      control.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'touch' }));
+      // Do not invoke real operation handlers while checking a click on the glyph.
+      glyph.dispatchEvent(new MouseEvent('click', { bubbles: false }));
+      expect(play).not.toHaveBeenCalled();
+      control.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+      expect(play).toHaveBeenCalledTimes(control.matches(':disabled') ? 0 : 1);
+      control.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse' }));
+      expect(play).toHaveBeenCalledTimes(control.matches(':disabled') ? 0 : 1);
+      play.mockRestore();
+    }
+  });
+
+  it('Chrome 콘텐츠 환경처럼 customElements가 없어도 도구를 표시한다', () => {
+    const original = globalThis.customElements;
+    vi.stubGlobal('customElements', null);
+    try {
+      mount();
+      expect(overlay.recordButton.querySelector('[data-lucian]')?.shadowRoot?.querySelector('svg')).not.toBeNull();
+    } finally { vi.stubGlobal('customElements', original); }
+  });
+
+  it('비활성 도구도 키보드로 설명을 읽고 Escape로 닫을 수 있다', async () => {
+    mount();
+    const wrapper = overlay.sendSelectionButton.parentElement!;
+    expect(wrapper.tabIndex).toBe(0);
+    wrapper.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(wrapper.classList.contains('dismissed')).toBe(true);
+    wrapper.dispatchEvent(new FocusEvent('focusout'));
+    expect(wrapper.classList.contains('dismissed')).toBe(false);
+    overlay.sendSelectionButton.disabled = false;
+    await settle();
+    expect(wrapper.tabIndex).toBe(-1);
+  });
+});
+
+describe('수집 관리 더 보기', () => {
+  it('관리 동작은 기본으로 접고 Escape로 닫아 초점을 돌린다', () => {
+    mount();
+    const more = overlay.syncButton.closest('details')!;
+    expect(more.open).toBe(false);
+    expect(overlay.sendAllButton.closest('details')).toBeNull();
+    more.open = true;
+    overlay.syncButton.focus();
+    overlay.syncButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(more.open).toBe(false);
+    expect(overlay.host.shadowRoot!.activeElement).toBe(more.querySelector('summary'));
+  });
+});
+
 describe('"싱크 맞추기" 버튼', () => {
   it('syncNow(reason: button)를 백그라운드로 보내고 결과를 안내한다', async () => {
     const send = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: true, result: result({ newTurns: 2, flushed: true }) } as never);
     mount();
     overlay.syncButton.click();
     expect(overlay.syncButton.disabled).toBe(true); // 도는 동안 다시 누르지 못하게
-    expect(toastText()).toBe('동기화하는 중이에요…');
+    expect(toastText()).toBe('새 대화와 수집 대기분을 확인하고 있어요…');
     await settle();
     expect(send).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith({ type: 'syncNow', params: { reason: 'button' } });

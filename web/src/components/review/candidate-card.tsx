@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Pencil, TriangleAlert, X } from "lucide-react";
 import { fmtDue, parseSource } from "@shared/format";
 import { CLASSIFICATION_METHOD_LABEL, TAG_BORDER, TAG_COLOR, TAG_LABEL, statusBadges } from "@shared/labels";
+import { PRE_ALERT_HINT, preAlertText, type PreAlert } from "@shared/pre-alert";
 import type { RelatedCard } from "@shared/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isSelectable } from "@/lib/review-candidates";
@@ -29,8 +30,8 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
   return (
     <article
       className={cn(
-        "group flex gap-4 rounded-xl border-2 bg-card p-5 transition-colors",
-        checked ? TAG_BORDER[c.tag] : "border-transparent shadow-xs",
+        "group flex gap-3.5 rounded-[12px] border-[1.5px] bg-card p-[18px] transition-colors",
+        checked ? TAG_BORDER[c.tag] : "border-card-border",
       )}
     >
       <Checkbox
@@ -38,14 +39,14 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
         checked={checked}
         disabled={!isSelectable(c)}
         onCheckedChange={(v) => onCheckedChange(v === true)}
-        className="mt-1 size-5 data-checked:border-brand data-checked:bg-brand"
+        className="mt-0.5 size-5 rounded-[5px] border-[1.5px] border-foreground/25 bg-white data-checked:border-brand data-checked:bg-brand"
         aria-label="이 카드 선택"
       />
-      <div className="min-w-0 flex-1 space-y-2">
+      <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", TAG_COLOR[c.tag])}>{TAG_LABEL[c.tag]}</span>
+          <span className={cn("rounded-full px-2.5 py-[3px] text-xs leading-[1.5] font-medium", TAG_COLOR[c.tag])}>{TAG_LABEL[c.tag]}</span>
           {statusBadges(c).map((b) => (
-            <span key={b.label} className={cn("rounded-full px-2 py-0.5 text-xs font-medium", b.color)}>
+            <span key={b.label} title={b.title} className={cn("rounded-full px-2 py-0.5 text-xs font-medium", b.color)}>
               {b.label}
             </span>
           ))}
@@ -91,11 +92,12 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
             </button>
           </form>
         ) : (
-          <label htmlFor={id} className="block cursor-pointer text-[17px] font-semibold break-keep">
+          <label htmlFor={id} className="block cursor-pointer text-base leading-[1.5] font-medium break-keep">
             {c.content}
           </label>
         )}
 
+        {c.preAlert && <PreAlertNote alert={c.preAlert} />}
         {meta && <p className={cn("text-sm break-keep", c.tag === "todo" ? "font-semibold text-tag-todo" : "text-muted-foreground")}>{meta}</p>}
         <p className="text-xs text-muted-foreground/80 break-keep">“{c.sentence}”</p>
         {onEvidenceChange && <EvidenceEditor sentence={c.sentence} onSave={onEvidenceChange} />}
@@ -103,6 +105,19 @@ export function CandidateCard({ card: c, checked, onCheckedChange, onContentChan
         {c.evidence?.roleGuessed && <RoleConfirm onConfirm={() => onConfirmUser?.()} onDismiss={onDismiss} />}
       </div>
     </article>
+  );
+}
+
+// 승인 전 미리 알림: 어긋나는 팀 결정 (본인에게만 보임, 팀에는 보내지 않음)
+function PreAlertNote({ alert }: { alert: PreAlert }) {
+  return (
+    <div role="note" className="flex gap-2 rounded-lg bg-alert-conflict-soft px-3 py-2 text-sm text-alert-conflict">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="space-y-0.5 break-keep">
+        <p className="font-medium">{preAlertText(alert)}</p>
+        <p className="text-xs opacity-80">{PRE_ALERT_HINT}</p>
+      </div>
+    </div>
   );
 }
 

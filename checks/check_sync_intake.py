@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 import math
 import time
+from unittest.mock import patch
 
 from ai.syncup_ai.batch import group_turns
 from batch_queue import unbatched_turns
@@ -140,6 +141,21 @@ class OptionalFields(SyncFixture):
                 self.assertEqual(response['newMessages'], 0)
         self.assertEqual(self.count('SELECT count(*) FROM intake'), 0)
 
+    def test_kakao_paste_turn_ids_group_turns_without_origin(self):
+        """Web KakaoTalk paste (shared/kakaotalk.ts): site manual, no origin, turnId = conversation chunk; re-send skips."""
+        def kakao(n, turn):
+            return dict(id=f'kakao:room:202611142102:{n:014x}:0:0', site='manual', conversationId='kakao:room', role='user',
+                        roleGuessed=False, text=f'카톡 메시지 {n}', collectedAt='2026-11-14T21:02:00+09:00', turnId=turn)
+        messages = [kakao(1, 'kakao:room:t1'), kakao(2, 'kakao:room:t1'), kakao(3, 'kakao:room:t2')]
+        response = turn_intake.append(self.pipeline, messages, flush=True)
+        self.assertEqual((response['newMessages'], response['intakeIssues']), (3, []))
+        stored = [self.stored()[m['id']] for m in messages]
+        self.assertEqual([s['turnId'] for s, _ in stored], ['kakao:room:t1', 'kakao:room:t1', 'kakao:room:t2'])
+        self.assertTrue(all(job for _, job in stored), 'flush batches the chunks even without an answer')
+        self.assertEqual([len(t) for t in group_turns([s for s, _ in stored])], [2, 1], 'one turn per chunk')
+        again = turn_intake.append(self.pipeline, messages, flush=True)
+        self.assertEqual((again['newMessages'], again['intakeIssues']), (0, []), 'a pasted overlap is skipped, not quarantined')
+
     def test_valid_optional_fields_are_kept_only_when_sent(self):
         message = self.screen('s', 'user', origin='screen', createdAt='2026-11-13T19:00:00+09:00', turnId='t' * 1200)
         self.assertEqual(turn_intake.append(self.pipeline, [message])['intakeIssues'], [])
@@ -243,13 +259,34 @@ class Windows(SyncFixture):
         with connect(self.db) as c:
             c.execute('UPDATE settings SET start=?,end=?', (now - 100, now - 50))
         self.turn_on(now - 100)
-        configure(self.pipeline, dict(endsAt=iso(now + 600)))
+        extended = dispatch(self.pipeline, 'collection.configure', dict(endsAt=iso(now + 600)))
+        self.assertFalse(extended['autoCollect'])
+        self.assertEqual(extended['syncWindows'], [dict(start=iso(now - 100), end=iso(now - 50))])
+        configure(self.pipeline, dict(autoCollect=True))
         with connect(self.db) as c:
             gap_end = c.execute('SELECT end FROM pauses').fetchone()[0]
             first, second = sync_windows(c, c.execute('SELECT * FROM settings').fetchone())
         self.assertEqual(first, (now - 100, now - 50))
         self.assertTrue(0 <= second[0] - gap_end < .001)
         self.assertEqual(second[1], now + 600)
+
+    def test_deadline_accepts_seven_days_and_collection_stops_at_it(self):
+        now = math.floor(time.time())
+        end = now + 7 * 24 * 60 * 60
+        self.turn_on(now)
+        with patch('collection_settings.time.time', return_value=now):
+            status = dispatch(self.pipeline, 'collection.configure', {'endsAt': iso_ms(end)})
+            self.assertEqual(seconds(status['endsAt']), end)
+            self.assertTrue(status['autoCollect'])
+            with self.assertRaisesRegex(ValueError, '7일 이내'):
+                dispatch(self.pipeline, 'collection.configure', {'endsAt': iso_ms(end + 1)})
+        with patch('collection_settings.time.time', return_value=end - 1):
+            result = turn_intake.append(self.pipeline, self.sync_turn('near-end', end - 2))
+            self.assertEqual(result['newTurns'], 1)
+        with patch('collection_settings.time.time', return_value=end):
+            self.assertFalse(collection_status(self.pipeline)['autoCollect'])
+            with self.assertRaisesRegex(ValueError, '일시중지되었거나 종료'):
+                turn_intake.append(self.pipeline, self.sync_turn('at-end', end))
 
     def test_status_reports_iso_windows(self):
         self.turn_on(self.T + 100)

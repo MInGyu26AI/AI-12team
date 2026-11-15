@@ -131,6 +131,9 @@ class _Saves:
     running: dict = field(default_factory=dict)  # team -> number of saves under way
     unsaved: dict = field(default_factory=dict)  # team -> people of failed saves, named in the next commit
     status: dict = field(default_factory=dict)  # team -> the latest outcome, shown by GET …/repo
+    # team -> how many times the repository it saves to has changed; a save records its outcome only when this
+    # is still what it was when the save chose its repository, so an old repository's result never shows as the new one's
+    generation: dict = field(default_factory=dict)
 
 
 _servers = weakref.WeakKeyDictionary()  # server -> _Saves; a stopped server's entry goes with it
@@ -164,7 +167,13 @@ _links = weakref.WeakKeyDictionary()  # server -> {team id: _Link}; guarded by _
 def linked(server, team_id):
     """The repository linked to this team (an id as uuid or text), or None. The team's web link comes first,
     then the server's environment link."""
-    link = _cached_link(server, team_id)
+    with _lock:
+        return _linked_locked(server, team_id)
+
+
+def _linked_locked(server, team_id):
+    """linked() for a caller that already holds _lock (it is not reentrant)."""
+    link = _links.get(server, {}).get(str(team_id)) if server is not None else None
     if link is not None and link.target is not None:
         return link.target
     target = getattr(server, 'repo_target', None)
@@ -187,17 +196,21 @@ def load_link(c, server, team_id):
 
 
 def _remember(server, team_id, row):
-    """Keep the team's link (row from team_settings.read_repo_link, or None); a changed link forgets the last
-    save outcome, so the status reads 'unknown' until the next save to the new repository."""
+    """Keep the team's link (row from team_settings.read_repo_link, or None). When the repository the team saves to
+    changes (repository, branch, token, unlink, or back to the server's environment link), the last save outcome is
+    forgotten, so the status reads 'unknown' until the next save there, and saves already under way for the old
+    repository no longer record theirs. Rereading the same link changes nothing."""
     target = None if row is None else RepoTarget(uuid.UUID(str(team_id)), row['repo'], row['branch'], row['token'],
                                                  api=getattr(server, 'github_api', GITHUB_API))
     meta = {} if row is None else {k: row[k] for k in ('private', 'linkedBy', 'linkedByName', 'linkedAt')}
+    key = uuid.UUID(str(team_id))
     with _lock:
-        links = _links.setdefault(server, {})
-        before = links.get(str(team_id))
-        links[str(team_id)] = _Link(target, meta, time.monotonic())
-        if before is None or before.target != target:
-            _saves(server).status.pop(uuid.UUID(str(team_id)), None)
+        before = _linked_locked(server, team_id)
+        _links.setdefault(server, {})[str(team_id)] = _Link(target, meta, time.monotonic())
+        if _linked_locked(server, team_id) != before:
+            saves = _saves(server)
+            saves.status.pop(key, None)
+            saves.generation[key] = saves.generation.get(key, 0) + 1
 
 
 def first_check_due(server, team_id):
@@ -248,9 +261,8 @@ def _wait_then_save(server, target, job):
             job.wake.clear()
         job.wake.wait(wait)
     try:
-        current = linked(server, team_id)
-        if current is not None and not server.checks_stop.is_set():
-            _save_and_record(server, current, job)
+        if not server.checks_stop.is_set():
+            _save_and_record(server, target, job)
     finally:
         with _lock:
             running = _saves(server).running
@@ -260,10 +272,18 @@ def _wait_then_save(server, target, job):
 
 
 def _save_and_record(server, target, job):
-    """Rebuild and save; the outcome goes to GET …/repo, a failure also to the diagnostic log (kind only)."""
+    """Rebuild and save to the repository the team is linked to once this save's turn comes (target only names the
+    team; the link may have changed while it waited). The outcome goes to GET …/repo unless the link changed again
+    before it finished; a failure also goes to the diagnostic log (kind only)."""
+    team_id = target.team_id
     with _saving:
         with _lock:
-            known = (_saves(server).status.get(target.team_id) or {}).get('commit')
+            target = _linked_locked(server, team_id)
+            saves = _saves(server)
+            generation = saves.generation.get(team_id, 0)
+            known = (saves.status.get(team_id) or {}).get('commit')
+        if target is None:  # unlinked while waiting
+            return
         latest = {}
 
         def build():
@@ -283,10 +303,11 @@ def _save_and_record(server, target, job):
                           httpStatus=error.code if isinstance(error, GitHubError) else None)
         with _lock:
             saves = _saves(server)
-            if result['state'] == 'failed':
-                waiting = saves.waiting.get(target.team_id)
-                _credit(waiting.people if waiting else saves.unsaved.setdefault(target.team_id, {}), job.people)
-            saves.status[target.team_id] = dict(result, checkedAt=time.time())
+            if result['state'] == 'failed':  # these people are still named in the team's next commit, wherever it goes
+                waiting = saves.waiting.get(team_id)
+                _credit(waiting.people if waiting else saves.unsaved.setdefault(team_id, {}), job.people)
+            if saves.generation.get(team_id, 0) == generation:
+                saves.status[team_id] = dict(result, checkedAt=time.time())
 
 
 def repo_status(server, team_id):
@@ -294,18 +315,18 @@ def repo_status(server, team_id):
 
     source is 'team' for the team's web link and 'env' for the server's environment link. tokenSet only says
     that a token is stored; the token itself is never part of any answer."""
-    target = linked(server, team_id)
-    if target is None:
-        return dict(linked=False)
-    link = _cached_link(server, team_id)
+    with _lock:  # the link and its status read together, so they always describe the same repository
+        target = _linked_locked(server, team_id)
+        if target is None:
+            return dict(linked=False)
+        link = _links.get(server, {}).get(str(team_id))
+        saves = _saves(server)
+        busy = target.team_id in saves.waiting or target.team_id in saves.running
+        status = dict(saves.status.get(target.team_id) or dict(state='unknown'), pending=busy)
     if link is not None and link.target == target:
         about = dict(source='team', **link.meta)
     else:
         about = dict(source='env', private=None, linkedBy=None, linkedByName=None, linkedAt=None)
-    with _lock:
-        saves = _saves(server)
-        busy = target.team_id in saves.waiting or target.team_id in saves.running
-        status = dict(saves.status.get(target.team_id) or dict(state='unknown'), pending=busy)
     return dict(linked=True, repo=target.repo, branch=target.branch, files=list(FILES), tokenSet=True,
                 **about, **status)
 

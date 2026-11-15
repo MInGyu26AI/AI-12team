@@ -1,35 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { Copy } from "lucide-react";
+import Link from "next/link";
+import { Copy, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { fmtMDHM, timeOf } from "@shared/format";
-import { alertLevel, type AlertLevel } from "@shared/labels";
-import { criteriaFromState } from "@shared/criteria";
+import { alertLevel } from "@shared/labels";
 import { branchMatcher, branchNames, repoIndex } from "@shared/repo";
 import type { RelatedCard } from "@shared/types";
 import { BranchFilter } from "@/components/board/branch-filter";
 import { ConflictBanner } from "@/components/board/conflict-banner";
 import { ConflictChecks } from "@/components/board/conflict-checks";
 import { DecisionHistoryList } from "@/components/board/decision-history";
-import { DecisionTimeline, TopicFilter } from "@/components/board/decision-timeline";
+import { DecisionTimeline, TopicFilter, type Flag } from "@/components/board/decision-timeline";
 import { RepoStatusBar } from "@/components/board/repo-status";
 import { ResearchPanel } from "@/components/board/research-panel";
-import { TeamCriteriaCard } from "@/components/board/team-criteria";
-import { TeamRecord } from "@/components/board/team-record";
 import { TodoPanel } from "@/components/board/todo-panel";
 import { ConflictDialog } from "@/components/conflict-dialog";
+import { PageTitle } from "@/components/page-title";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { buttonPrimary } from "@/components/ui/surface";
 import { USE_MOCK, api } from "@/lib/api";
 import { resetMockData } from "@/lib/api/mock";
 import { boardToMarkdown } from "@/lib/board-markdown";
 import { useBoard } from "@/lib/use-board";
 import { useTeam } from "@/lib/team";
 import { useRepo } from "@/lib/use-repo";
+import { cn } from "@/lib/utils";
 
-// 피그마 6번: 팀 결정 기록 보드
+// 피그마 6번: 팀 결정 기록 보드 (176:2 레포 미연결 · 182:2 연결 후).
+// 세 열: 왼쪽 브랜치·세부 주제 필터 · 가운데 결정 타임라인 + 이전 결정 이력 · 오른쪽 할 일 + 팀 목표·범위·규칙 + 조사·참고 (사용자 결정 11/15).
+// '팀 상태 파일'(SYNCUP.md)은 예전 '팀 기록' 탭을 별도 화면(/board/record, 피그마 7-2·7-3)으로 옮겼다
 export default function BoardPage() {
   const { load, refresh, reload } = useBoard();
   const repo = useRepo();
@@ -51,9 +52,9 @@ export default function BoardPage() {
     : cards;
   const { decisions, todos, research, topics, lastUpdate } = boardSections(visible);
   const shown = topic ? decisions.filter((c) => topicOf(c) === topic) : decisions;
-  const flagged = new Map<string, AlertLevel>(conflicts.map((x) => [x.cardB.id, alertLevel(x)]));
+  // 새 결정(cardB) id → 알림 단계와 바뀌기 전 결정 ('변경됨 · 이전: …' 표시용)
+  const flagged = new Map<string, Flag>(conflicts.map((x) => [x.cardB.id, { level: alertLevel(x), previous: x.cardA.content }]));
   // 팀 기준: 목업은 팀 만들기에서 적은 값, 실제 모드는 팀 서버가 레포의 syncup.json team 에 넣은 값
-  const criteria = USE_MOCK ? team.criteria : criteriaFromState(repo.state?.team);
 
   const copyRecord = async () => {
     try {
@@ -91,55 +92,65 @@ export default function BoardPage() {
 
   return (
     <Shell>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold">팀 결정 기록</h1>
-          <p className="text-muted-foreground">
-            결정 {decisions.length}개 · 할 일 {todos.length}개{lastUpdate > 0 && ` · 마지막 업데이트 ${fmtMDHM(new Date(lastUpdate))}`}
-          </p>
-        </div>
-        <Button onClick={copyRecord} disabled={!cards.length} className="h-11 bg-brand px-5 hover:bg-brand-hover">
-          <Copy />
-          팀 기록 복사
-        </Button>
-      </div>
+      <PageTitle
+        title="팀 결정 기록"
+        actions={
+          <>
+            {/* 피그마 182:40: 흰 바탕 · 테두리 rgba(24,23,58,0.14) · 높이 41 · 글자 13px */}
+            <Link
+              href="/board/record"
+              className="inline-flex h-[41px] items-center gap-1.5 rounded-md border border-foreground/14 bg-white px-4 text-[13px] font-medium hover:bg-surface-soft"
+            >
+              <FileText className="size-[15px]" aria-hidden />
+              팀 상태 파일
+            </Link>
+            <button type="button" onClick={copyRecord} disabled={!cards.length} className={cn(buttonPrimary, "gap-2")}>
+              <Copy />
+              팀 기록 복사
+            </button>
+          </>
+        }
+      >
+        <span className="text-sm">
+          결정 {decisions.length}개 · 할 일 {todos.length}개{lastUpdate > 0 && ` · 마지막 업데이트 ${fmtMDHM(new Date(lastUpdate))}`}
+        </span>
+      </PageTitle>
       {load.stale && (
-        <p role="status" className="rounded-lg border border-alert-review/40 bg-alert-review-soft px-4 py-2 text-sm text-alert-review">
+        <p role="status" className="rounded-[12px] border border-alert-review-dot/50 bg-alert-review-soft px-4 py-2 text-sm text-alert-review">
           연결이 잠시 끊겼어요. 마지막으로 받은 기록을 보여 주고 있고, 다시 연결되면 자동으로 새로 고쳐요.
         </p>
       )}
-      <TeamCriteriaCard criteria={criteria} />
       <DecisionHistoryList />
       <ConflictChecks cards={cards} onRetry={retryCheck} />
       {conflicts.length > 0 && <ConflictBanner conflicts={conflicts} onOpen={() => setDialog(true)} />}
       <RepoStatusBar status={repo.status} unreachable={repo.unreachable} />
 
-      <Tabs defaultValue="board" className="gap-5">
-        <TabsList aria-label="팀 보드 보기">
-          <TabsTrigger value="board">결정 보드</TabsTrigger>
-          <TabsTrigger value="record">팀 기록</TabsTrigger>
-        </TabsList>
-        <TabsContent value="record">
-          <TeamRecord status={repo.status} onCopy={copyRecord} />
-        </TabsContent>
-        <TabsContent value="board" className="space-y-4">
+      <div className="grid items-start gap-5 lg:grid-cols-[180px_minmax(0,1fr)_320px]">
+        <div className="space-y-3">
           <BranchFilter branches={branchNames(repo.state)} value={match ? branch : null} members={match?.members} onChange={setBranch} />
+          <TopicFilter topics={topics} total={decisions.length} active={topic} onChange={setTopic} />
+        </div>
+        <div className="min-w-0 space-y-4">
           {!cards.length ? (
             <EmptyState title="아직 팀에 올라온 결정이 없어요">
               <p>승인함에서 내용을 골라 올리면 여기에 쌓여요.</p>
             </EmptyState>
           ) : (
-            <div className="grid items-start gap-5 lg:grid-cols-[200px_minmax(0,1fr)_300px]">
-              <TopicFilter topics={topics} total={decisions.length} active={topic} onChange={setTopic} />
-              <DecisionTimeline decisions={shown} flagged={flagged} saved={savedDecisions} onOpenConflict={() => setDialog(true)} />
-              <div className="space-y-5">
-                <TodoPanel todos={todos} done={done} todoIds={todoIds} onToggle={toggleTodo} />
-                {research.length > 0 && <ResearchPanel research={research} />}
-              </div>
-            </div>
+            <DecisionTimeline
+              decisions={shown}
+              flagged={flagged}
+              saved={savedDecisions}
+              repoLinked={!!repo.status?.linked}
+              onOpenConflict={() => setDialog(true)}
+            />
           )}
-        </TabsContent>
-      </Tabs>
+          <DecisionHistoryList />
+        </div>
+        <div className="space-y-5">
+          <TodoPanel todos={todos} done={done} todoIds={todoIds} onToggle={toggleTodo} />
+          {research.length > 0 && <ResearchPanel research={research} />}
+        </div>
+      </div>
 
       {USE_MOCK && (
         <p className="text-center text-xs text-muted-foreground">
@@ -157,8 +168,9 @@ export default function BoardPage() {
   );
 }
 
+// 피그마 본문: 폭 1280 화면에서 좌우 40 · 위 32 (내용 폭 1200)
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-wide space-y-6 px-gutter py-10">{children}</div>;
+  return <div className="mx-auto max-w-[1280px] space-y-5 px-gutter py-8 sm:px-10">{children}</div>;
 }
 
 const topicOf = (c: RelatedCard) => c.topic_key ?? "기타";

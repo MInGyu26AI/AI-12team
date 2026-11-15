@@ -48,6 +48,9 @@ venv/
 node_modules/
 .next-integration/
 .next/
+.next-demo/
+.next-auth-qa/
+/web/public/downloads/
 .wxt/
 .output/
 *.tsbuildinfo

@@ -30,6 +30,8 @@ export const sendToBackground = <T = BgResponse>(request: BgRequest) => browser.
 
 // 팝업 → 콘텐츠 스크립트: 지금 이 탭에서 대화를 읽을 수 있는지
 export type TabPing = { type: 'ping' };
+export type TabPrepareStop = { type: 'collection.prepareStop' };
+export type TabStopResult = { ok: true } | { ok: false; error: string };
 export type TabPingResult = {
   site: string;
   onConversation: boolean; // /c/... 대화 화면인지

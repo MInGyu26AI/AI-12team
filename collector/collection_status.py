@@ -9,6 +9,7 @@ from batch_queue import unbatched_turns
 from collection_session import active, bound_team, session_state
 import local_privacy
 from storage import connect
+import team_decisions
 from turn_intake import unresolved_issues
 
 # Counts for collection.status. Params: team id (and the session start for PENDING_COUNT).
@@ -25,6 +26,9 @@ LAST_COLLECTED = "SELECT MAX(received) FROM intake WHERE team_id=? AND json_extr
 RECENT_BATCHES = '''SELECT x.job,x.context,x.messages,MAX(i.received) AS received FROM job_context x
     JOIN jobs j ON j.id=x.job JOIN intake i ON i.job=x.job
     WHERE x.team_id=? AND j.state='done' GROUP BY x.job ORDER BY received DESC LIMIT 20'''
+# Candidates still in review, for the pre-approval alerts. Param: team id.
+IN_REVIEW = '''SELECT d.body FROM candidate_details d JOIN cards c ON c.id=d.id
+    WHERE d.team_id=? AND NOT d.dismissed AND c.status='ready' ORDER BY c.rowid'''
 # Cards the legacy collector drafted before the pipeline existed.
 LEGACY_CANDIDATE_COUNT = '''SELECT count(*) FROM cards WHERE status IN ('manual','ready')
     AND id NOT IN (SELECT id FROM candidate_details)'''
@@ -78,6 +82,20 @@ def _recent_batches(c, team_id):
     return recent
 
 
+def _pre_alerts(c, team_id):
+    """Pre-approval alerts of the candidates in review, one per key (team_decisions.summaries).
+
+    Only the team decisions and the topic are listed, never the candidate's own text: the extension shows these in
+    the popup and a system notification."""
+    alerts = []
+    for (body,) in c.execute(IN_REVIEW, (team_id,)):
+        card = json.loads(body)
+        alert = team_decisions.pre_alert(card, card.get(team_decisions.STORED_KEY))
+        if alert:
+            alerts.append(alert)
+    return team_decisions.summaries(alerts)
+
+
 def _account_sync(state):
     """{enabled, account, since} with since as ISO; None when account sync was never turned on."""
     if not state:
@@ -104,10 +122,12 @@ def collection_status(pipeline):
         legacy = c.execute(LEGACY_CANDIDATE_COUNT).fetchone()[0]
         recent = _recent_batches(c, team_id)
         windows = sync_windows(c, s)
+        pre_alerts = _pre_alerts(c, team_id)
     team = next((t for t in profile['teams'] if t['id'] == team_id), None)
     return dict(
         version='1',
         configured=bool(team),
+        browserOnly=getattr(pipeline, 'browser_only', False),
         autoCollect=active(s),
         state=session_state(s),
         turnsPerBatch=options['turnsPerBatch'],
@@ -117,6 +137,7 @@ def collection_status(pipeline):
         lastCollectedAt=_iso(last_collected) if last_collected is not None else None,
         teamId=team_id,
         teamName=team['name'] if team else '접근 불가',
+        userId=profile['user_id'],
         userName=profile['name'],
         teams=profile['teams'],
         projectTopic=options['projectTopic'],
@@ -131,4 +152,5 @@ def collection_status(pipeline):
         counts=counts,
         syncWindows=[dict(start=_iso(start), end=_iso(end)) for start, end in windows],
         accountSync=_account_sync(options.get('accountSync')),
+        preAlerts=pre_alerts,
     )

@@ -20,9 +20,10 @@ from .schema import SUBTOPICS, normalize_card
 # zoneinfo without the extra tzdata package.
 KST = timezone(timedelta(hours=9), "KST")
 # 발화 site → 카드 출처 이름(shared/labels.ts SITE_LABEL 과 같다). manual 은 대화 붙여넣기와 수집기에서 고친 입력
-# (intake.retry), chatgpt-export 는 내보내기 파일이다.
+# (intake.retry), chatgpt-export 는 내보내기 파일이고, file-upload·notion·google-docs 는 올린 파일과 외부 문서 연결이다.
 SITE_LABEL = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "codex": "Codex", "claude-code": "Claude Code",
-              "manual": "직접 입력", "chatgpt-export": "ChatGPT 내보내기"}
+              "manual": "직접 입력", "chatgpt-export": "ChatGPT 내보내기", "file-upload": "파일 올리기", "notion": "노션",
+              "google-docs": "구글 문서"}
 
 
 def _system_prompt() -> str:

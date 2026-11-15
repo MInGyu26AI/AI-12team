@@ -16,6 +16,7 @@ from ai.syncup_ai.llm import DecisionsClient
 from batch_classification import classify_queued
 from check_teams import TeamIsolation, own_tests, request, running_server
 from collection_settings import configure
+from conflict_checks import UNCERTAIN_JUDGEMENT
 from local_fixtures import AI, public_card, work_gate
 from native_host import request as native_request
 from review_page import Review
@@ -244,34 +245,43 @@ class TeamIntegration(TeamIsolation):
         alert = found[0]
         self.assertEqual((alert['cardA']['id'], alert['cardB']['id'], alert['method']), ('alias', 'new', 'decisions'))
 
-    def test_uncertain_check_stays_failed_until_explicit_retry(self):
+    def test_uncertain_pair_becomes_review_alert_and_check_continues(self):
         calls = []
-        confidence = [.4]
 
         def respond(path, raw):
             body = json.loads(raw)
             calls.append(body)
-            return 200, answers(body, '무관', confidence[0])
+            return 200, answers(body, '무관', .4 if 'e1: OLD_UNSURE' in body['input'] else .9)
         model = self.enterContext(stub_model(respond))
-        self.publish_card('old', '기존 결정')
+        self.publish_card('unsure', 'OLD_UNSURE 기존 결정')
+        self.publish_card('clear', 'OLD_CLEAR 기존 결정')
         self.settle_checks()
-        self.publish_card('new', '새 결정')
+        self.publish_card('new', 'OLD_UNSURE 비슷한 새 결정')
         with decisions_api(model):
             self.run_due_checks()
-            self.assertEqual([len(b['questions']) for b in calls], [1])
+            # The uncertain pair comes first; the check still goes on to the second pair, asking each pair once.
+            self.assertEqual([len(b['questions']) for b in calls], [1, 1])
+            self.assertIn('e1: OLD_UNSURE', calls[0]['input'])
+            self.assertIn('e1: OLD_CLEAR', calls[1]['input'])
             item = self.board_item('new')
-            self.assertEqual(item['conflictCheckStatus'], 'failed')
-            self.assertIn('확인 필요', item['conflictCheckDetail'])
-            self.assertIn('확신도 부족', item['conflictCheckDetail'])
-            self.assertFalse(self.team_request('GET', 'conflicts')[1]['conflicts'])
+            self.assertEqual((item['conflictCheckStatus'], item['conflictCheckDetail'], item['conflictCheckProgress']),
+                             ('complete', '', dict(total=2, completed=2, skipped=0)))
+            self.assertEqual(item['decisionState'], 'review')
+            [alert] = self.team_request('GET', 'conflicts')[1]['conflicts']
+            self.assertEqual((alert['cardA']['id'], alert['cardB']['id'], alert['judgement']),
+                             ('unsure', 'new', UNCERTAIN_JUDGEMENT))
+            self.assertIn("'무관'", alert['reason'])
+            self.assertIn('확신하지 못', alert['reason'])
+            self.assertEqual((alert['aiJudgement'], alert['confidence']), ('무관', .4))
+            # The uncertain pair is never asked again on its own.
             self.make_check_due('new')
             self.run_due_checks()
-            self.assertEqual(len(calls), 1)
-            confidence[0] = .9
-            self.assertEqual(self.team_request('POST', 'items/new/retry-check', {})[0], 200)
-            self.run_due_checks()
-        self.assertEqual(self.board_item('new')['conflictCheckStatus'], 'complete')
-        self.assertEqual(len(calls), 2)
+            self.assertEqual(len(calls), 2)
+        # The team settles it like any other alert.
+        resolved = self.team_request('POST', 'conflicts/'+alert['id']+'/resolve', dict(resolution='both-valid'))
+        self.assertEqual(resolved[0], 200)
+        self.assertFalse(self.team_request('GET', 'conflicts')[1]['conflicts'])
+        self.assertEqual(self.board_item('new')['decisionState'], 'active')
 
     def test_actual_transport_retry_waits_and_stops_at_three_attempts(self):
         calls = []

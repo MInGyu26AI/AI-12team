@@ -3,6 +3,8 @@ import repo_paths  # noqa: F401  collector/·server/·contract/·ai 경로
 import json
 import os
 import subprocess
+import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -42,14 +44,14 @@ def sqlite_rows(c):
 
 
 class LocalUpgrade(PipelineSchema):
-    def test_populated_14_to_17_and_backup_restore(self):
+    def test_populated_16_to_19_and_backup_restore(self):  # 14 -> 17 before the two connector tables (connector_scopes, connector_items)
         with connect(self.db) as c:
             approve(c, dict(id='c',text='DB = SQLite',quote='SQLite로 결정했다.').__getitem__,dict(c.execute('SELECT * FROM sharing').fetchone()))
         with patch('pipeline_schema.local_privacy.initialize'):
             ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             before = sqlite_rows(c)
-        self.assertEqual(len(before),14)
+        self.assertEqual(len(before),16)
         backup = self.db.with_name('before-upgrade.sqlite')
         with connect(self.db) as c, connect(backup) as b:
             c.backup(b)
@@ -57,7 +59,7 @@ class LocalUpgrade(PipelineSchema):
         ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             after = sqlite_rows(c)
-            self.assertEqual(len(after),17)
+            self.assertEqual(len(after),19)
             self.assertEqual({n:after[n] for n in before},before)
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])
@@ -94,6 +96,26 @@ class ServerUpgrade(TeamIntegration):
         postgres('pg_restore', '--exit-on-error', '-d', 'syncup_restore', input=dump)
         return make_conninfo(self.admin_dsn, dbname='syncup_restore'), make_conninfo(self.api_dsn, dbname='syncup_restore')
 
+    def test_migration_lock_timeout_rolls_back_and_allows_retry(self):
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
+        before = self.snapshot(self.admin_dsn)
+        with psycopg.connect(self.admin_dsn) as reader:
+            reader.execute('SELECT * FROM syncup.team_settings')
+            start = time.monotonic()
+            result = subprocess.run([sys.executable, str(repo_paths.REPO/'server'/'team_admin.py'), 'migrate-integration'],
+                                    env=dict(os.environ, SYNCUP_ADMIN_DATABASE_URL=self.admin_dsn),
+                                    capture_output=True, text=True, timeout=15)
+            elapsed = time.monotonic() - start
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('DB 잠금을 5초 안에 얻지 못했습니다', result.stderr)
+            self.assertGreaterEqual(elapsed, 5)
+        # Restoring diagnostics runs before the blocked settings DDL and must have rolled back.
+        self.assertEqual(self.snapshot(self.admin_dsn), before)
+        self.admin('migrate-integration')
+        verify_database(self.api_dsn, web_keys=True)
+        print(f'Migration CLI: lock timeout after {elapsed:.1f}s, rollback verified, retry succeeded', flush=True)
+
     def test_populated_upgrade_dump_restore_and_process_restart(self):
         self.change_after_discussion()
         self.publish_card('todo','합성 복구 점검','todo')
@@ -112,6 +134,14 @@ class ServerUpgrade(TeamIntegration):
             joined = c.execute("SELECT o_outcome FROM syncup.join_with_invite(%s,%s::jsonb,%s,%s,NULL,'macOS','합성')",
                                ('c'*64,'[{"provider":"github","subject":"1001"}]','d'*64,'e'*64)).fetchone()[0]
         self.assertEqual((made,joined),('created','member'))
+        onboarding_digest = '3'*64
+        with psycopg.connect(self.api_dsn) as c:
+            signed = c.execute('SELECT syncup.open_onboarding(%s,%s,%s,%s)',
+                               ('1002','4'*64,onboarding_digest,'합성 가입 사용자')).fetchone()[0]
+            created = c.execute('SELECT syncup.onboarding_create_team(%s,%s,%s,%s)',
+                                (onboarding_digest,'9e702b17-b61b-40c1-a633-22c303158399',
+                                 '합성 가입 팀','합성 가입 주제')).fetchone()[0]
+        self.assertEqual((signed['outcome'],created['outcome']),('ready','created'))
         with psycopg.connect(self.admin_dsn) as c:
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
             c.execute("INSERT INTO syncup.team_notion_links(team_id,page_id,token,actor) VALUES(%s,%s,%s,%s)",
@@ -137,6 +167,9 @@ class ServerUpgrade(TeamIntegration):
         restored_admin, restored_api = self.restored_copy()
         self.assertEqual(self.snapshot(restored_admin),(after,schema))
         verify_database(restored_api, web_keys=True)
+        with psycopg.connect(restored_api) as c:
+            account = c.execute('SELECT syncup.onboarding_account(%s)', (onboarding_digest,)).fetchone()[0]
+        self.assertEqual(account['teams'], [dict(id=created['id'], name='합성 가입 팀')])
         # Restart the actual CLI twice against the restored DB; credentials remain local to subprocesses.
         env = dict(os.environ, SYNCUP_DATABASE_URL=restored_api)
         env.pop('SYNCUP_ADMIN_DATABASE_URL', None)
