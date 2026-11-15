@@ -21,7 +21,7 @@ from conflict_resolution import resolve
 from conflict_scheduler import schedule
 from diagnostics import failure
 import key_issue
-from repo_sync import first_check_due, linked, repo_status, schedule_save, target_from_env
+from repo_sync import first_check_due, link_request, linked, load_link, repo_status, schedule_save, target_from_env
 from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
 from team_board import board, conflict_events, conflicts, done_todos, mark_todo, shared_item, shared_items
@@ -85,10 +85,13 @@ class TeamHandler(SecureHandler):
             parts, team_id = self.parse_path()
             token = self.bearer_token()
             data = json.loads(self.body()) if self.command == 'POST' else None
-            with authorized(self.server.dsn, token, team_id) as (c, user_id):
-                result = dispatch(c, user_id, team_id, self.command, parts, data, self.server)
-                if self.command == 'POST' and linked(self.server, team_id):
-                    actor = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
+            if self.command == 'POST' and parts[2:3] == ['repo']:  # checks GitHub outside any DB transaction
+                result = link_request(self.server, token, team_id, parts[3:], data)
+            else:
+                with authorized(self.server.dsn, token, team_id) as (c, user_id):
+                    result = dispatch(c, user_id, team_id, self.command, parts, data, self.server)
+                    if self.command == 'POST' and linked(self.server, team_id):
+                        actor = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
             # Respond only after the transaction has committed, including idempotent retries.
         except AccessError as error:
             status, result = error.status, {'error': '접근할 수 없거나 허용되지 않은 요청입니다.'}
@@ -142,6 +145,7 @@ def dispatch(c, user_id, team_id, method, parts, data, server=None):
             raise AccessError(405)
         return me(c, user_id)
     tail = parts[2:]
+    load_link(c, server, team_id)  # the team's GitHub link, for this request's saves and status
     if tail[0] == 'items' and len(tail) != 3:
         return shared_cards(c, team_id, user_id, method, tail, data)
     if tail == ['settings']:
