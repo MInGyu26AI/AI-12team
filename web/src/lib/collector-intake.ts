@@ -23,16 +23,19 @@ export interface IntakeSummary {
   elsewhere: number;
 }
 
-function toMessages(utterances: Utterance[]): CollectedMessage[] {
+/** 발화 → turns.append 메시지 (시험에서도 부른다) */
+export function toMessages(utterances: Utterance[]): CollectedMessage[] {
   const conversationId = crypto.randomUUID(); // 붙여넣기는 대화 id 가 없으니 한 번 넣은 것을 한 대화로 본다
   return utterances.map((u, i) => ({
     id: u.id ?? `${conversationId}:${i}`,
     conversationId: u.conversationId ?? conversationId,
     collectedAt: u.collectedAt ?? new Date().toISOString(),
-    site: u.conversationId ? "chatgpt-export" : "manual",
+    site: u.site ?? (u.conversationId ? "chatgpt-export" : "manual"),
     role: u.speaker === "ai" ? "assistant" : "user",
     roleGuessed: u.roleGuessed ?? true,
     text: u.text,
+    // 카톡 대화 덩어리. 화면 경로의 turnId 는 수집기가 받는다 (collector/turn_intake.py _sync_fields)
+    ...(u.turnId ? { turnId: u.turnId } : {}),
   }));
 }
 

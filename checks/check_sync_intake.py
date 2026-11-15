@@ -140,6 +140,21 @@ class OptionalFields(SyncFixture):
                 self.assertEqual(response['newMessages'], 0)
         self.assertEqual(self.count('SELECT count(*) FROM intake'), 0)
 
+    def test_kakao_paste_turn_ids_group_turns_without_origin(self):
+        """Web KakaoTalk paste (shared/kakaotalk.ts): site manual, no origin, turnId = conversation chunk; re-send skips."""
+        def kakao(n, turn):
+            return dict(id=f'kakao:room:202611142102:{n:014x}:0:0', site='manual', conversationId='kakao:room', role='user',
+                        roleGuessed=False, text=f'카톡 메시지 {n}', collectedAt='2026-11-14T21:02:00+09:00', turnId=turn)
+        messages = [kakao(1, 'kakao:room:t1'), kakao(2, 'kakao:room:t1'), kakao(3, 'kakao:room:t2')]
+        response = turn_intake.append(self.pipeline, messages, flush=True)
+        self.assertEqual((response['newMessages'], response['intakeIssues']), (3, []))
+        stored = [self.stored()[m['id']] for m in messages]
+        self.assertEqual([s['turnId'] for s, _ in stored], ['kakao:room:t1', 'kakao:room:t1', 'kakao:room:t2'])
+        self.assertTrue(all(job for _, job in stored), 'flush batches the chunks even without an answer')
+        self.assertEqual([len(t) for t in group_turns([s for s, _ in stored])], [2, 1], 'one turn per chunk')
+        again = turn_intake.append(self.pipeline, messages, flush=True)
+        self.assertEqual((again['newMessages'], again['intakeIssues']), (0, []), 'a pasted overlap is skipped, not quarantined')
+
     def test_valid_optional_fields_are_kept_only_when_sent(self):
         message = self.screen('s', 'user', origin='screen', createdAt='2026-11-13T19:00:00+09:00', turnId='t' * 1200)
         self.assertEqual(turn_intake.append(self.pipeline, [message])['intakeIssues'], [])
