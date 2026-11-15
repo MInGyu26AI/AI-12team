@@ -20,6 +20,7 @@ import sys
 from native_host import EXTENSION_ID
 from private_files import make_private_directory
 from runtime import ENABLED_PLATFORMS, script_command
+from team_client import team_api_url
 
 HOST_NAME = 'com.syncup.collector'
 WINDOWS_REGISTRY_KEY = 'HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\' + HOST_NAME
@@ -65,14 +66,17 @@ def _windows_launcher(output, command):
     return launcher
 
 
-def prepare(extension_id, connection, output):
+def prepare(extension_id, connection, output, team_api=None):
+    """team_api: the team server this PC gets its connection key from on the web (key_setup.py); without it setup.connect
+    tells the user to register again with --team-api."""
     if not EXTENSION_ID.fullmatch(extension_id):
         raise ValueError('Chrome 확장 프로그램 ID는 a~p 소문자 32자입니다.')
     if sys.platform not in ENABLED_PLATFORMS:
         raise ValueError('이 운영체제에서는 아직 연결을 지원하지 않습니다 (macOS·Windows).')
     # Chrome runs the launcher as this user, so on Windows no other account may replace it or the manifest.
     make_private_directory(output)
-    command = script_command('native_host.py', '--connection', str(connection.resolve()), '--extension-id', extension_id)
+    team = ['--team-api', team_api_url(team_api)] if team_api else []
+    command = script_command('native_host.py', '--connection', str(connection.resolve()), '--extension-id', extension_id, *team)
     launcher = (_windows_launcher if sys.platform == 'win32' else _posix_launcher)(output, command)
     manifest = output / f'{HOST_NAME}.json'
     with manifest.open('x') as f:
@@ -91,8 +95,9 @@ def main():
     parser.add_argument('--extension-id', required=True)
     parser.add_argument('--connection', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--team-api', help='웹 로그인으로 연결 키를 받을 팀 서버 주소 (HTTPS)')
     args = parser.parse_args()
-    manifest = prepare(args.extension_id, args.connection, args.output)
+    manifest = prepare(args.extension_id, args.connection, args.output, args.team_api)
     print(manifest)
     if sys.platform == 'win32':
         print('Chrome에 등록하려면 다음 명령을 실행하세요:')

@@ -99,13 +99,19 @@ class ServerUpgrade(TeamIntegration):
         self.publish_card('todo','합성 복구 점검','todo')
         self.assertEqual(self.team_request('POST','items/todo/done',dict(done=True))[0],200)
         self.assertEqual(self.team_request('POST','settings',dict(topic='합성 복구 점검 주제'))[0],200)
+        # A web key (team_upgrades.sql issue_web_key): a linked login identity, the key and its issue record.
+        self.admin('identity','--provider','github','--subject','1001','--user',self.users['Alice'],'--note','alice')
+        with psycopg.connect(self.api_dsn) as c:
+            issued = c.execute("SELECT o_outcome FROM syncup.issue_web_key(%s::jsonb,%s,%s,NULL,'macOS')",
+                               ('[{"provider":"github","subject":"1001"}]','a'*64,'b'*64)).fetchone()[0]
+        self.assertEqual(issued,'issued')
         with psycopg.connect(self.admin_dsn) as c:
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
         before,_ = self.snapshot(self.admin_dsn)
         self.assertTrue(all(before.values()),'Every table (team_settings included) must contain synthetic records')
         self.admin('migrate-integration')
         self.admin('migrate-integration')
-        verify_database(self.api_dsn)
+        verify_database(self.api_dsn, web_keys=True)
         after,schema = self.snapshot(self.admin_dsn)
         for name in before:
             values = after[name]
@@ -119,7 +125,7 @@ class ServerUpgrade(TeamIntegration):
             self.assertEqual(values,before[name],name)
         restored_admin, restored_api = self.restored_copy()
         self.assertEqual(self.snapshot(restored_admin),(after,schema))
-        verify_database(restored_api)
+        verify_database(restored_api, web_keys=True)
         # Restart the actual CLI twice against the restored DB; credentials remain local to subprocesses.
         env = dict(os.environ, SYNCUP_DATABASE_URL=restored_api)
         env.pop('SYNCUP_ADMIN_DATABASE_URL', None)

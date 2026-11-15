@@ -40,10 +40,51 @@ python3 server/team_admin.py token --user <사용자 ID> --output /안전한/개
 ```sh
 python3 server/team_admin.py member --user <사용자 ID> --team <팀 ID> --revoke   # 그 팀 소속만 끔
 python3 server/team_admin.py revoke-tokens --user <사용자 ID>                    # 키 모두 폐기
+python3 server/team_admin.py revoke-tokens --user <사용자 ID> --via admin        # 손으로 전달한 관리자 키만
+python3 server/team_admin.py revoke-tokens --via web                             # 모든 사용자의 웹 발급 키
+python3 server/team_admin.py identity --provider github --subject <숫자 ID> --remove  # 웹 로그인 연결 해제
 ```
+
+- 신원 연결을 해제하면 새 웹 키만 막는다. 이미 받은 키는 `revoke-tokens`로 따로 폐기한다. Supabase 사용자를 지워도 SyncUp 키는 그대로다.
 
 - 소속은 `--revoke` 없이 다시 실행하면 되살아난다. 폐기한 키를 되살리는 명령은 없다.
 - 서버는 요청마다 키와 소속을 확인하므로 회수 뒤 첫 요청부터 401·403이다. 처리 중인 요청, 내려받은 사본, 승인된 카드, 서버 백업에는 미치지 않는다.
+
+## 웹 로그인으로 연결 키 받기
+
+팀원이 배포 웹에서 GitHub로 로그인하면, 그 PC의 연결 프로그램(native host)이 만든 키의 SHA-256 값을 이 서버가 등록한다. 키는 그 PC 밖으로 나가지 않는다. 코드는 `server/key_issue.py`(서버), `collector/key_setup.py`(PC), `web/src/lib/github-login.ts`(웹), DB는 `team_upgrades.sql`의 `identities`·`key_events` 표와 `issue_web_key`·`replay_web_key` 함수.
+
+1. 웹 `/connect`가 연결 프로그램에 `setup.begin`을 보낸다. 연결 프로그램은 PKCE 비밀값(verifier)을 상태 폴더에 두고 그 해시(challenge)만 돌려준다.
+2. 웹이 Supabase `/auth/v1/authorize?provider=github&code_challenge=…`로 이동한다. GitHub 로그인 뒤 Supabase가 `/auth/callback?code=…`로 돌려보낸다.
+3. 웹은 code만 `setup.connect`로 넘긴다. 연결 프로그램이 키를 만들고 `POST /keys`에 code, verifier, 키의 SHA-256(`digest`), 기기(`macOS`·`Windows`), 다시 받을 때 이 PC 이전 키의 SHA-256(`replaces`)을 보낸다.
+4. 서버가 Supabase에서 code를 토큰으로 바꾸고(`/auth/v1/token?grant_type=pkce`), 응답의 `user.identities`에서 공급자와 공급자 사용자 ID(`id`, GitHub는 숫자 ID)를 읽는다. `user_metadata`·`app_metadata`는 읽지 않는다. 로그인 방법(`amr`)이 OAuth여야 한다.
+5. DB 함수가 관리자가 이어 둔 신원이면 키를 등록한다. 서버는 그 Supabase 세션을 바로 로그아웃시키고, Supabase 토큰과 GitHub 토큰은 버린다. 연결 프로그램은 새 키로 `/me`를 확인한 뒤 `team.key`·`team.json`을 저장한다.
+
+**관리자 준비**
+
+```sh
+gh api users/<GitHub 아이디> --jq .id      # 숫자 ID (로그인 이름은 바뀔 수 있다)
+python3 server/team_admin.py identity --provider github --subject <숫자 ID> --user <사용자 ID> --note '<GitHub 아이디>'
+```
+
+- Supabase: GitHub 공급자를 켜고(클라이언트 ID·비밀값은 Supabase 대시보드에만), URL Configuration의 Redirect URLs에 `https://<웹 주소>/auth/callback`을 정확히 넣는다. Email·Phone·Anonymous 로그인과 수동 연결은 끈다.
+- 서버: `SYNCUP_SUPABASE_URL`(`https://<프로젝트>.supabase.co`)과 `SYNCUP_SUPABASE_PUBLISHABLE_KEY`(공개용 키. secret·service_role 키는 거절한다). 웹: `NEXT_PUBLIC_SUPABASE_URL`.
+- 켜기 전에 `migrate-integration`을 실행한다. 두 변수가 있으면 서버는 표·함수·권한을 확인하고, 맞지 않으면 시작하지 않는다. 변수가 없으면 예전 DB에서도 그대로 뜬다.
+
+**규칙**
+
+| 항목 | 값 |
+|---|---|
+| 유효 기간 | 30일 (DB 함수에 고정) |
+| 활성 웹 키 | 사용자당 3개. 넘으면 409, 자동 폐기 없음. `replaces`로 이 PC 키만 바꾼다 |
+| 발급 횟수 | 사용자당 1시간 5회 (429) |
+| 한 로그인 | 키 1개. Supabase code는 한 번만 바뀐다 |
+| 응답 잃은 재시도 | 같은 `digest`로 10분 안에 다시 보내면 등록된 결과를 그대로 준다 |
+| 서버 전체 | 5분에 Supabase 교환 60회 (메모리, 재시작하면 초기화) |
+| 응답 | 200 `{user_id, name, expires_at}` · 400 형식 · 401 로그인 만료·재사용 · 403 등록 안 된 신원·비활성 · 409 키 3개 · 429 · 503 |
+
+- `key_events`에 발급과 거절을 남긴다. 키·토큰·IP·공급자 사용자 ID는 넣지 않는다(등록 안 된 신원은 공급자 이름만). 관리 계정으로 조회한다.
+- `syncup_api`는 `tokens`·`identities`·`key_events`를 직접 읽거나 쓰지 못하고 두 함수만 실행한다. 다만 이 함수 때문에 `syncup_api` 비밀번호가 새면 등록된 팀원의 웹 키를 만들 수 있고, 그 키는 비밀번호를 바꿔도 남는다. 새면 비밀번호를 바꾸고 `revoke-tokens --via web`으로 웹 키를 모두 폐기한 뒤 각자 다시 받는다.
 
 ## 서버 실행
 
@@ -95,11 +136,12 @@ docker build -f Dockerfile.cloud .
 | `SYNCUP_PUBLIC_HOST` | 공개 호스트 이름 (소문자, 포트·경로 없이). 없으면 `RENDER_EXTERNAL_HOSTNAME` |
 | `PORT` | 기본 10000 |
 | AI 설정 | 이미지에 `ai/.env`가 없으므로 호스팅 서비스의 환경 변수로 준다 |
+| `SYNCUP_SUPABASE_URL` · `SYNCUP_SUPABASE_PUBLISHABLE_KEY` | 웹 로그인 키 발급([아래](#웹-로그인으로-연결-키-받기)). 둘 다 비우면 꺼지고 `/keys`는 404. 하나만 있거나 형식이 틀리면 시작하지 않는다 |
 
 - Host 헤더가 공개 호스트 이름 하나와 정확히 같아야 받는다.
 - `GET /healthz`는 DB에 3초 안에 닿으면 200 `{"ready": true}`, 아니면 503 `{"ready": false}`. 준비 여부 말고는 내보내지 않는다. 이 경로만 Railway 점검 호스트 `healthcheck.railway.app`도 받는다.
 - TLS: 이미지는 `server/supabase-ca.crt`(Supabase Root 2021 CA)를 `PGSSLROOTCERT`로 쓴다. 다른 DB 제공자면 그 CA 파일을 `COPY`·`.dockerignore`에 더하고 연결 주소의 `sslrootcert`로 지정한다.
-- Supabase Auth와 Data API는 쓰지 않는다. 사용자와 연결 키는 `syncup` 스키마에 둔다.
+- Supabase Data API는 쓰지 않는다. Supabase Auth는 웹 GitHub 로그인 확인에만 쓰고([아래](#웹-로그인으로-연결-키-받기)), 사용자와 연결 키는 `syncup` 스키마에 둔다.
 - 설정이 틀리면 접속 정보나 드라이버 오류 문구 없이 고정된 원인 한 줄만 출력하고 멈춘다.
 
 ## API 요청
@@ -120,6 +162,7 @@ docker build -f Dockerfile.cloud .
 | `GET …/repo` | 팀 상태 파일의 GitHub 저장 상태 ([아래](#github-레포-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | `GET …/notion` | 팀 기록의 노션 페이지 저장 상태 ([아래](#노션-페이지-저장)). 연결 안 된 팀은 `{"linked": false}` |
 | `GET …/settings` · `POST …/settings` | 팀이 함께 쓰는 설정 ([아래](#팀-설정)). POST는 보낸 칸만 바꾸고 나머지는 둔다 |
+| `POST /keys` | 웹 GitHub 로그인으로 이 PC의 키 등록. 연결 키 대신 로그인으로 인증한다([아래](#웹-로그인으로-연결-키-받기)) |
 | 공통 | 401 키 없음·틀림·만료·폐기, 사용자 비활성 · 403 그 팀 소속 아님 · 503 DB에 닿지 못함 |
 
 ## GitHub 레포 저장
@@ -241,7 +284,7 @@ FROM syncup.conflict_checks WHERE state <> 'complete';
 - 팀 범위: 서버가 소속을 확인하고, DB도 RLS로 요청한 팀의 행만 보여 준다. 앱 코드에 조건이 빠져도 다른 팀 행은 읽히지 않는다.
 - `syncup_api`는 키 테이블을 읽지 못하고, 소속을 바꾸거나 승인 카드·충돌 처리 기록을 고치거나 지울 수 없다.
 - DB에는 연결 키의 SHA-256 값만 둔다. 무엇이 팀 서버와 외부 AI로 가는지는 [privacy.md](privacy.md)에 있다.
-- 활성 팀원은 모두 같은 권한이다. 읽기 전용 역할, 초대·관리 웹 화면, SSO는 없다.
+- 활성 팀원은 모두 같은 권한이다. 읽기 전용 역할, 초대·관리 웹 화면은 없다. 웹 GitHub 로그인은 관리자가 이어 둔 사람의 키 발급에만 쓴다.
 - 다루지 않는 것: 같은 OS 계정의 악성 프로그램, 연결 키 탈취, DB 관리자 계정 침해. 팀 검색·첨부파일은 기능이 없다.
 
 검사: `python3 checks/run_checks.py team` ([README 검사](../README.md#검사))
