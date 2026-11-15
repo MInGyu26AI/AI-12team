@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-// 피그마 토글 (켜짐 = 브랜드 남색)
+// 피그마 토글 40×22 (켜짐 = 브랜드 남색, 꺼짐 = 베이지 #D6C9B5, 손잡이 지름 18)
 export function Switch({
   checked,
   onChange,
@@ -23,14 +23,14 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "bg-brand" : "bg-gray-300",
+        "relative h-[22px] w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-brand" : "bg-[#d6c9b5]",
       )}
     >
       <span
         className={cn(
-          "absolute top-1 left-1 size-5 rounded-full bg-white shadow transition-transform",
-          checked && "translate-x-5",
+          "absolute top-0.5 left-0.5 size-[18px] rounded-full bg-white transition-transform",
+          checked && "translate-x-[18px]",
         )}
       />
     </button>

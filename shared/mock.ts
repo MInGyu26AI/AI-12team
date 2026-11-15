@@ -36,9 +36,10 @@ export const MOCK_TEAM: Team = {
   kind: TEAM_KINDS[0]!,
   me: "김도윤",
   members: [
-    { name: "김도윤", initial: "도", color: "#4F46E5", ai: "ChatGPT", status: "joined", leader: true },
-    { name: "서하준", initial: "하", color: "#3B9AE1", ai: "ChatGPT", status: "joined" },
-    { name: "윤채원", initial: "채", color: "#C2407A", ai: "Claude", status: "joined" },
+    // 아바타 색은 새 피그마 디자인의 파스텔 4색(#cde9f4 #eadfcf #e3dcf2 #fff3a6) 중에서 고른다
+    { name: "김도윤", initial: "도", color: "#cde9f4", ai: "ChatGPT", status: "joined", leader: true },
+    { name: "서하준", initial: "하", color: "#fff3a6", ai: "ChatGPT", status: "joined" },
+    { name: "윤채원", initial: "채", color: "#e3dcf2", ai: "Claude", status: "joined" },
   ],
   // 팀 기준 예시 (팀 만들기 화면에서 바꿀 수 있음)
   criteria: {

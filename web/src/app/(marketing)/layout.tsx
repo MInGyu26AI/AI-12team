@@ -9,8 +9,12 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         <LandingHeader />
       </Suspense>
       <div className="flex-1">{children}</div>
+      {/* 피그마 Footer (149:147): 왼쪽 서비스 이름 · 오른쪽 상표 안내 */}
       <footer className="border-t">
-        <p className="mx-auto max-w-wide px-gutter py-6 text-sm text-muted-foreground">Sync up · Shared Memory for Students</p>
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-gutter py-8 sm:px-10 lg:px-20">
+          <p className="text-[13px] font-medium text-muted-foreground">SyncUp · Shared Memory for Students</p>
+          <p className="text-xs text-text-tertiary">ChatGPT는 OpenAI의 상표이며, SyncUp은 OpenAI와 제휴 관계가 없습니다</p>
+        </div>
       </footer>
     </>
   );

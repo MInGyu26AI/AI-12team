@@ -9,7 +9,7 @@ import type { TabPing, TabPingResult } from './messages';
 import { CHAT_PAGE_MATCHES } from './sites';
 
 export const WARN_BADGE_TEXT = '!';
-export const WARN_BADGE_COLOR = '#D97706'; // 변경·주의에 쓰는 주황빛 (shared/theme.css)
+export const WARN_BADGE_COLOR = '#8a6d00'; // 주의(확인 필요)에 쓰는 황토색. 흰 글자가 읽히는 진한 쪽 (shared/theme.css --color-warn)
 export const CONFIRM_POLLS = 2; // 연이어 이만큼 경고여야 배지를 건다 (30초 간격이면 약 30~60초 뒤)
 export const PING_TIMEOUT_MS = 5000; // 멈춘 탭 하나가 전체 점검을 붙잡지 않게
 

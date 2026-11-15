@@ -21,7 +21,7 @@ export function QueueStatus({ settings, pendingCount, syncEnabled }: { settings:
   };
 
   return (
-    <section className="space-y-1 rounded-lg bg-gray-50 p-3">
+    <section className="space-y-1 rounded-lg bg-surface-soft p-3">
       <div className="flex items-center justify-between gap-2">
         <p>
           다음 분류까지 대화 <b>{nextBatchTurns}</b>/{turnsOf(settings)}회
@@ -62,12 +62,12 @@ export function QueueStatus({ settings, pendingCount, syncEnabled }: { settings:
       <p className="text-xs text-gray-500">연결한 프로젝트의 새 대화를 확인하고, 다른 대화를 포함한 수집 대기분을 처리해요. 프로젝트 연결이 꺼져 있으면 대기분만 처리해요.</p>
       {result && <Notice tone={result.tone}>{result.text}</Notice>}
       {!settings.autoCollect && bufferedTurns > 0 && (
-        <p className="text-xs text-gray-500">쌓인 대화는 보관돼 있어요. 수집을 다시 켜면 다음 묶음에 합쳐요.</p>
+        <p className="text-xs text-muted-foreground">쌓인 대화는 보관돼 있어요. 수집을 다시 켜면 다음 묶음에 합쳐요.</p>
       )}
       <p>
-        검토 대기 카드 <b className="text-tag-decision">{pendingCount}개</b>
+        검토 대기 카드 <b className="text-brand">{pendingCount}개</b>
       </p>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-muted-foreground">
         마지막 수집: {settings.lastCollectedAt ? new Date(settings.lastCollectedAt).toLocaleString('ko-KR') : '아직 없음'}
       </p>
     </section>

@@ -14,7 +14,7 @@ export function SubtopicPicker({ value, onChange }: { value: Subtopic[]; onChang
           </label>
         ))}
       </div>
-      <p className="text-xs text-gray-500">꺼 둔 소주제 내용은 ‘기타’로 분류돼요. 하나도 고르지 않으면 모든 소주제를 사용해요.</p>
+      <p className="text-xs text-muted-foreground">꺼 둔 소주제 내용은 ‘기타’로 분류돼요. 하나도 고르지 않으면 모든 소주제를 사용해요.</p>
     </fieldset>
   );
 }

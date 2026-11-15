@@ -35,7 +35,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
 
   return (
     <form
-      className="w-[340px] space-y-3 p-4 font-sans text-sm text-gray-900"
+      className="w-[340px] space-y-3 p-4 font-sans text-sm text-foreground"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -80,7 +80,7 @@ export function SetupForm({ initial, firstTime, onSaved, onCancel }: SetupFormPr
         <button
           type="submit"
           disabled={!canSave}
-          className="flex-1 rounded-lg bg-gray-900 px-3 py-2 font-medium text-white disabled:opacity-40"
+          className="flex-1 rounded-lg bg-brand px-3 py-2 font-medium text-white disabled:opacity-40"
         >
           저장
         </button>

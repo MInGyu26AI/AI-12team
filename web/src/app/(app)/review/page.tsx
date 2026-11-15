@@ -12,9 +12,10 @@ import { CandidateList } from "@/components/review/candidate-list";
 import { ExcludedMessages, HeldBatches, PrivacyTab } from "@/components/review/privacy-review";
 import { ReviewNotices } from "@/components/review/review-notices";
 import { ShareBar } from "@/components/review/share-bar";
+import { PageTitle } from "@/components/page-title";
 import { LoadingState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonOutline, chip } from "@/components/ui/surface";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, USE_MOCK } from "@/lib/api";
 import { syncNowErrorNotice, syncNowSummary } from "@/lib/rpc";
@@ -97,21 +98,24 @@ export default function ReviewPage() {
   const retryPrivacy = () => void collector.refresh();
 
   return (
-    <div className="mx-auto max-w-content space-y-6 px-gutter pt-10 pb-32">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-3xl font-bold">팀에 올릴 내용을 골라 주세요</h1>
-          {!USE_MOCK && (
-            <Button variant="outline" onClick={syncNow} disabled={syncing || !collector.available}>
-              <RefreshCw className={cn(syncing && "animate-spin")} />
-              {syncing ? "맞추는 중…" : "싱크 맞추기"}
-            </Button>
-          )}
-        </div>
-        <p className="text-muted-foreground break-keep">{subtitle}</p>
-        <div className="flex flex-wrap gap-1.5">
+    <div className="mx-auto max-w-[860px] space-y-4 px-gutter py-10">
+      <div className="space-y-4">
+        <PageTitle
+          title="팀에 올릴 내용을 골라 주세요"
+          actions={
+            !USE_MOCK && (
+              <button type="button" className={buttonOutline} onClick={syncNow} disabled={syncing || !collector.available}>
+                <RefreshCw className={cn(syncing && "animate-spin")} />
+                {syncing ? "맞추는 중…" : "싱크 맞추기"}
+              </button>
+            )
+          }
+        >
+          {subtitle}
+        </PageTitle>
+        <div className="flex flex-wrap gap-2">
           {LEGEND.map(({ label, color }) => (
-            <span key={label} className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", color)}>
+            <span key={label} className={cn(chip, color)}>
               {label}
             </span>
           ))}
