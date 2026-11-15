@@ -169,7 +169,7 @@
 }
 /* 한국어가 섞인 버튼 라벨: IBM Plex Mono 글꼴만 (한글은 대체 글꼴이라 넓은 자간·대문자는 쓰지 않는다) */
 .button-mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-plex-mono), var(--font-noto-sans-kr), "Noto Sans KR", sans-serif; /* 한글은 Noto Sans KR 로 (고정폭 대체 글꼴이 자간을 벌리지 않게) */
   letter-spacing: 0.02em;
 }
 /* 영어 큰 제목: Inter Tight 800 */
