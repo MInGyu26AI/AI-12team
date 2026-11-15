@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, FolderOpen, Puzzle, RefreshCw, Server, Settings, ShieldCheck, ToggleRight } from "lucide-react";
+import { Download, FolderOpen, KeyRound, Puzzle, RefreshCw, Server, Settings, ShieldCheck, ToggleRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import release from "@/lib/extension-release.json";
 import { cn } from "@/lib/utils";
@@ -49,8 +49,19 @@ const STEPS = [
     title: "로컬 수집기 연결",
     body: (
       <>
-        확장은 이 컴퓨터의 로컬 수집기를 거쳐서만 동작해요. 저장소의 <code>docs/running.md</code>에 따라 수집기를 먼저 실행하고,
-        확장 ID로 Native Messaging 설정(<code>collector/prepare_native.py</code>)을 만들어 크롬에 등록해요.
+        확장은 이 컴퓨터의 로컬 수집기를 거쳐서만 동작해요. 저장소의 <code>docs/running.md</code>에 따라 확장 ID와 팀 서버 주소로
+        Native Messaging 설정(<code>collector/prepare_native.py --team-api …</code>)을 만들어 크롬에 등록해요.
+      </>
+    ),
+  },
+  {
+    icon: KeyRound,
+    title: "팀 연결 키 받기",
+    body: (
+      <>
+        <Link href="/connect" className="underline">팀 연결 키 받기</Link>에서 GitHub로 로그인하면 이 PC에 연결 키가 저장돼요. 팀 관리자가
+        미리 등록한 GitHub 계정만 받을 수 있어요. 그다음 수집기를 켜요. 실행 명령에 <code>--team-api</code>·<code>--team-token-file</code>은
+        필요 없어요.
       </>
     ),
   },

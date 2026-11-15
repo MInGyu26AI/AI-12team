@@ -38,6 +38,7 @@ Copy-Item scanner\target\release\syncup-scanner.exe bin\
 ### Windows에서 알아 둘 것
 
 - **비공개 파일은 ACL로 지킨다.** macOS의 umask 077·권한 600 대신 `collector/windows_security.py`를 쓴다. 비어 있는 상태 폴더에는 현재 사용자와 SYSTEM만 들어오는 ACL을 설정하고, 안의 파일이 이를 물려받는다. 이미 파일이 있는 폴더는 ACL을 바꾸지 않고, 다른 계정이 접근할 수 있으면 시작을 거절한다. 연결 키 파일과 `connection.json`은 현재 사용자 소유인지, 현재 사용자·SYSTEM·Administrators·OWNER RIGHTS 밖의 계정이 들어올 수 없는지 확인한 뒤 읽는다. 상태 폴더는 ACL이 있는 NTFS 드라이브에 둔다.
+- **웹에서 받은 키는 상태 폴더에 생긴다.** `syncup.exe native-setup … --team-api <팀 서버>`로 등록했으면 배포 웹 `/connect`의 GitHub 로그인으로 `team.key`·`team.json`이 상태 폴더에 생긴다([running.md](running.md#github로-연결-키-받기)). 새 빈 상태 폴더에는 현재 사용자와 SYSTEM만 들어오는 ACL을 걸고 파일이 이를 물려받는다. 다른 계정이 접근할 수 있는 기존 폴더면 받지 않으니 새 빈 폴더로 native-setup을 다시 한다. 다른 프로그램이 `team.key`를 열고 있으면 바꾸기를 잠깐 다시 시도한다.
 - **키 파일은 사용자 폴더 바로 아래에 둔다**(예: `%USERPROFILE%\syncup-team.key`). OneDrive처럼 동기화되는 폴더는 피한다. Windows용 Codex를 쓰면 Codex가 만지는 폴더에 `CodexSandboxUsers` 읽기 권한이 붙고, 그 폴더에서 옮긴 파일에도 남는다. 이때 수집기는 `연결 키 파일에 다른 계정의 읽기 권한이 있습니다(예: Codex의 CodexSandboxUsers)…`로 멈춘다. 다음 명령으로 기본 권한으로 되돌린다.
   ```bat
   icacls "%USERPROFILE%\syncup-team.key" /reset
