@@ -314,7 +314,9 @@ class NotionSave(unittest.TestCase):
             self.save(build_state([]))
         self.assertEqual(len(starts), len(self.fake.requests))
         self.assertGreater(len(starts), 5)
-        self.assertTrue(all(later - earlier >= .095 for earlier, later in zip(starts, starts[1:])), starts)
+        # A late wake-up shortens the next gap a little; the pace keeps the average and every gap stays close to it.
+        self.assertTrue(all(later - earlier >= .08 for earlier, later in zip(starts, starts[1:])), starts)
+        self.assertGreaterEqual((starts[-1] - starts[0]) / (len(starts) - 1), .095, starts)
 
     def test_server_errors_are_retried_for_reads_but_never_for_writes(self):
         self.fake.fail_next = ('GET', '/children', 502)
