@@ -14,6 +14,7 @@ import psycopg
 import local_rpc
 import repo_sync
 import team_relay
+import team_server
 from ai.syncup_ai.team_state import build_state
 from check_team_integration import checked
 from check_teams import TeamIsolation, own_tests, request
@@ -214,9 +215,51 @@ class RepoSyncTeam(TeamIsolation):
             for private in (PRIVATE_SENTENCE, PRIVATE_SOURCE, self.users['Dana'], self.users['Alice'], TOKEN):
                 self.assertNotIn(private, text)
 
+    def scheduled(self):
+        """Count the team server's save requests. The HTTP reply goes out before the save is scheduled, so a returned
+        request is not yet a scheduled one; tests wait on this count instead."""
+        calls = []
+        real = team_server.schedule_save
+
+        def counting(*args, **kwargs):
+            real(*args, **kwargs)
+            calls.append(kwargs.get('actor'))
+        self.enterContext(patch.object(team_server, 'schedule_save', counting))
+        return calls
+
+    def waiting(self):
+        """True while a save job for team A waits for changes to settle."""
+        with repo_sync._lock:
+            return uuid.UUID(self.teams['A']) in repo_sync._saves(self.api).waiting
+
+    def hold_snapshot(self, after_read):
+        """Stop the first save while it builds the files: before it reads the database, or right after.
+        Returns (started, release) events."""
+        started, release, real, calls = threading.Event(), threading.Event(), repo_sync.state_files, []
+
+        def held(c, target):
+            calls.append(1)
+            first = len(calls) == 1
+            if first and not after_read:
+                started.set()
+                release.wait(10)
+            result = real(c, target)
+            if first and after_read:
+                started.set()
+                release.wait(10)
+            return result
+        self.enterContext(patch.object(repo_sync, 'state_files', held))
+        return started, release
+
     def test_a_burst_of_approvals_is_one_public_commit(self):
-        self.share('d1', 'DB = PostgreSQL')
-        self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+        """Both approvals are scheduled before the save starts: one job, one commit with both."""
+        calls = self.scheduled()
+        with patch.object(repo_sync, 'SAVE_DELAY_SECONDS', 5):  # long enough that nothing saves on its own
+            self.share('d1', 'DB = PostgreSQL')
+            self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+            wait_until(lambda: len(calls) == 2)
+        self.assertEqual(self.fake.commits(), ['init'])
+        schedule_save(self.api, self.tokens['Dana'], self.teams['A'], delay=0)  # the batch is complete: save now
         status = self.settled()
         self.assertEqual(self.fake.commits(), ['SyncUp: DB 결정 추가 외 1건 (Dana 승인)', 'init'])
         self.assertEqual((status['state'], status['commit']['sha']), ('saved', self.fake.head))
@@ -224,6 +267,40 @@ class RepoSyncTeam(TeamIsolation):
         self.assertIn('**DB**: DB = PostgreSQL', files['SYNCUP.md'])
         self.assertIn('`SU-1` 배포 페이지 만들기', files['SYNCUP.md'])
         self.assertEqual(json.loads(files['syncup.json'])['team'], dict(name='A팀', repo='team/repo'))
+        self.assert_public()
+
+    def test_a_second_job_whose_changes_the_first_already_saved_is_unchanged(self):
+        """The second approval is scheduled as its own job while the first save waits to read the database;
+        the first save then reads both, so the second finds nothing new. Not a failure: the web shows both
+        'saved' and 'unchanged' as saved."""
+        calls, (started, release) = self.scheduled(), self.hold_snapshot(after_read=False)
+        self.share('d1', 'DB = PostgreSQL')
+        started.wait(5)
+        self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+        wait_until(lambda: len(calls) == 2 and self.waiting())
+        release.set()
+        wait_until(lambda: not self.waiting())
+        status = self.settled()
+        self.assertEqual(self.fake.commits(), ['SyncUp: DB 결정 추가 외 1건 (Dana 승인)', 'init'])
+        self.assertEqual((status['state'], status['commit']['sha']), ('unchanged', self.fake.head))
+        self.assertIn('`SU-1` 배포 페이지 만들기', self.fake.files()['SYNCUP.md'])
+        self.assert_public()
+
+    def test_an_approval_after_the_first_snapshot_gets_its_own_commit(self):
+        """The second approval lands after the first save has read the database: the next save must add it."""
+        calls, (started, release) = self.scheduled(), self.hold_snapshot(after_read=True)
+        self.share('d1', 'DB = PostgreSQL')
+        started.wait(5)
+        self.share('t1', '배포 페이지 만들기', tag='todo', topic='배포')
+        wait_until(lambda: len(calls) == 2 and self.waiting())
+        release.set()
+        wait_until(lambda: not self.waiting())
+        status = self.settled()
+        self.assertEqual(self.fake.commits(), ['SyncUp: SU-1 할 일 추가 (Dana 승인)', 'SyncUp: DB 결정 추가 (Dana 승인)', 'init'])
+        self.assertEqual((status['state'], status['commit']['sha']), ('saved', self.fake.head))
+        files = self.fake.files()['SYNCUP.md']
+        self.assertIn('**DB**: DB = PostgreSQL', files)
+        self.assertIn('`SU-1` 배포 페이지 만들기', files)
         self.assert_public()
 
     def test_todo_checks_are_saved_and_unlinked_teams_never(self):
