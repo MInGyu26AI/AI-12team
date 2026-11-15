@@ -15,7 +15,8 @@ MESSAGE_FIELDS = ('id', 'text', 'conversationId', 'site', 'role', 'collectedAt')
 # Optional fields of shared/collector.ts, checked and stored only when sent. Account sync (origin 'sync') needs all three.
 SYNC_FIELDS = ('origin', 'createdAt', 'turnId')
 ORIGINS = ('screen', 'sync')
-INTAKE_SITES = ('chatgpt', 'manual', 'chatgpt-export')
+# file-upload, notion and google-docs come from collector/connectors (docs/connectors.md): one document section is a turn.
+INTAKE_SITES = ('chatgpt', 'manual', 'chatgpt-export', 'file-upload', 'notion', 'google-docs')
 # '팀 기록 불러오기' pastes the team board (web/src/lib/board-markdown.ts, head line '# 싱크업 팀 기록 (date)') and, from
 # the extension, the end line after it (sync-contract.md 8장). Pasted back into a chat, it is not the user's own words.
 TEAM_RECORD_HEAD = '# 싱크업 팀 기록'

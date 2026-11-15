@@ -51,6 +51,7 @@ Mac 로컬 수집기 (개인 DB <상태 폴더>/private.sqlite)
 
 - `collection_loop.watch`는 한 번 처리하고 2초 쉰다. 수집 중일 때만 스캔·받기·분류한다.
 - 분류는 한 번에 하나만 돈다. AI를 기다리는 동안 잠금을 잡지 않아 설정 변경·일시중지를 받는다.
+- 외부 서비스 커넥터(`connectors.base.watch`)는 전송 스레드처럼 따로 돈다. 수집 중일 때만 5분마다 켜 둔 범위를 읽어 `turns.append`와 같은 입구로 넣는다 ([connectors.md](connectors.md)).
 
 ## 4. 로컬 RPC
 
@@ -77,6 +78,11 @@ Mac 로컬 수집기 (개인 DB <상태 폴더>/private.sqlite)
 | `jobs.retry` | 분류 실패 묶음을 지금 세션에서 다시 대기로 |
 | `delivery.retry` | 멈춘(`blocked`) 전송을 같은 내용·목적지로 다시 넣음. 시도 횟수는 새로 셈 |
 | `team.*` (`board`·`history`·`conflicts`·`conflictHistory`·`done`·`resolve`·`setDone`·`retryCheck`) | 연결된 팀의 팀 서버 API(`/teams/{팀}/…`)로 중계. 응답의 `team_id`가 다르면 오류 ([API 요청](team-server.md#api-요청)) |
+| `connectors.list` | 연결 서비스와 상태(`connected`·`tokenSet`·`needs`, 토큰은 없음), 현재 팀의 읽을 범위 ([connectors.md](connectors.md)) |
+| `connectors.setScope` | `{site, scopeId, title?, enabled}` 읽을 범위를 만들거나 켜고 끔 |
+| `connectors.sync` | `{site?, scopeId?}` 지금 읽어서 `turns.append`와 같은 입구로 넣음. 수집 중일 때만 됨 |
+| `connectors.disconnect` | `{site}` 이 PC의 연결 정보 파일을 지움 |
+| `files.ocr` | `{pages: [{page, image}], name?}` 쪽 이미지(base64 PNG·JPEG)를 이 PC의 Ollama로 읽어 글로 돌려줌. 쪽마다 `ok`·`reason` |
 
 - 목록은 현재 팀 것만 돌려준다. `intake.retry`·`intake.dismiss`·`privacy.exclude`·`privacy.recheck`·`candidates.approve`는 요청의 `teamId`가 현재 팀과 같아야 하고, `jobs.retry`·`delivery.retry`는 `teamId`를 주면 확인한다. `collection.configure`의 `teamId`는 팀 변경이고, 나머지는 `teamId`를 보지 않고 연결된 팀에 대해 처리한다.
 - `collection.flush`·`turns.append`·`intake.retry`·`jobs.retry`는 수집 중일 때만 된다.

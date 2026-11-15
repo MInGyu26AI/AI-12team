@@ -24,6 +24,9 @@ PY = sys.executable
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
     ('local', [PY, 'checks/check_sync_intake.py'], '계정 동기화 창·접수·화면 경로 중복 (docs/sync-contract.md 3장)'),
+    ('local', [PY, 'checks/check_connectors.py'], '외부 서비스 연결 틀(메시지 변환·중복·토큰 파일·RPC·로컬 페이지)과 로컬 문자 인식 files.ocr'),
+    ('local', [PY, 'checks/check_connector_notion.py'], '노션 연결(가짜 노션 서버: 설정·블록 변환·화자 규칙·커서·Retry-After·종단 간)'),
+    ('local', [PY, 'checks/check_connector_google.py'], '구글 문서 연결: 127.0.0.1 OAuth(PKCE)·토큰 갱신·문서 변환·담당자 확인 (가짜 구글 서버)'),
     ('local', [PY, 'checks/check_team_topic.py'], '팀이 함께 쓰는 프로젝트 주제: 올리기·따라가기·팀 설정 중계'),
     ('local', [PY, 'checks/check_pipeline_schema.py'], '로컬 DB 마이그레이션·승인 계약·TS 공용 상수'),
     ('local', [PY, 'checks/check_retention.py'], '원문·백업 7일 보존 정책'),

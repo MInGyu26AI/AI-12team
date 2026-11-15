@@ -42,14 +42,14 @@ def sqlite_rows(c):
 
 
 class LocalUpgrade(PipelineSchema):
-    def test_populated_14_to_17_and_backup_restore(self):
+    def test_populated_16_to_19_and_backup_restore(self):  # 14 -> 17 before the two connector tables (connector_scopes, connector_items)
         with connect(self.db) as c:
             approve(c, dict(id='c',text='DB = SQLite',quote='SQLite로 결정했다.').__getitem__,dict(c.execute('SELECT * FROM sharing').fetchone()))
         with patch('pipeline_schema.local_privacy.initialize'):
             ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             before = sqlite_rows(c)
-        self.assertEqual(len(before),14)
+        self.assertEqual(len(before),16)
         backup = self.db.with_name('before-upgrade.sqlite')
         with connect(self.db) as c, connect(backup) as b:
             c.backup(b)
@@ -57,7 +57,7 @@ class LocalUpgrade(PipelineSchema):
         ensure_pipeline_schema(self.db)
         with connect(self.db) as c:
             after = sqlite_rows(c)
-            self.assertEqual(len(after),17)
+            self.assertEqual(len(after),19)
             self.assertEqual({n:after[n] for n in before},before)
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])

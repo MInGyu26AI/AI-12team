@@ -23,6 +23,21 @@ def _create_intake_issue_tables(c):
                  resolved REAL NOT NULL)''')
 
 
+def _create_connector_tables(c):
+    """Connector state (collector/connectors/base.py): the scopes a user chose per team, and what was already sent.
+
+    connector_items holds a content hash only, never text. Tokens are not here: they live in <state>/connectors/*.json.
+    """
+    c.execute('''CREATE TABLE IF NOT EXISTS connector_scopes(team_id TEXT NOT NULL, site TEXT NOT NULL,
+                 scope_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+                 enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), cursor TEXT, last_run REAL,
+                 last_error TEXT, imported INTEGER NOT NULL DEFAULT 0 CHECK(imported>=0),
+                 PRIMARY KEY(team_id, site, scope_id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS connector_items(team_id TEXT NOT NULL, site TEXT NOT NULL,
+                 item_key TEXT NOT NULL, content_hash TEXT NOT NULL, first_sent REAL NOT NULL,
+                 PRIMARY KEY(team_id, site, item_key, content_hash))''')
+
+
 def _rebuild_cards_without_kind_limit(c):
     # Drop/recreate without renaming the old table: existing foreign keys keep referencing cards.
     if CARDS_UNIQUE not in PRIVATE_SCHEMA['cards']:
@@ -55,6 +70,7 @@ def ensure_pipeline_schema(db):
     initialize(db)
     with closing(sqlite3.connect(db)) as c, c:
         _create_intake_issue_tables(c)
+        _create_connector_tables(c)
         local_privacy.initialize(c)
         c.commit()
         if c.execute("SELECT 1 FROM sqlite_master WHERE name='integration_settings'").fetchone():

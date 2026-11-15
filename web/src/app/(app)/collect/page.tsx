@@ -7,6 +7,7 @@ import { TURNS_PER_BATCH } from "@shared/batch";
 import { fmtMDHM } from "@shared/format";
 import { RepoLinkRow } from "@/components/board/repo-status";
 import { CollectionSettings } from "@/components/collect/collection-settings";
+import { FileUploadCard } from "@/components/collect/file-upload-card";
 import { RecentBatches } from "@/components/collect/recent-batches";
 import { ExtensionMissingDialog } from "@/components/extension-missing-dialog";
 import { Switch } from "@/components/switch";
@@ -150,6 +151,8 @@ export default function CollectPage() {
           </p>
         )}
       </section>
+
+      <FileUploadCard />
 
       <RecentBatches
         batches={connected ? st.recent : null}

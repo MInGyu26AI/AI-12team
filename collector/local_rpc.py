@@ -4,6 +4,8 @@ import batch_queue
 import candidate_review
 import collection_settings
 from collection_status import collection_status
+from connectors import base as connector_base
+from connectors import vision
 import privacy_holds
 import team_relay
 import turn_intake
@@ -42,6 +44,46 @@ def _retry_delivery(pipeline, params):
     return candidate_review.retry_delivery(pipeline, params)
 
 
+def _check_connector_fields(params, allowed):
+    if set(params) - allowed:
+        raise ValueError('연결 요청 필드 오류')
+
+
+def _connectors_list(pipeline, params):
+    """Every provider with its status (connected, tokenSet, needs: never a token) and the scopes of the current team."""
+    _check_connector_fields(params, set())
+    connector_base.load_providers()
+    scopes = {}
+    for row in connector_base.list_scopes(pipeline):
+        scopes.setdefault(row['site'], []).append(connector_base.scope_info(row))
+    return dict(providers=[dict(site=p.site, label=p.label, status=connector_base.provider_status(pipeline, p),
+                                scopes=scopes.get(p.site, [])) for p in connector_base.PROVIDERS.values()])
+
+
+def _connectors_set_scope(pipeline, params):
+    _check_connector_fields(params, {'site', 'scopeId', 'title', 'enabled'})
+    if type(params.get('enabled')) is not bool:
+        raise ValueError('사용 여부를 확인하세요.')
+    return connector_base.set_scope(pipeline, params.get('site'), params.get('scopeId'), params.get('title'), params['enabled'])
+
+
+def _connectors_sync(pipeline, params):
+    """Read now: one scope, every enabled scope of one service, or of all. A failing service is an `error` kind in its
+    result and in the scope's lastError; a ValueError is only for a request that cannot run (paused, unknown scope)."""
+    _check_connector_fields(params, {'site', 'scopeId'})
+    for key in params:
+        if not isinstance(params[key], str) or not params[key].strip():
+            raise ValueError('연결할 서비스와 범위를 확인하세요.')
+    return dict(results=connector_base.run_selected(pipeline, params.get('site'), params.get('scopeId')))
+
+
+def _connectors_disconnect(pipeline, params):
+    """Forget the connection (connector_base.disconnect): the token file goes, the scopes stay."""
+    _check_connector_fields(params, {'site'})
+    provider = connector_base.disconnect(pipeline, params.get('site'))
+    return dict(site=provider.site, status=connector_base.provider_status(pipeline, provider))
+
+
 METHODS = {
     'collection.status': lambda pipeline, params: collection_status(pipeline),
     'collection.configure': _configure,
@@ -61,6 +103,11 @@ METHODS = {
     'candidates.approve': candidate_review.approve_candidates,
     'jobs.retry': _retry_job,
     'delivery.retry': _retry_delivery,
+    'connectors.list': _connectors_list,
+    'connectors.setScope': _connectors_set_scope,
+    'connectors.sync': _connectors_sync,
+    'connectors.disconnect': _connectors_disconnect,
+    'files.ocr': lambda pipeline, params: vision.ocr(params),
 }
 
 

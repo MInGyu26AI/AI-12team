@@ -33,6 +33,9 @@ export const SITE_LABEL: Record<MessageSite, string> = {
   chatgpt: "ChatGPT",
   manual: "직접 입력",
   "chatgpt-export": "ChatGPT 내보내기",
+  "file-upload": "파일 올리기",
+  notion: "노션",
+  "google-docs": "구글 문서",
   codex: "Codex",
   "claude-code": "Claude Code",
 };

@@ -35,22 +35,28 @@ def unbatched_turns(c, team_id, start):
     return conversations
 
 
-def queue_ready_batches(c, team_id, context, flush=False):
-    """Queue every full batch of this session's unbatched turns; flush also queues what is left."""
+def queue_ready_batches(c, team_id, context, flush=False, only=None):
+    """Queue every full batch of this session's unbatched turns; flush also queues what is left.
+
+    only: conversation keys ('<site>:<conversationId>', the intake.conversation column). With it, flush applies to those
+    conversations alone; the others still queue their full batches. Connectors flush just the document they imported,
+    so another conversation's open batch (a ChatGPT chat in progress) is not cut short.
+    """
     turns_per_batch = read_options(c)['turnsPerBatch']
-    trigger = 'flush' if flush else 'auto'
-    for messages in unbatched_turns(c, team_id, context['collectionStart']).values():
-        ready, _ = take_ready_batches(messages, turns_per_batch, flush)
+    for conversation, messages in unbatched_turns(c, team_id, context['collectionStart']).items():
+        flushing = flush and (only is None or conversation in only)
+        ready, _ = take_ready_batches(messages, turns_per_batch, flushing)
         for batch in ready:
-            queue_batch(c, batch, team_id, dict(context, trigger=trigger))
+            queue_batch(c, batch, team_id, dict(context, trigger='flush' if flushing else 'auto'))
 
 
-def flush(pipeline):
-    """collection.flush: queue the open batches now, however few turns they have."""
+def flush(pipeline, conversations=None):
+    """collection.flush: queue the open batches now, however few turns they have (conversations: only these, see above)."""
     with pipeline.write() as c:
         _, binding = require_active(pipeline.db)
         team_id = binding['team_id']
-        queue_ready_batches(c, team_id, classification_context(c, team_id, local_profile(c)), True)
+        queue_ready_batches(c, team_id, classification_context(c, team_id, local_profile(c)), True,
+                            None if conversations is None else set(conversations))
     return dict(queued=True)
 
 

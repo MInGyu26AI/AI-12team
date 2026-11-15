@@ -23,6 +23,7 @@ import time
 
 from collection_loop import send_approved, watch
 from collection_session import bind_sharing
+from connectors import base as connector_base
 from diagnostics import failure
 from key_setup import KEY_FILE, saved_connection
 from private_files import make_private_directory
@@ -142,6 +143,7 @@ def _connect_team(srv, args, parser):
 def _start_pipeline(srv, args, profile):
     """--integrated: the turn pipeline and the connection file the native host and local web read."""
     srv.pipeline = TurnPipeline(srv.db, srv.team_client, profile)
+    srv.pipeline.page_port = srv.server_port  # connectors build OAuth return addresses from it (base.local_page_url)
     srv.rpc_secret = secrets.token_urlsafe(32)
     connection = args.state / 'connection.json'
     connection.write_text(json.dumps(dict(url=f'http://127.0.0.1:{srv.server_port}/rpc', token=srv.rpc_secret)))
@@ -152,6 +154,8 @@ def start_workers(srv, args):
     sources = (args.codex_dir, args.claude_dir, args.codex_sqlite_dir, args.claude_project_name)
     threading.Thread(target=watch, args=(srv.db, *sources, srv.pipeline), daemon=True).start()
     threading.Thread(target=send_approved, args=(srv,), daemon=True).start()
+    if srv.pipeline:  # its own thread, like delivery: a slow Notion read must not stall scanning and classification
+        threading.Thread(target=connector_base.watch, args=(srv.pipeline,), daemon=True).start()
 
 
 def serve_review(args, parser):
