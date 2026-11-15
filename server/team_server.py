@@ -20,6 +20,7 @@ from conflict_checks import retry_check
 from conflict_resolution import resolve
 from conflict_scheduler import schedule
 from diagnostics import failure
+import key_issue
 from repo_sync import first_check_due, linked, repo_status, schedule_save, target_from_env
 from secure_http import SecureHandler
 from team_access import AccessError, DatabaseSetupError, authorized, team_lock, valid_token, verify_database
@@ -50,6 +51,7 @@ class TeamServer(http.server.ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         self.checks_stop = threading.Event()
         self.repo_target = None  # repo_sync.RepoTarget when one team's state is saved to GitHub
+        self.key_issuer = None  # key_issue.KeyIssuer when teammates get keys by logging in on the web
         super().__init__(*args, **kwargs)
 
     def shutdown(self):
@@ -76,6 +78,8 @@ class TeamHandler(SecureHandler):
         self.handle_api()
 
     def handle_api(self):
+        if self.path == '/keys':  # web login → key; authenticated by the login itself, not a key
+            return key_issue.handle(self)
         status, result, token, team_id, actor = 200, {}, '', None, None
         try:
             parts, team_id = self.parse_path()
@@ -192,14 +196,18 @@ def main():
     except ValueError as error:
         parser.error(str(error))
     try:
-        verify_database(dsn)
+        issuer = key_issue.issuer_from_env()  # its messages name the setting, never the key
+    except key_issue.SettingError as error:
+        parser.error(str(error))
+    try:
+        verify_database(dsn, web_keys=issuer is not None)
     except DatabaseSetupError as error:
         parser.error(str(error))
     except (ValueError, psycopg.Error):
         # Driver messages can contain connection details; show only the kind of problem.
         parser.error('제한된 syncup_api 계정과 팀 DB 연결을 확인하세요.')
     with TeamServer(('127.0.0.1', args.port), TeamHandler) as srv:
-        srv.dsn, srv.repo_target = dsn, target
+        srv.dsn, srv.repo_target, srv.key_issuer = dsn, target, issuer
         print(f'팀 API http://127.0.0.1:{srv.server_port}/ · 외부 연결은 HTTPS 프록시 필요', flush=True)
         srv.serve_forever()
 

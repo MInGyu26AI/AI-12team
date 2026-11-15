@@ -1,6 +1,7 @@
 """Real HTTP boundary checks; synthetic settings, no cloud credentials."""
 import repo_paths  # noqa: F401  collector/·server/·contract/·ai 경로
 import ast
+import base64
 import http.client
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest.mock import patch
 import psycopg
 
 from cloud_server import CloudHandler, main, settings
+from key_issue import SettingError as KeySettingError, issuer_from_env
 from team_access import DatabaseSetupError
 from team_server import TeamServer
 
@@ -80,6 +82,9 @@ class CloudBoundary(unittest.TestCase):
         self.assertEqual(self.request('/me', [self.server.public_host]*2)[0], 400)
         self.assertEqual(self.request('/me', ['healthcheck.railway.app'])[0], 400)
         self.assertEqual(self.request('/healthz?token=FAKE')[0], 404)
+        self.assertEqual(self.request('/keys')[0], 404)  # web keys are off without the Supabase settings
+        self.assertEqual(self.request('/keys', ['evil.example.com'])[0], 400)
+        self.assertEqual(self.request('/keys', ['healthcheck.railway.app'])[0], 400)
 
     def test_health_is_bounded_and_does_not_leak_connection_errors(self):
         with patch('cloud_server.psycopg.connect') as connect:
@@ -106,6 +111,33 @@ class CloudBoundary(unittest.TestCase):
                 with patch.dict(os.environ, {key: value}):
                     with self.assertRaises(ValueError):
                         settings()
+
+    def test_web_key_settings_fail_closed_and_never_echo_the_key(self):
+        publishable = 'sb_publishable_' + 'P' * 24
+        ok = dict(SYNCUP_SUPABASE_URL='https://synthetic.supabase.co', SYNCUP_SUPABASE_PUBLISHABLE_KEY=publishable)
+        self.assertIsNone(issuer_from_env({}))
+        self.assertEqual(issuer_from_env(ok).url, 'https://synthetic.supabase.co')
+        anon = '.'.join(['eyJhbGciOiJIUzI1NiJ9', base64.urlsafe_b64encode(b'{"role":"anon"}').decode().rstrip('='), 'sig'])
+        self.assertEqual(issuer_from_env(dict(ok, SYNCUP_SUPABASE_PUBLISHABLE_KEY=anon)).key, anon)
+        service = anon.replace(anon.split('.')[1], base64.urlsafe_b64encode(b'{"role":"service_role"}').decode().rstrip('='))
+        for changes in [dict(SYNCUP_SUPABASE_PUBLISHABLE_KEY=''), dict(SYNCUP_SUPABASE_URL=''),
+                        dict(SYNCUP_SUPABASE_URL='http://synthetic.supabase.co'),
+                        dict(SYNCUP_SUPABASE_URL='https://evil.example.com'),
+                        dict(SYNCUP_SUPABASE_URL='https://synthetic.supabase.co/auth/v1'),
+                        dict(SYNCUP_SUPABASE_PUBLISHABLE_KEY='sb_secret_' + 'S' * 24),
+                        dict(SYNCUP_SUPABASE_PUBLISHABLE_KEY=service)]:
+            with self.subTest(changes=changes), self.assertRaises(KeySettingError) as refused:
+                issuer_from_env(dict(ok, **changes))
+            for value in changes.values():
+                if value:
+                    self.assertNotIn(value, str(refused.exception))
+        env = dict(SYNCUP_DATABASE_URL='host=db.example.com sslmode=verify-full', SYNCUP_PUBLIC_HOST='synthetic.example.com',
+                   SYNCUP_SUPABASE_URL='https://synthetic.supabase.co')
+        with patch.dict(os.environ, env, clear=True), patch('cloud_server.verify_database') as verify:
+            with self.assertRaises(SystemExit) as stop:
+                main()
+        self.assertIn('SYNCUP_SUPABASE_PUBLISHABLE_KEY', str(stop.exception))
+        verify.assert_not_called()
 
     def test_startup_names_fixed_reasons_but_never_driver_errors(self):
         verified = 'host=db.example.com sslmode=verify-full password=FAKE_DO_NOT_LOG'

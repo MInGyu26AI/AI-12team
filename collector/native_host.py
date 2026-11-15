@@ -1,4 +1,7 @@
-"""Chrome Native Messaging transport; the running local service owns all state."""
+"""Chrome Native Messaging transport; the running local service owns all state.
+
+The exception is setup.*: getting this PC's team connection key from a web login (key_setup.py), which has to work
+before the collector can start and is answered here without it."""
 import sys
 from pathlib import Path
 
@@ -8,6 +11,7 @@ sys.path[1:1] = [str(_REPO / 'contract'), str(_REPO)]
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import struct
@@ -15,6 +19,7 @@ import sys
 import urllib.error
 import urllib.request
 
+import key_setup
 from private_files import SECRET_TOKEN, read_private_file
 from secure_http import RPC_LIMIT, NoRedirect
 
@@ -72,10 +77,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--connection',type=Path,required=True)
     parser.add_argument('--extension-id',required=True)
+    # The team server setup.connect registers keys at, fixed when the host is registered (prepare_native.py --team-api).
+    parser.add_argument('--team-api')
     # Chrome on Windows also passes the calling window's handle; the host has no window to parent.
     parser.add_argument('--parent-window')
     parser.add_argument('origin')
     args = parser.parse_args()
+    os.umask(0o077)  # Chrome's umask otherwise: what setup.* creates in the state folder stays the user's own
     if not EXTENSION_ID.fullmatch(args.extension_id) or args.origin != f'chrome-extension://{args.extension_id}/':
         raise SystemExit('허용되지 않은 확장 프로그램')
     while True:
@@ -83,7 +91,10 @@ def main():
             payload = read_frame(sys.stdin.buffer)
             if payload is None:
                 return
-            result = request(args.connection,payload)
+            if isinstance(payload, dict) and str(payload.get('method', '')).startswith('setup.'):
+                result = key_setup.handle(args.connection, args.team_api, payload)
+            else:
+                result = request(args.connection,payload)
         except Exception:
             result = dict(ok=False,code='unreachable',error='로컬 수집기 연결 실패 · 실행 상태와 연결 파일을 확인하세요.')
         data = json.dumps(result,ensure_ascii=False).encode()

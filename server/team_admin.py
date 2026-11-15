@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+import re
 import secrets
 import uuid
 
@@ -85,8 +86,36 @@ def run(c, args):
     elif args.command == 'token':
         issue_token(c, args.user, args.output, args.days)
     elif args.command == 'revoke-tokens':
-        c.execute('UPDATE syncup.tokens SET revoked=true WHERE user_id=%s', (args.user,))
+        if args.user is None and args.via is None:
+            raise AdminInputError('--user나 --via를 지정하세요')
+        c.execute('''UPDATE syncup.tokens SET revoked=true
+            WHERE (%(user)s::uuid IS NULL OR user_id=%(user)s) AND (%(via)s::text IS NULL OR issued_via=%(via)s)''',
+            dict(user=args.user, via=args.via))
+    elif args.command == 'identity':
+        link_identity(c, args)
     return None
+
+
+# A GitHub login name can change and can be taken over; its numeric user ID cannot (docs/team-server.md).
+SUBJECT_FORMS = {'github': (re.compile(r'[1-9][0-9]{0,19}'), 'GitHub는 숫자 ID를 넣으세요: gh api users/<아이디> --jq .id'),
+                 'kakao': (re.compile(r'[1-9][0-9]{0,19}'), '카카오는 회원 번호(숫자)를 넣으세요'),
+                 'google': (re.compile(r'[0-9]{1,64}'), 'Google은 사용자 ID(숫자)를 넣으세요')}
+
+
+def link_identity(c, args):
+    """Link a login provider's user ID to a SyncUp user, or with --remove unlink it. Unlinking stops new web keys
+    only; keys already issued keep working until revoke-tokens."""
+    form, hint = SUBJECT_FORMS[args.provider]
+    if not form.fullmatch(args.subject):
+        raise AdminInputError(hint)
+    if args.remove:
+        c.execute('DELETE FROM syncup.identities WHERE provider=%s AND subject=%s', (args.provider, args.subject))
+        return
+    if args.user is None:
+        raise AdminInputError('--user를 지정하세요')
+    c.execute('''INSERT INTO syncup.identities(provider,subject,user_id,note) VALUES(%s,%s,%s,%s)
+        ON CONFLICT(provider,subject) DO UPDATE SET user_id=excluded.user_id, note=excluded.note''',
+        (args.provider, args.subject, args.user, args.note))
 
 
 def parser():
@@ -104,7 +133,15 @@ def parser():
     token.add_argument('--user', type=uuid.UUID, required=True)
     token.add_argument('--output', type=Path, required=True)
     token.add_argument('--days', type=int, default=TOKEN_DAYS_DEFAULT)
-    sub.add_parser('revoke-tokens').add_argument('--user', type=uuid.UUID, required=True)
+    revoke = sub.add_parser('revoke-tokens')
+    revoke.add_argument('--user', type=uuid.UUID)
+    revoke.add_argument('--via', choices=('admin', 'web'), help='관리자 발급 키나 웹 발급 키만 (사용자 없이 쓰면 모든 사용자)')
+    identity = sub.add_parser('identity')
+    identity.add_argument('--provider', choices=tuple(SUBJECT_FORMS), required=True)
+    identity.add_argument('--subject', required=True, help='공급자의 사용자 ID (GitHub는 숫자 ID)')
+    identity.add_argument('--user', type=uuid.UUID)
+    identity.add_argument('--note', default='', help='관리자용 메모 (예: GitHub 아이디)')
+    identity.add_argument('--remove', action='store_true')
     return p
 
 

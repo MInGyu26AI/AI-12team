@@ -52,14 +52,19 @@ def read_key_file(token_file):
     return token
 
 
+def team_api_url(api_url):
+    """api_url as 'scheme://host[:port]/'; ValueError unless it is HTTPS, or HTTP on 127.0.0.1, with no path or credentials."""
+    parsed = urllib.parse.urlsplit(api_url)
+    if (parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/')
+            or not parsed.hostname or parsed.scheme not in ('https', 'http')
+            or (parsed.scheme == 'http' and parsed.hostname != '127.0.0.1')):
+        raise ValueError('팀 API는 HTTPS 주소 또는 로컬 127.0.0.1 주소여야 합니다.')
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '/', '', ''))
+
+
 class TeamClient:
     def __init__(self, api_url, token_file, user_id=None):
-        parsed = urllib.parse.urlsplit(api_url)
-        if (parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/')
-                or not parsed.hostname or parsed.scheme not in ('https', 'http')
-                or (parsed.scheme == 'http' and parsed.hostname != '127.0.0.1')):
-            raise ValueError('팀 API는 HTTPS 주소 또는 로컬 127.0.0.1 주소여야 합니다.')
-        self.api_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '/', '', ''))
+        self.api_url = team_api_url(api_url)
         self.token = read_key_file(token_file)
         # A previously bound identity enables local recovery, never remote authorization.
         self.user_id = None
