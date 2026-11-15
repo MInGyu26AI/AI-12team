@@ -108,6 +108,7 @@ def collection_status(pipeline):
     return dict(
         version='1',
         configured=bool(team),
+        browserOnly=getattr(pipeline, 'browser_only', False),
         autoCollect=active(s),
         state=session_state(s),
         turnsPerBatch=options['turnsPerBatch'],

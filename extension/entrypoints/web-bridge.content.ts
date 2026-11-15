@@ -9,6 +9,7 @@ import { WEB_BRIDGE_MATCHES, isTrustedWebOrigin } from '@/lib/web-url';
 
 export default defineContentScript({
   matches: WEB_BRIDGE_MATCHES,
+  runAt: 'document_start',
   main(ctx) {
     const receive = async (event: MessageEvent) => {
       const message = event.data;

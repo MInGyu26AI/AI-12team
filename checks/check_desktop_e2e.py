@@ -48,6 +48,11 @@ class DesktopE2E(Onboarding):
         response = request(self.desktop.state/'connection.json', dict(version=1, method='collection.status', params={}))
         self.assertTrue(response['ok'])
         self.assertFalse(response['result']['autoCollect'])
+        self.assertTrue(response['result']['browserOnly'])
+        connectors = self.native('connectors.list')
+        self.assertTrue(connectors['ok'])
+        self.assertEqual({p['site'] for p in connectors['result']['providers']}, {'notion', 'google-docs'})
+        self.assertTrue(connectors['result']['setupUrl'].endswith('/connectors'))
         from collection_session import require_active
         with self.assertRaises(ValueError):
             require_active(self.desktop.state/'private.sqlite')

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 import math
 import time
+from unittest.mock import patch
 
 from ai.syncup_ai.batch import group_turns
 from batch_queue import unbatched_turns
@@ -258,13 +259,34 @@ class Windows(SyncFixture):
         with connect(self.db) as c:
             c.execute('UPDATE settings SET start=?,end=?', (now - 100, now - 50))
         self.turn_on(now - 100)
-        configure(self.pipeline, dict(endsAt=iso(now + 600)))
+        extended = dispatch(self.pipeline, 'collection.configure', dict(endsAt=iso(now + 600)))
+        self.assertFalse(extended['autoCollect'])
+        self.assertEqual(extended['syncWindows'], [dict(start=iso(now - 100), end=iso(now - 50))])
+        configure(self.pipeline, dict(autoCollect=True))
         with connect(self.db) as c:
             gap_end = c.execute('SELECT end FROM pauses').fetchone()[0]
             first, second = sync_windows(c, c.execute('SELECT * FROM settings').fetchone())
         self.assertEqual(first, (now - 100, now - 50))
         self.assertTrue(0 <= second[0] - gap_end < .001)
         self.assertEqual(second[1], now + 600)
+
+    def test_deadline_accepts_seven_days_and_collection_stops_at_it(self):
+        now = math.floor(time.time())
+        end = now + 7 * 24 * 60 * 60
+        self.turn_on(now)
+        with patch('collection_settings.time.time', return_value=now):
+            status = dispatch(self.pipeline, 'collection.configure', {'endsAt': iso_ms(end)})
+            self.assertEqual(seconds(status['endsAt']), end)
+            self.assertTrue(status['autoCollect'])
+            with self.assertRaisesRegex(ValueError, '7일 이내'):
+                dispatch(self.pipeline, 'collection.configure', {'endsAt': iso_ms(end + 1)})
+        with patch('collection_settings.time.time', return_value=end - 1):
+            result = turn_intake.append(self.pipeline, self.sync_turn('near-end', end - 2))
+            self.assertEqual(result['newTurns'], 1)
+        with patch('collection_settings.time.time', return_value=end):
+            self.assertFalse(collection_status(self.pipeline)['autoCollect'])
+            with self.assertRaisesRegex(ValueError, '일시중지되었거나 종료'):
+                turn_intake.append(self.pipeline, self.sync_turn('at-end', end))
 
     def test_status_reports_iso_windows(self):
         self.turn_on(self.T + 100)

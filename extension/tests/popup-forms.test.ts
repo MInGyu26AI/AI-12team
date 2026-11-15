@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// 팝업 입력 회귀 시험: 종료 시각은 입력 중에 되돌아가지 않고 칸을 벗어날 때 한 번 저장, 첫 설정 화면은 늦게 온 팀 이름을 받는다
+// 팝업 입력 회귀 시험: 종료 시각 저장과 늦게 도착하는 팀 이름
 import { createElement } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -36,20 +36,51 @@ afterEach(() => {
 });
 
 describe('종료 시각 입력', () => {
-  it('입력하는 동안은 되돌아가지 않고 저장도 안 하다가, 칸을 벗어나면 한 번 저장한다', async () => {
+  const now = new Date('2026-11-28T18:20').getTime();
+  const click = (label: string) => act(() => host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click());
+  const submit = () => act(() => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+
+  beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(now));
+
+  it('달력에서 달이 바뀐 날짜와 시간을 고르고 설정을 누를 때 한 번만 저장한다', async () => {
     const send = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: true } as never);
-    await render(createElement(CollectionLimits, { settings: settings({ endsAt: '2099-11-14T12:00:00.000Z' }) }));
-    const input = host.querySelector('input[type="datetime-local"]') as HTMLInputElement;
-
-    await act(async () => type(input, '')); // 브라우저가 덜 찬 날짜를 빈 값으로 알릴 때
-    expect(input.value).toBe('');
-    await act(async () => type(input, '2099-11-15T09:30'));
-    expect(input.value).toBe('2099-11-15T09:30');
+    await render(createElement(CollectionLimits, { settings: settings({ endsAt: new Date('2026-11-29T18:30').toISOString() }) }));
+    await click('종료 날짜와 시각 선택');
+    await click('12월 2일 수요일');
+    const input = host.querySelector<HTMLInputElement>('input[type="time"]')!;
+    await act(() => type(input, '09:30'));
+    expect(input.value).toBe('09:30');
     expect(send).not.toHaveBeenCalled();
-
-    await act(async () => input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await submit();
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send.mock.calls[0]![0]).toMatchObject({ type: 'updateSettings', patch: { endsAt: new Date('2099-11-15T09:30').toISOString() } });
+    expect(send.mock.calls[0]![0]).toEqual({ type: 'updateSettings', patch: { endsAt: new Date('2026-12-02T09:30').toISOString() } });
+    expect(host.querySelector('form')).toBeNull();
+  });
+
+  it('타이머를 누른 순간부터 종료까지의 시간만 저장하고 자동 수집을 켜지 않는다', async () => {
+    const send = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: true } as never);
+    await render(createElement(CollectionLimits, { settings: settings({ endsAt: new Date(now - 60_000).toISOString(), autoCollect: false }) }));
+    for (const [label, hours] of [['3시간', 3], ['6시간', 6], ['12시간', 12], ['1일', 24], ['3일', 72], ['7일', 168]] as const) {
+      await click(`지금부터 ${label}`);
+      expect(send).toHaveBeenLastCalledWith({ type: 'updateSettings', patch: { endsAt: new Date(now + hours * 3_600_000).toISOString() } });
+    }
+    expect(send).toHaveBeenCalledTimes(6);
+  });
+
+  it('지난 시각과 저장 실패를 설정 섹션 안에서 알려 준다', async () => {
+    const send = vi.spyOn(fakeBrowser.runtime, 'sendMessage').mockResolvedValue({ ok: false, error: '수집기가 응답하지 않아요.' } as never);
+    await render(createElement(CollectionLimits, { settings: settings({}) }));
+    await click('종료 날짜와 시각 선택');
+    const input = host.querySelector<HTMLInputElement>('input[type="time"]')!;
+    await act(() => type(input, '09:30'));
+    await submit();
+    expect(send).not.toHaveBeenCalled();
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('7일 이내');
+    await act(() => type(input, '21:30'));
+    await submit();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('수집기가 응답하지 않아요.');
+    expect(host.querySelector('form')).not.toBeNull();
   });
 });
 

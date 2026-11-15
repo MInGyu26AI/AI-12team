@@ -37,7 +37,8 @@ def main():
     desktop_setup.read_config(work)
     data = [(ROOT/'bin'/scanner, 'bin'), (ROOT/'ai/prompts', 'ai/prompts'),
             (ROOT/'web/public/syncup-extension.zip', '.'), (config, '.'),
-            (ROOT/'collector/desktop.html', '.'), (ROOT/'collector/desktop.js', '.')]
+            (ROOT/'collector/desktop.html', '.'), (ROOT/'collector/desktop.js', '.'),
+            (ROOT/'collector/desktop-assets', 'desktop-assets')]
     import PyInstaller.__main__
     # Windows windowed bootloaders discard stdin/stdout, which Chrome native messaging requires.
     PyInstaller.__main__.run(['--noconfirm', '--clean', '--onedir',

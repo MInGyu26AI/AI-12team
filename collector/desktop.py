@@ -23,6 +23,26 @@ from team_client import TeamClient
 from runtime import child_environment
 
 
+def open_connection_in_chrome(url):
+    """The extension can complete the connection only in Chrome."""
+    if sys.platform == 'darwin':
+        result = subprocess.run(['open', '-a', 'Google Chrome', url], capture_output=True, timeout=10)
+        if result.returncode == 0:
+            return
+    elif sys.platform == 'win32':
+        import winreg
+        key = r'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe'
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(hive, key) as registration:
+                    executable = winreg.QueryValueEx(registration, '')[0]
+                subprocess.Popen([executable, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
+            except OSError:
+                continue
+    raise ValueError('Chrome을 열 수 없어요. 설치된 Chrome에서 위 SyncUp 웹 주소의 /connect를 열어 주세요.')
+
+
 class DesktopState:
     def __init__(self, resources, source, executable_relative, home=None):
         self.resources, self.source = Path(resources), Path(source)
@@ -85,7 +105,7 @@ class DesktopState:
 
     def start(self, team_id, api_key=''):
         if self.child is not None and self.child.poll() is None:
-            return dict(running=True)
+            raise ValueError('수집기가 실행 중이에요. 팀이나 AI 키를 바꾸려면 먼저 수집기를 중지해 주세요.')
         if self.executable is None:
             # A later launch of the installed app does not need to register again.
             if getattr(sys, 'frozen', False) and Path(sys.executable).is_relative_to(self.root / 'versions'):
@@ -100,16 +120,13 @@ class DesktopState:
             raise ValueError('사용할 팀을 선택해 주세요.') from None
         if not isinstance(api_key, str) or len(api_key) > 2048 or any(ord(c) < 32 for c in api_key):
             raise ValueError('AI 키 입력을 확인해 주세요.')
-        # Browser-only default: do not discover or read this user's Codex/Claude history during onboarding.
-        for name in ('web-project', 'empty-codex', 'empty-claude'):
-            desktop_setup.private_dir(self.root / name)
+        desktop_setup.private_dir(self.root / 'web-project')
         env = child_environment()
         if api_key.strip():
             env['OPENAI_API_KEY'] = api_key.strip()
-        command = [str(self.executable), 'run', '--integrated', '--start-paused', '--state', str(self.state),
-                   '--project', str(self.root / 'web-project'), '--port', '0', '--team-id', selected,
-                   '--codex-dir', str(self.root / 'empty-codex'), '--codex-sqlite-dir', str(self.root / 'empty-codex'),
-                   '--claude-dir', str(self.root / 'empty-claude')]
+        command = [str(self.executable), 'run', '--integrated', '--browser-only', '--start-paused',
+                   '--state', str(self.state), '--project', str(self.root / 'web-project'),
+                   '--port', '0', '--team-id', selected]
         flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
         self.child = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL, **flags)
@@ -163,7 +180,7 @@ class SetupHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         for key, value in (headers or {}).items():
             self.send_header(key, value)
         self.end_headers()
@@ -195,6 +212,9 @@ class SetupHandler(http.server.BaseHTTPRequestHandler):
             return self.reply(200, (self.server.state.resources / 'desktop.html').read_bytes(), 'text/html; charset=utf-8')
         if self.path == '/app.js':
             return self.reply(200, (self.server.state.resources / 'desktop.js').read_bytes(), 'text/javascript; charset=utf-8')
+        if self.path in ('/desktop-assets/chrome-extensions.png', '/desktop-assets/chrome-syncup-id.png'):
+            screenshot = self.server.state.resources / self.path.removeprefix('/')
+            return self.reply(200, screenshot.read_bytes(), 'image/png')
         if self.path == '/status':
             try:
                 return self.reply(200, self.server.state.status())
@@ -224,7 +244,7 @@ class SetupHandler(http.server.BaseHTTPRequestHandler):
                 elif self.path == '/install':
                     result = state.install(data.get('extension_id'))
                 elif self.path == '/connect':
-                    webbrowser.open(state.config['web_url'] + '/connect')
+                    open_connection_in_chrome(state.config['web_url'] + '/connect')
                     result = {'opened': True}
                 elif self.path == '/start':
                     result = state.start(data.get('team_id'), data.get('api_key', ''))

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
-import { cleanCriteria, rulesFromText } from "@shared/criteria";
 import { TEAM_KINDS } from "@shared/mock";
 import { Avatar } from "@/components/avatar";
 import { InvitePanel } from "@/components/invite-panel";
@@ -39,9 +38,6 @@ function NewTeamForm() {
     topic: team.topic,
     deadline: team.deadline,
     kind: team.kind,
-    goal: team.criteria?.teamGoal ?? "",
-    scope: team.criteria?.teamScope ?? "",
-    rules: (team.criteria?.teamRules ?? []).join("\n"),
   });
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -62,8 +58,7 @@ function NewTeamForm() {
 
   const create = () => {
     if (!valid) return;
-    const criteria = cleanCriteria({ teamGoal: form.goal, teamScope: form.scope, teamRules: rulesFromText(form.rules) });
-    setTeam({ ...team, name: form.name.trim(), topic: form.topic.trim(), deadline: form.deadline, kind: form.kind, criteria });
+    setTeam({ ...team, name: form.name.trim(), topic: form.topic.trim(), deadline: form.deadline, kind: form.kind });
     toast.success("팀을 만들었어요");
     router.push("/collect");
   };
@@ -97,28 +92,6 @@ function NewTeamForm() {
             </select>
           </Field>
         </div>
-      </section>
-
-      <section className="space-y-5 rounded-xl border bg-card p-6">
-        <div className="space-y-1">
-          <h2 className="font-semibold">팀 목표·범위·규칙 <span className="text-sm font-normal text-muted-foreground">(선택)</span></h2>
-          <p className="text-sm text-muted-foreground break-keep">팀 결정 기록 맨 위에 고정되고, AI가 프로젝트 대화를 고르는 기준이 돼요.</p>
-        </div>
-        <Field label="팀 목표">
-          <input value={form.goal} onChange={set("goal")} className={inputCls} placeholder="예: 11/16까지 시연 가능한 MVP 제출" />
-        </Field>
-        <Field label="범위">
-          <input value={form.scope} onChange={set("scope")} className={inputCls} placeholder="예: ChatGPT 웹 수집 + 팀 보드까지, 결제는 제외" />
-        </Field>
-        <Field label="규칙" hint="한 줄에 하나씩 적어 주세요.">
-          <textarea
-            value={form.rules}
-            onChange={set("rules")}
-            rows={3}
-            className={cn(inputCls, "h-auto py-2.5")}
-            placeholder={"예: 결정은 팀장 승인 후 확정\n개인 일정·연락처는 올리지 않기"}
-          />
-        </Field>
       </section>
 
       <section className="space-y-4 rounded-xl border bg-card p-6">

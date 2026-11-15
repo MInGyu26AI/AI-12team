@@ -17,6 +17,7 @@
 !server/notion_page.py
 !server/key_issue.py
 !server/team_invites.py
+!server/onboarding.py
 !contract/secure_http.py
 !contract/diagnostics.py
 !contract/card_contract.py

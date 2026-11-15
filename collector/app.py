@@ -22,6 +22,7 @@ import threading
 import time
 
 from collection_loop import send_approved, watch
+from collection_settings import MAX_COLLECTION_SECONDS
 from collection_session import bind_sharing
 from connectors import base as connector_base
 from diagnostics import failure
@@ -34,7 +35,7 @@ from storage import connect, initialize, runtime_lock
 from team_client import TEAM_ERRORS, TEAM_UNREACHABLE_ERRORS, KeyFileError, TeamClient, team_api_url
 from turn_pipeline import TurnPipeline
 
-MAX_MINUTES = 1440
+MAX_MINUTES = MAX_COLLECTION_SECONDS // 60
 NEEDS_TEAM = ('팀 서버 연결이 필요합니다. 배포 웹 /connect에서 GitHub로 로그인해 이 PC의 연결 키를 받거나, '
               '--team-api와 --team-token-file을 지정하세요 (docs/team-server.md 참고).')
 
@@ -55,7 +56,10 @@ def parse_args():
     parser.add_argument('--team-id', help='최초 또는 시작 시 선택할 팀 ID')
     parser.add_argument('--integrated', action='store_true', help='통합 분류와 확장 프로그램 연결 활성화')
     parser.add_argument('--start-paused', action='store_true', help='사용자가 켜기 전까지 대화 수집 중지')
+    parser.add_argument('--browser-only', action='store_true', help='브라우저 확장에서만 수집하고 로컬 대화 폴더는 읽지 않음')
     args = parser.parse_args()
+    if args.browser_only and not args.integrated:
+        parser.error('--browser-only는 --integrated와 함께 사용하세요.')
     try:
         saved = saved_connection(args.state)  # team.json the native host wrote after a web login (key_setup.py)
     except ValueError as error:
@@ -74,7 +78,8 @@ def parse_args():
         if not same_server:
             parser.error('상태 폴더의 연결 키는 team.json의 팀 서버용입니다. --team-api를 빼거나 같은 주소를 쓰세요.')
     try:
-        args.codex_dir, args.codex_sqlite_dir, args.claude_dir, args.claude_project_name = storage_paths(args)
+        if not args.browser_only:
+            args.codex_dir, args.codex_sqlite_dir, args.claude_dir, args.claude_project_name = storage_paths(args)
     except (ValueError, OSError):
         parser.error("대화 저장 위치 설정을 확인하세요. 필요하면 --codex-sqlite-dir로 DB 폴더를 직접 지정하세요.")
     return parser, args
@@ -98,7 +103,7 @@ def main():
 
 def _open_review_server(args, parser):
     if not args.project or not args.project.is_dir() or not 1 <= args.minutes <= MAX_MINUTES:
-        parser.error("프로젝트 폴더와 1~1440분의 기간을 확인해 주세요.")
+        parser.error(f"프로젝트 폴더와 1~{MAX_MINUTES}분의 기간을 확인해 주세요.")
     srv = LoopbackServer(("127.0.0.1", args.port), Review)
     srv.db = args.state / "private.sqlite"
     initialize(srv.db)
@@ -143,6 +148,7 @@ def _connect_team(srv, args, parser):
 def _start_pipeline(srv, args, profile):
     """--integrated: the turn pipeline and the connection file the native host and local web read."""
     srv.pipeline = TurnPipeline(srv.db, srv.team_client, profile)
+    srv.pipeline.browser_only = getattr(args, 'browser_only', False)
     srv.pipeline.page_port = srv.server_port  # connectors build OAuth return addresses from it (base.local_page_url)
     srv.rpc_secret = secrets.token_urlsafe(32)
     connection = args.state / 'connection.json'

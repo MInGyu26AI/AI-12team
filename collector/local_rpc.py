@@ -56,7 +56,8 @@ def _connectors_list(pipeline, params):
     scopes = {}
     for row in connector_base.list_scopes(pipeline):
         scopes.setdefault(row['site'], []).append(connector_base.scope_info(row))
-    return dict(providers=[dict(site=p.site, label=p.label, status=connector_base.provider_status(pipeline, p),
+    return dict(setupUrl=connector_base.local_page_url(pipeline, '/connectors'),
+                providers=[dict(site=p.site, label=p.label, status=connector_base.provider_status(pipeline, p),
                                 scopes=scopes.get(p.site, [])) for p in connector_base.PROVIDERS.values()])
 
 

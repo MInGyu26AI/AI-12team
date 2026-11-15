@@ -22,6 +22,7 @@ export interface BatchRecord {
 }
 
 export interface ExtStatus {
+  browserOnly?: boolean;
   teamId?: string;
   teams?: { id: string; name: string }[];
   projectTopic?: string;

@@ -987,7 +987,7 @@ describe('동기화로 고른 프로젝트에서는 화면 수집을 하지 않�
   });
 
   it.each(['manual', 'selection'] as const)('같은 프로젝트의 %s 보내기는 거절하고 싱크 맞추기를 안내한다', async (trigger) => {
-    expect(await collect(trigger, syncedPage)).toEqual({ ok: false, error: '이 프로젝트 대화는 동기화가 가져와요. 싱크 맞추기를 눌러 주세요' });
+    expect(await collect(trigger, syncedPage)).toEqual({ ok: false, error: '이 프로젝트는 자동 수집 중이에요. 지금 처리하려면 더 보기에서 ‘지금까지 모은 대화 넣기’를 눌러 주세요' });
     expect(appendCalls()).toHaveLength(0);
   });
 
@@ -1021,7 +1021,7 @@ describe('동기화로 고른 프로젝트에서는 화면 수집을 하지 않�
   it('우클릭 선택 보내기도 같은 프로젝트면 보내지 않고 안내한다', async () => {
     rightClick(syncedPage);
     await vi.waitFor(() => expect(toasts()).toHaveLength(1));
-    expect(toasts()[0]).toEqual({ type: 'toast', text: '이 프로젝트 대화는 동기화가 가져와요. 싱크 맞추기를 눌러 주세요', tone: 'error' });
+    expect(toasts()[0]).toEqual({ type: 'toast', text: '이 프로젝트는 자동 수집 중이에요. 지금 처리하려면 더 보기에서 ‘지금까지 모은 대화 넣기’를 눌러 주세요', tone: 'error' });
     expect(appendCalls()).toHaveLength(0);
   });
 

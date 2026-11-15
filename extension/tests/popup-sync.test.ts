@@ -268,7 +268,7 @@ describe('팝업 화면 그리기', () => {
     const html = renderToStaticMarkup(
       createElement(MainScreen, { settings: settings(), syncState: SYNC_DEFAULTS, lastError: null, pendingCount: 0, onEdit: () => {} }),
     );
-    expect(html).toContain('싱크 맞추기');
+    expect(html).toContain('지금까지 모은 대화 넣기');
     expect(html).toContain('프로젝트만 수집');
     expect(html).not.toContain('지금 분류하기');
     expect(html).not.toContain('회마다');

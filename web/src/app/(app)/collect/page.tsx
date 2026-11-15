@@ -1,5 +1,7 @@
 "use client";
 
+import { DocumentConnections } from "@/components/collect/document-connections";
+
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -98,14 +100,15 @@ export default function CollectPage() {
         <AiRow
           name="Codex·Claude Code"
           detail={
-            connected
+            connected && !st.browserOnly
               ? "로컬 수집기가 선택한 프로젝트에서 완료된 새 발화를 모아요"
+              : connected ? "현재 앱은 브라우저 대화만 수집해요"
               : link === "collector-off"
                 ? "로컬 수집기가 꺼져 있어요. 수집기를 실행해 주세요"
                 : "로컬 수집기를 실행하면 연결돼요"
           }
-          on={connected}
-          action={connected ? <ConnectedChip /> : null}
+          on={connected && !st.browserOnly}
+          action={connected && !st.browserOnly ? <ConnectedChip /> : null}
         />
         <AiRow name="Claude 웹" detail="지원 예정이에요" on={false} action={<SoonChip />} />
         <AiRow name="Gemini 웹" detail="지원 예정이에요" on={false} action={<SoonChip />} last />
@@ -153,6 +156,7 @@ export default function CollectPage() {
       </section>
 
       <FileUploadCard />
+      <DocumentConnections connected={connected} />
 
       <RecentBatches
         batches={connected ? st.recent : null}
@@ -161,7 +165,7 @@ export default function CollectPage() {
       />
 
       <p className="text-sm text-muted-foreground">
-        확장 프로그램을 쓸 수 없나요?{" "}
+        카카오톡 대화나 텍스트를 가져오려면{" "}
         <Link href="/collect/paste" className="font-semibold text-brand hover:underline">
           대화 직접 붙여넣기
         </Link>

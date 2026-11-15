@@ -5,6 +5,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+from subprocess import CompletedProcess
 import tempfile
 import threading
 import unittest
@@ -12,7 +13,7 @@ from unittest.mock import patch
 import zipfile
 
 import desktop_setup
-from desktop import SetupServer
+from desktop import SetupServer, open_connection_in_chrome
 
 
 class Registry:
@@ -89,6 +90,16 @@ class DesktopSetup(unittest.TestCase):
         self.assertNotEqual(first,second)
         self.assertEqual(first.read_text(), 'binary')
         self.assertTrue((source/'SyncUp').exists())
+
+    def test_mac_pc_connection_targets_chrome_even_when_another_browser_is_default(self):
+        url = 'https://syncup-example.vercel.app/connect'
+        with patch('desktop.sys.platform', 'darwin'), patch('desktop.subprocess.run') as run:
+            run.return_value = CompletedProcess([], 0)
+            open_connection_in_chrome(url)
+            run.assert_called_once_with(['open', '-a', 'Google Chrome', url], capture_output=True, timeout=10)
+            run.return_value = CompletedProcess([], 1)
+            with self.assertRaisesRegex(ValueError, '설치된 Chrome'):
+                open_connection_in_chrome(url)
 
 
 class SetupHttp(unittest.TestCase):

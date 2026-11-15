@@ -584,7 +584,8 @@ class RpcValidation(ConnectorFixture):
 
     def test_list_shape(self):
         listed = dispatch(self.pipeline, 'connectors.list', {})
-        self.assertEqual(set(listed), {'providers'})
+        self.assertEqual(set(listed), {'providers', 'setupUrl'})
+        self.assertIsNone(listed['setupUrl'])  # no listener has been started in this fixture
         provider, = listed['providers']
         self.assertEqual((provider['site'], provider['label'], provider['scopes']), ('notion', '가짜 노션', []))
         self.assertEqual(provider['status'], dict(connected=False, tokenSet=False, needs='연결 정보를 입력하세요.'))
@@ -996,6 +997,8 @@ class RealCollector(unittest.TestCase):
                 self.assertIn('href="/connectors"', call(None, '/', get=True)[1])
                 status, body = call('connectors.list')
                 self.assertEqual((status, isinstance(json.loads(body)['result']['providers'], list)), (200, True))
+                self.assertTrue(json.loads(body)['result']['setupUrl'].startswith('http://127.0.0.1:'))
+                self.assertTrue(json.loads(body)['result']['setupUrl'].endswith('/connectors'))
                 status, body = call('connectors.sync')
                 self.assertEqual((status, json.loads(body)['result']), (200, dict(results=[])))
                 status, body = call('connectors.setScope', body=dict(version=1, method='connectors.setScope', params=dict(

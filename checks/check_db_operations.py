@@ -112,6 +112,14 @@ class ServerUpgrade(TeamIntegration):
             joined = c.execute("SELECT o_outcome FROM syncup.join_with_invite(%s,%s::jsonb,%s,%s,NULL,'macOS','합성')",
                                ('c'*64,'[{"provider":"github","subject":"1001"}]','d'*64,'e'*64)).fetchone()[0]
         self.assertEqual((made,joined),('created','member'))
+        onboarding_digest = '3'*64
+        with psycopg.connect(self.api_dsn) as c:
+            signed = c.execute('SELECT syncup.open_onboarding(%s,%s,%s,%s)',
+                               ('1002','4'*64,onboarding_digest,'합성 가입 사용자')).fetchone()[0]
+            created = c.execute('SELECT syncup.onboarding_create_team(%s,%s,%s,%s)',
+                                (onboarding_digest,'9e702b17-b61b-40c1-a633-22c303158399',
+                                 '합성 가입 팀','합성 가입 주제')).fetchone()[0]
+        self.assertEqual((signed['outcome'],created['outcome']),('ready','created'))
         with psycopg.connect(self.admin_dsn) as c:
             c.execute('ALTER TABLE syncup.conflict_checks DROP COLUMN diagnostics')
             c.execute("INSERT INTO syncup.team_notion_links(team_id,page_id,token,actor) VALUES(%s,%s,%s,%s)",
@@ -137,6 +145,9 @@ class ServerUpgrade(TeamIntegration):
         restored_admin, restored_api = self.restored_copy()
         self.assertEqual(self.snapshot(restored_admin),(after,schema))
         verify_database(restored_api, web_keys=True)
+        with psycopg.connect(restored_api) as c:
+            account = c.execute('SELECT syncup.onboarding_account(%s)', (onboarding_digest,)).fetchone()[0]
+        self.assertEqual(account['teams'], [dict(id=created['id'], name='합성 가입 팀')])
         # Restart the actual CLI twice against the restored DB; credentials remain local to subprocesses.
         env = dict(os.environ, SYNCUP_DATABASE_URL=restored_api)
         env.pop('SYNCUP_ADMIN_DATABASE_URL', None)
