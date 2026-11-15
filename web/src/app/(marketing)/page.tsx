@@ -44,6 +44,7 @@ export default function LandingPage() {
       <Hero />
       <Feature
         id="overview"
+        en="Every chat, one record."
         step={{ label: "한눈에 보기", sub: "팀 결정 기록" }}
         title={<>팀원들의&nbsp; 대화가<br />한 곳에 모여요</>}
         body={<>누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요.<br />주제·역할·작업별로 묶어서 보여 줘요.</>}
@@ -51,6 +52,7 @@ export default function LandingPage() {
       />
       <Feature
         id="approve"
+        en="Only what you approve."
         step={{ index: 1, sub: "프로젝트 대화 · 승인 후 공유" }}
         title={<>프로젝트 대화만 모으고,<br />공유는 내가 정해요</>}
         body="ChatGPT 프로젝트 대화에서 결정·할 일·조사 후보를 찾아요. 내가 체크한 것만 팀에 올라가요. 승인하지 않은 내용은 팀에 보이지 않아요."
@@ -59,6 +61,7 @@ export default function LandingPage() {
       />
       <Feature
         id="alert"
+        en="Clashes, flagged first."
         step={{ index: 2, sub: "대화 중 실시간 알림" }}
         title={<>대화하는 그 자리에서<br />어긋난 결정을 알려줘요</>}
         body="ChatGPT 웹에서 기존 팀 결정과 다른 내용이 나오면 바로 알림이 떠요. 대화를 멈추지 않고 확인할 수 있어요."
@@ -67,6 +70,7 @@ export default function LandingPage() {
       />
       <Feature
         id="conflict"
+        en="Side by side, settled."
         step={{ index: 3, sub: "결정 충돌 해결" }}
         title={<>엇갈린 결정은<br />그 자리에서 정리해요</>}
         body="기존 결정을 유지할지, 새 결정으로 바꿀지 바로 정해요."
@@ -75,6 +79,7 @@ export default function LandingPage() {
       />
       <Feature
         id="record"
+        en="Burst into the record."
         step={{ index: 4, sub: "팀 결정 기록" }}
         title={<>언제, 누가, 왜 정했는지<br />한 곳에서 이어 써요</>}
         body="팀 기록을 복사해 새 AI 대화에 붙여 넣으면 팀의 맥락이 그대로 이어져요."
@@ -132,25 +137,30 @@ function Hero() {
 
 type Step = { label?: string; index?: number; sub: string };
 
+// 단계 옆 원소 표기 (별의 일생: 수소 → 헬륨 → 탄소 → 철 → 초신성)
+const ELEMENT = ["", "H → He", "He → C", "Fe", "✦"];
+
 function StepLine({ step }: { step: Step }) {
   return (
-    <p className="flex flex-wrap items-center gap-3 text-[13px]">
-      <span className="font-medium">{step.label ?? `0${step.index} / 04`}</span>
+    <p className="flex flex-wrap items-center gap-3 text-[12px]">
+      <span className="label-mono text-ink">{step.label ?? `0${step.index} / 04`}</span>
       {step.index && (
         <span aria-hidden className="flex gap-1">
           {[1, 2, 3, 4].map((i) => (
-            <span key={i} className={cn("h-0.5 w-5 rounded-[1px]", i === step.index ? "bg-brand" : "bg-foreground/12")} />
+            <span key={i} className={cn("h-[3px] w-6", i === step.index ? "bg-ink" : "bg-blush-deep")} />
           ))}
         </span>
       )}
-      <span className="text-text-tertiary">{step.sub}</span>
+      {step.index && <span className="font-serif text-[15px] text-ink-2 italic">{ELEMENT[step.index]}</span>}
+      <span className="button-mono text-ink-3">{step.sub}</span>
     </p>
   );
 }
 
 // 기능 섹션 (피그마 Section 0~4): 위 구분선 · 넓은 화면 높이 760 · 왼쪽 글 472 + 오른쪽 미리보기 560
-function Feature({ id, step, title, body, bodyWidth, preview, cta }: {
+function Feature({ id, en, step, title, body, bodyWidth, preview, cta }: {
   id: string;
+  en: string; // 영어 큰 제목 (Inter Tight 800)
   step: Step;
   title: React.ReactNode;
   body: React.ReactNode;
@@ -159,12 +169,15 @@ function Feature({ id, step, title, body, bodyWidth, preview, cta }: {
   cta?: boolean;
 }) {
   return (
-    <section id={id} className="scroll-mt-16 border-t border-foreground/8">
+    <section id={id} className="scroll-mt-16 border-t border-ink">
       <div className="mx-auto flex max-w-[1280px] flex-col gap-12 px-gutter py-16 sm:px-10 lg:min-h-[760px] lg:flex-row lg:items-center lg:px-20 lg:py-0">
         <div className="lg:w-[472px] lg:shrink-0">
           <StepLine step={step} />
-          <h2 className="mt-6 text-3xl leading-[1.28] font-medium tracking-[-0.015em] break-keep sm:text-[42px]">{title}</h2>
-          <p className={cn("mt-5 text-base leading-[1.65] text-muted-foreground break-keep sm:text-[17px]", bodyWidth)}>{body}</p>
+          <h2 className="mt-6">
+            <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">{en}</span>
+            <span className="mt-4 block text-xl leading-[1.4] font-bold break-keep text-ink sm:text-2xl">{title}</span>
+          </h2>
+          <p className={cn("mt-5 text-base leading-[1.7] text-ink-body break-keep sm:text-[17px]", bodyWidth)}>{body}</p>
           {cta && (
             <Link href={START.href} className={cn(primaryLg, "mt-9")}>
               {START.label}
@@ -177,22 +190,26 @@ function Feature({ id, step, title, body, bodyWidth, preview, cta }: {
   );
 }
 
-// 이렇게 사용해요 (149:108): 옅은 베이지 띠 · 6단계 번호 + 이어지는 선 · 단계마다 태그
+// 이렇게 사용해요: 수채화 배경 · 6단계 각진 번호 + 이어지는 선 · 단계마다 태그(강조 = 진갈색, 나머지 = 연분홍)
 function HowTo() {
   return (
-    <section id="how" className="scroll-mt-16 border-t border-foreground/8 bg-[#e6d8c4]/40">
-      <div className="mx-auto max-w-[1280px] space-y-10 px-gutter py-16 sm:px-10 lg:px-20 lg:py-24">
-        <h2 className="text-[32px] font-medium tracking-[-0.01em]">이렇게 사용해요</h2>
+    <section id="how" className="relative scroll-mt-16 overflow-hidden border-t border-ink">
+      <WatercolorBg />
+      <div className="relative mx-auto max-w-[1280px] space-y-10 px-gutter py-16 sm:px-10 lg:px-20 lg:py-24">
+        <h2>
+          <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">How it works.</span>
+          <span className="mt-3 block text-xl font-bold text-ink sm:text-2xl">이렇게 사용해요</span>
+        </h2>
         <ol className="grid gap-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-0">
           {HOW.map((s, i) => (
             <li key={s.title} className="flex flex-col items-start gap-3 lg:pr-2">
               <span className="flex w-full items-center gap-2">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-foreground/15 bg-white text-xs font-medium">{i + 1}</span>
-                {i < HOW.length - 1 && <span aria-hidden className="hidden h-px flex-1 bg-foreground/15 lg:block" />}
+                <span className="flex size-8 shrink-0 items-center justify-center border border-ink bg-glass font-mono text-xs text-ink">{String(i + 1).padStart(2, "0")}</span>
+                {i < HOW.length - 1 && <span aria-hidden className="hidden h-px flex-1 bg-ink lg:block" />}
               </span>
-              <span className="text-[15px] font-medium">{s.title}</span>
-              <span className="max-w-[172px] text-[13px] text-muted-foreground break-keep">{s.body}</span>
-              <span className={cn("rounded-md px-2 py-[3px] text-[11px] font-medium", s.strong ? "bg-brand text-white" : "bg-foreground/6 text-muted-foreground")}>{s.tag}</span>
+              <span className="text-[15px] font-bold text-ink">{s.title}</span>
+              <span className="max-w-[172px] text-[13px] text-ink-body break-keep">{s.body}</span>
+              <span className={cn("px-2 py-[3px] text-[11px] font-medium", s.strong ? "bg-ink text-white" : "bg-blush text-ink")}>{s.tag}</span>
               {s.link && (
                 <Link href="/install" className="text-xs font-medium hover:underline">
                   설치 방법 보기 →
@@ -201,7 +218,7 @@ function HowTo() {
             </li>
           ))}
         </ol>
-        <p className="text-[13px] text-text-tertiary">지금은 ChatGPT 웹을 지원해요. Claude와 Gemini는 준비 중이에요.</p>
+        <p className="text-[13px] text-ink-3">지금은 ChatGPT 웹을 지원해요. Claude와 Gemini는 준비 중이에요.</p>
       </div>
     </section>
   );
@@ -211,24 +228,27 @@ function HowTo() {
 function Install() {
   const version = release.version.split(".").slice(0, 2).join(".");
   return (
-    <section id="install" className="scroll-mt-16 border-t border-foreground/8">
+    <section id="install" className="scroll-mt-16 border-t border-ink">
       <div className="mx-auto flex max-w-[1280px] flex-col gap-16 px-gutter py-16 sm:px-10 lg:flex-row lg:items-center lg:px-20 lg:py-24">
         <div className="lg:w-[520px] lg:shrink-0">
           <p className="flex flex-wrap gap-2.5 text-[13px]">
-            <span className="font-medium">브라우저 확장</span>
-            <span className="text-text-tertiary">Chrome 데스크톱 · macOS · Windows</span>
+            <span className="label-mono text-[12px] text-ink">Extension</span>
+            <span className="button-mono text-[12px] text-ink-3">브라우저 확장 · Chrome 데스크톱 · macOS · Windows</span>
           </p>
-          <h2 className="mt-6 text-3xl font-medium sm:text-[42px]">3단계면 준비 끝나요</h2>
-          <p className="mt-4 max-w-[480px] text-base text-muted-foreground break-keep sm:text-[17px]">
+          <h2 className="mt-6">
+            <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">Ready in three steps.</span>
+            <span className="mt-4 block text-xl font-bold text-ink sm:text-2xl">3단계면 준비 끝나요</span>
+          </h2>
+          <p className="mt-4 max-w-[480px] text-base text-ink-body break-keep sm:text-[17px]">
             설치는 한 번만 하면 돼요. 그다음부터는 ChatGPT에서 평소처럼 대화하면 돼요.
           </p>
           <ol className="mt-8 space-y-5">
             {INSTALL_STEPS.map((s, i) => (
               <li key={s.title} className="flex gap-4">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-foreground/25 bg-white text-[13px] font-medium">{i + 1}</span>
+                <span className="flex size-8 shrink-0 items-center justify-center border border-ink bg-glass font-mono text-[13px] text-ink">{String(i + 1).padStart(2, "0")}</span>
                 <span className="space-y-1">
-                  <span className="block text-[17px] font-medium">{s.title}</span>
-                  <span className="block max-w-[430px] text-sm text-muted-foreground break-keep">{s.body}</span>
+                  <span className="block text-[17px] font-bold text-ink">{s.title}</span>
+                  <span className="block max-w-[430px] text-sm text-ink-body break-keep">{s.body}</span>
                 </span>
               </li>
             ))}
@@ -238,9 +258,9 @@ function Install() {
               <Download className="size-[18px]" aria-hidden />
               확장 프로그램 받기
             </Link>
-            <span className="text-[13px] text-text-tertiary">v{version} · 무료</span>
+            <span className="font-mono text-[13px] text-ink-3">v{version} · 무료</span>
           </div>
-          <p className="mt-5 text-[13px] text-text-tertiary">휴대폰에서는 설치할 수 없어요</p>
+          <p className="mt-5 text-[13px] text-ink-3">휴대폰에서는 설치할 수 없어요</p>
         </div>
         <div className="flex min-w-0 flex-1 justify-center">
           <PopupPreview />
