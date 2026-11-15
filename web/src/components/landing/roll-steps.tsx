@@ -31,8 +31,10 @@ function StepIcon({ index }: { index: number }) {
 
 // 글자마다 같은 글자 2개를 세로로 쌓은 칸. 굴린 상태(on)면 칸 안에서 -50% 굴러 아래 글자가 보인다 (글자마다 24ms 시차).
 // 스타일은 globals.css 없이 inline 으로만 (클래스가 빠지면 두 글자가 나란히 보이던 버그)
-const CELL: React.CSSProperties = { display: "inline-block", overflow: "hidden", height: "1.18em", lineHeight: 1.18, verticalAlign: "top" };
-const GLYPH: React.CSSProperties = { display: "block", height: "1.18em", lineHeight: 1.18 };
+// 높이 1.28em 은 Inter Tight 의 A 꼭대기·p 꼬리까지 담는 값, margin-block -0.05em 으로 늘어난 만큼 행 높이를 되돌린다.
+// 가로는 자르지 않는다(letter-spacing -0.05em 이라 칸이 글자보다 좁다): overflow 는 globals.css .roll-cell (clip 미지원이면 hidden)
+const CELL: React.CSSProperties = { display: "inline-block", height: "1.28em", lineHeight: 1.28, marginBlock: "-0.05em", verticalAlign: "top" };
+const GLYPH: React.CSSProperties = { display: "block", height: "1.28em", lineHeight: 1.28 };
 
 function RollWord({ word, on, still }: { word: string; on: boolean; still: boolean }) {
   return (
@@ -40,7 +42,7 @@ function RollWord({ word, on, still }: { word: string; on: boolean; still: boole
       {[...word].map((ch, i) => {
         const c = ch === " " ? " " : ch;
         return (
-          <span key={i} style={CELL}>
+          <span key={i} className="roll-cell" style={CELL}>
             <span
               style={{
                 display: "flex",
