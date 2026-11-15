@@ -289,7 +289,7 @@ docker build -f Dockerfile.cloud .
 - 만들기: 실제 모드 웹 `/team/new` '초대 링크 만들기' → 수집기 RPC `team.createInvite` → `POST /teams/{팀}/invites`. 응답의 코드로 `/join/<코드>` 주소를 만든다. 코드는 144비트 무작위(`secrets.token_urlsafe(18)`)이고 DB에는 SHA-256만 남는다. 주소는 만든 직후 한 번만 보인다.
 - 규칙(DB 함수에 고정): 7일 뒤 만료, 링크 하나를 여러 명이 쓴다, 활성 팀원 8명까지, 열린 링크는 팀마다 5개까지, 팀원 누구나 회수(`team.revokeInvite` → `POST …/invites/{링크}/revoke`). 목록 `team.invites`(`GET …/invites`)는 만든 사람·시각·참여 수만 보이고 코드는 없다. 역할 열은 없다.
 - 참여: 받은 사람이 `/join/<코드>`를 열면 웹이 확장 → 연결 프로그램 `setup.status`로 설치를 확인하고(없으면 `/install`로 보냄), `setup.invite`(→ `POST /invites/preview`, 키 없이 서버 전체 1분 30번)로 팀 이름·만료를 보여 준다. 'GitHub로 참여'를 누르면 `setup.begin`이 PKCE 비밀값 옆에 코드와 이름을 둔다. 코드는 로그인 주소에 싣지 않는다. 로그인 뒤 `/auth/callback`의 `setup.connect`가 `POST /keys`에 `invite`·`name`을 더해 보낸다.
-- 서버(`join_with_invite`): 팀 잠금을 잡고 만료·회수·인원을 다시 본다. GitHub 신원이 처음이면 사용자·신원·소속을 만들고, 아는 사용자면 소속만 더하고, 이미 팀원이면 소속은 그대로 둔다. 그다음 `issue_web_key`로 키를 등록한다. 키를 못 받으면(1시간 5회, PC 3대 등) 사용자·소속도 만들지 않는다. 팀에서 뺀 사람(소속 `active=false`)은 링크로 돌아오지 못한다.
+- 서버(`join_with_invite`): 셀프 가입과 같은 GitHub 계정 잠금을 먼저 잡고, 팀 잠금을 잡은 뒤 만료·회수·인원을 다시 본다. GitHub 신원이 처음이면 사용자·신원·소속을 만들고, 아는 사용자면 소속만 더하고, 이미 팀원이면 소속은 그대로 둔다. 그다음 `issue_web_key`로 키를 등록한다. 키를 못 받으면(1시간 5회, PC 3대 등) 사용자·소속도 만들지 않는다. 팀에서 뺀 사람(소속 `active=false`)은 링크로 돌아오지 못한다.
 - 기록: `invite_events`에 결과만 남는다(코드·해시·GitHub ID·IP 없음). 로그·진단·다른 응답에도 코드는 없다. API 계정은 두 표를 직접 읽거나 쓰지 못한다(RLS, 권한 없음).
 - 켜기: 웹 연결 키(`SYNCUP_SUPABASE_*`)와 같이 켜진다. 켜진 서버는 초대 표·함수가 없으면 시작하지 않으므로 배포 전에 [`migrate-integration`](#기존-db-업그레이드)을 먼저 한다.
 - 알려진 한계: `/join/<코드>` 주소는 웹 호스팅(Vercel) 요청 기록과 브라우저 방문 기록에 남는다. 미리보기 횟수 제한은 서버 전체 단위라 누군가 계속 두드리면 다른 사람의 미리보기도 잠시 막힌다.
@@ -302,7 +302,7 @@ docker build -f Dockerfile.cloud .
 python3 server/team_admin.py migrate-integration
 ```
 
-`syncup.conflict_checks`가 없으면 `team_decisions.sql`을 적용하고, 그다음 늘 `team_upgrades.sql`을 적용한다. 한 트랜잭션이라 중간에 실패하면 아무것도 바뀌지 않는다. 두 번 실행해도 되고, 승인 카드·검사 상태·RLS는 그대로 둔다.
+`syncup.conflict_checks`가 없으면 `team_decisions.sql`을 적용하고, 이어서 `team_upgrades.sql`과 `team_onboarding.sql`을 적용한다. 잠금 하나를 얻는 데 5초가 지나면 전체 트랜잭션을 롤백한다. 열린 조회 등 잠금을 잡은 작업이 끝난 뒤 같은 명령을 다시 실행한다.
 
 ## 백업과 복구
 
