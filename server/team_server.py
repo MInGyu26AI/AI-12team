@@ -87,10 +87,13 @@ class TeamHandler(SecureHandler):
             parts, team_id = self.parse_path()
             token = self.bearer_token()
             data = json.loads(self.body()) if self.command == 'POST' else None
-            with authorized(self.server.dsn, token, team_id) as (c, user_id):
-                result = dispatch(c, user_id, team_id, self.command, parts, data, self.server)
-                if self.command == 'POST' and linked(self.server, team_id):
-                    actor = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
+            if self.command == 'POST' and parts[2:3] == ['notion']:  # checks Notion outside any DB transaction
+                result = notion_sync.link_request(self.server, token, team_id, parts[3:], data)
+            else:
+                with authorized(self.server.dsn, token, team_id) as (c, user_id):
+                    result = dispatch(c, user_id, team_id, self.command, parts, data, self.server)
+                    if self.command == 'POST' and linked(self.server, team_id):
+                        actor = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
             # Respond only after the transaction has committed, including idempotent retries.
         except AccessError as error:
             status, result = error.status, {'error': '접근할 수 없거나 허용되지 않은 요청입니다.'}
@@ -111,6 +114,8 @@ class TeamHandler(SecureHandler):
         """A change is saved to the linked repository and Notion page. After a start, the team's first request of any
         kind saves once right away, so a save that was waiting when the server stopped still happens and the status
         is known."""
+        if self.command == 'POST' and parts[2:3] == ['notion']:
+            return  # a Notion link change: link_request has saved the new page; nothing else changed
         if self.command == 'POST':
             schedule_save(self.server, token, team_id, actor, approved=parts[2:] == ['items'])
             notion_sync.schedule_save(self.server, token, team_id)
@@ -148,6 +153,7 @@ def dispatch(c, user_id, team_id, method, parts, data, server=None):
         if method != 'GET':
             raise AccessError(405)
         return me(c, user_id)
+    notion_sync.load_link(c, server, team_id)  # the team's Notion link, for this request's saves and status
     tail = parts[2:]
     if tail[0] == 'items' and len(tail) != 3:
         return shared_cards(c, team_id, user_id, method, tail, data)

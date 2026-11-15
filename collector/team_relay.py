@@ -34,7 +34,9 @@ def _write_request(method, params):
 def relay(pipeline, method, params):
     with connect(pipeline.db) as c:
         team_id = bound_team(c)
-    if method in WRITE_METHODS:
+    if method in NOTION_WRITES:
+        path, data = _notion_request(method, params)
+    elif method in WRITE_METHODS:
         path, data = _write_request(method, params)
     elif method in READ_PATHS:
         path, data = READ_PATHS[method], None
@@ -46,3 +48,19 @@ def relay(pipeline, method, params):
     if result.get('team_id') != team_id:
         raise ValueError('대상 팀 응답 불일치')
     return result
+
+
+# --- the team's Notion page link (server/notion_sync.py link_request) ---------------------------------------------
+# The integration token passes through to the team server only; nothing here stores or logs it.
+READ_PATHS['team.notion'] = 'notion'
+NOTION_WRITES = {'team.verifyNotion': ('notion/verify', ('page', 'token')),
+                 'team.linkNotion': ('notion', ('page', 'token')),
+                 'team.unlinkNotion': ('notion/unlink', ())}
+
+
+def _notion_request(method, params):
+    """(path, body) of a Notion link check, link or unlink; any other field is refused."""
+    path, fields = NOTION_WRITES[method]
+    if set(params) - set(fields):
+        raise ValueError('노션 연결 필드 오류')
+    return path, {k: params[k] for k in fields if k in params}

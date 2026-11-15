@@ -1,6 +1,6 @@
 import type { RepoStatus } from "@shared/repo";
 import type { Conflict, RelatedCard } from "@shared/types";
-import type { ConflictEvent, TeamApi } from "./types";
+import type { ConflictEvent, NotionLinkResult, NotionStatus, TeamApi } from "./types";
 import { rpc } from "../rpc";
 
 export function createRealApi(): TeamApi {
@@ -30,5 +30,14 @@ export function createRealApi(): TeamApi {
       return { records: history.items, events: log.events };
     },
     getRepo: async () => (await rpc<{ repo: RepoStatus }>("team.repo")).repo,
+    getNotion: async () => (await rpc<{ notion: NotionStatus }>("team.notion")).notion,
+    verifyNotion: (page, token) => rpc<NotionLinkResult>("team.verifyNotion", notionBody(page, token)),
+    linkNotion: (page, token) => rpc<NotionLinkResult>("team.linkNotion", notionBody(page, token)),
+    unlinkNotion: async () => (await rpc<{ notion: NotionStatus }>("team.unlinkNotion")).notion,
   };
+}
+
+// 토큰을 비우면 보내지 않는다: 서버가 같은 페이지일 때만 저장된 토큰을 다시 쓴다
+function notionBody(page: string, token?: string): Record<string, unknown> {
+  return token ? { page, token } : { page };
 }

@@ -7,12 +7,15 @@ import threading
 import time
 import unittest
 import uuid
-from contextlib import redirect_stderr
+from contextlib import nullcontext, redirect_stderr
 from unittest.mock import patch
+
+import psycopg
 
 import notion_page
 import notion_sync
 import repo_sync
+import team_relay
 import team_server
 from ai.syncup_ai.team_state import build_state, short_date, to_kst
 from check_repo_sync import card, wait_until
@@ -24,8 +27,9 @@ from fake_github import FakeGitHub, fake_github, header_trap
 from fake_notion import FakeNotion, fake_notion
 from local_fixtures import public_card
 from notion_page import NotionError, save
-from notion_sync import NotionTarget, notion_status, page_blocks, target_from_env
+from notion_sync import NotionTarget, notion_status, page_blocks, page_from, target_from_env
 from repo_sync import RepoTarget
+from team_access import authorized
 
 TOKEN = 'synthetic-notion-token-DO-NOT-LOG'
 GITHUB_TOKEN = 'synthetic-github-token-DO-NOT-LOG'
@@ -301,9 +305,10 @@ class NotionSave(unittest.TestCase):
     def test_requests_keep_to_the_average_rate(self):
         starts, take_turn = [], notion_page._take_turn
 
-        def recorded():  # when each request may start, measured where it is sent rather than where it arrives
-            take_turn()
+        def recorded(longest=None):  # when each request may start, measured where it is sent rather than where it arrives
+            took = take_turn(longest)
             starts.append(time.monotonic())
+            return took
         with patch.object(notion_page, 'REQUEST_INTERVAL_SECONDS', .1), patch.object(notion_page, '_take_turn', recorded):
             self.save(build_state([card(f't{n}', 'todo', f'할 일 {n}', topic='배포', at=n) for n in range(5)]))
             self.save(build_state([]))
@@ -537,9 +542,262 @@ class NotionSyncTeam(TeamIsolation):
         self.assert_private_stays_out()
 
 
+# --- a team's own link from the web ---------------------------------------------------------------------------------
+# Synthetic tokens, shaped unlike real Notion secrets (secret_…, ntn_…).
+LINK_TOKEN = 'synthetic-team-link-token-DO-NOT-LOG'
+OTHER_TOKEN = 'synthetic-other-team-token-DO-NOT-LOG'
+READ_ONLY_TOKEN = 'synthetic-read-only-token-DO-NOT-LOG'
+
+
+class PageAddress(unittest.TestCase):
+    def test_a_page_id_or_a_notion_address_gives_the_page_id(self):
+        hex_id = '0123456789abcdef0123456789ABCDEF'
+        page = str(uuid.UUID(hex_id))
+        for text in (hex_id, page, f' {page.upper()} ', f'https://www.notion.so/team/A-Title-{hex_id}?pvs=4',
+                     f'https://www.notion.so/{hex_id}', f'https://team.notion.site/Title-{hex_id}/'):
+            with self.subTest(text=text):
+                self.assertEqual(page_from(text), page)
+        for text in ('', 'not a page', hex_id[:-1], f'http://www.notion.so/{hex_id}', f'https://evil.example/{hex_id}',
+                     f'https://notion.so.evil.example/{hex_id}', f'https://www.notion.so/{hex_id}x', 'https://[::1/x'):
+            with self.subTest(text=text):
+                self.assertIsNone(page_from(text))
+
+
+class _Pipeline:
+    db = None
+
+    def __init__(self):
+        self.sent = []
+        self.client = self
+
+    def request(self, path, data=None):
+        self.sent.append((path, data))
+        return dict(team_id='a', ok=True)
+
+
+class NotionRelay(unittest.TestCase):
+    """The collector passes the web's Notion link requests on, with only the fields the server takes."""
+
+    def test_the_relay_sends_only_the_link_fields(self):
+        pipeline = _Pipeline()
+        with patch.object(team_relay, 'connect', lambda db: nullcontext()), \
+                patch.object(team_relay, 'bound_team', lambda c: 'a'):
+            team_relay.relay(pipeline, 'team.notion', {})
+            team_relay.relay(pipeline, 'team.verifyNotion', dict(page='p', token=LINK_TOKEN))
+            team_relay.relay(pipeline, 'team.linkNotion', dict(page='p'))
+            team_relay.relay(pipeline, 'team.unlinkNotion', {})
+            for method, bad in [('team.linkNotion', dict(page='p', team='b')), ('team.unlinkNotion', dict(page='p'))]:
+                with self.subTest(method=method), self.assertRaisesRegex(ValueError, '노션 연결 필드 오류'):
+                    team_relay.relay(pipeline, method, bad)
+        self.assertEqual(pipeline.sent, [('teams/a/notion', None),
+                                         ('teams/a/notion/verify', dict(page='p', token=LINK_TOKEN)),
+                                         ('teams/a/notion', dict(page='p')), ('teams/a/notion/unlink', {})])
+
+
+class NotionLinkTeam(TeamIsolation):
+    """Teams link their own pages from the web; the server's environment link stays the fallback."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeNotion(TOKEN)
+        self.origin = self.enterContext(fake_notion(self.fake))
+        self.api.notion_api, self.api.notion_target = self.origin, None
+        self.enterContext(patch.object(repo_sync, 'SAVE_DELAY_SECONDS', .3))
+        self.enterContext(patch.object(notion_page, 'REQUEST_INTERVAL_SECONDS', 0))
+        self.team_page = self.fake.new_page('A팀 결정 기록', LINK_TOKEN)
+        self.raws = []  # every answer the API gave in this test
+        self.forget_links()
+        self.addCleanup(self.forget_links)
+
+    def forget_links(self):
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute('DELETE FROM syncup.team_notion_links')
+        notion_sync._links.pop(self.api, None)
+        notion_sync._servers.pop(self.api, None)
+
+    def link(self, action='', user='Dana', team='A', **body):
+        path = f"/teams/{self.teams[team]}/notion" + (f'/{action}' if action else '')
+        status, raw = request(self.api, 'POST', path, self.tokens[user], body)
+        self.raws.append(raw)
+        return status, json.loads(raw)
+
+    def status(self, user='Dana', team='A'):
+        status, raw = request(self.api, 'GET', f"/teams/{self.teams[team]}/notion", self.tokens[user])
+        self.assertEqual(status, 200, raw)
+        self.raws.append(raw)
+        return json.loads(raw)['notion']
+
+    def settled(self, user='Dana', team='A'):
+        end = time.monotonic() + 10
+        while time.monotonic() < end:
+            status = self.status(user, team)
+            if not status.get('pending') and status.get('state') != 'unknown':
+                return status
+            time.sleep(.05)
+        self.fail('the Notion save did not finish')
+
+    def share(self, identifier, content, user='Dana', team='A'):
+        shared = dict(public_card(PRIVATE_SENTENCE), content=content, tag='decision', topic_key='DB', source=PRIVATE_SOURCE)
+        packet = dict(id=identifier, label='결정', text=content, quote=PRIVATE_SENTENCE, speaker='사용자', version=2,
+                      card=shared)
+        envelope = dict(packet=packet, approved_by=self.users[user], approved_at=time.time())
+        status, body = request(self.api, 'POST', self.path(team), self.tokens[user], envelope)
+        self.assertEqual(status, 200, body)
+
+    def rows(self):
+        with psycopg.connect(self.admin_dsn) as c:
+            return c.execute('SELECT team_id::text,page_id::text,token,active FROM syncup.team_notion_links').fetchall()
+
+    def assert_token_stays_out(self):
+        for raw in self.raws:
+            for secret in (LINK_TOKEN, OTHER_TOKEN, READ_ONLY_TOKEN, TOKEN):
+                self.assertNotIn(secret, raw)
+
+    def test_a_check_names_each_refusal_and_stores_nothing(self):
+        database = str(uuid.uuid4())
+        self.fake.databases.add(database)
+        read_only = self.fake.new_page('읽기만', READ_ONLY_TOKEN)
+        self.fake.read_only.add(READ_ONLY_TOKEN)
+        cases = [('bad-format', dict(page='페이지 아님', token=LINK_TOKEN)),
+                 ('bad-format', dict(page=f'https://evil.example/{self.team_page.replace("-", "")}', token=LINK_TOKEN)),
+                 ('bad-format', dict(page=self.team_page, token='짧은 토큰')),
+                 ('token-needed', dict(page=self.team_page)),
+                 ('bad-token', dict(page=self.team_page, token='synthetic-unknown-token-0000')),
+                 ('not-found', dict(page=str(uuid.uuid4()), token=LINK_TOKEN)),
+                 ('not-found', dict(page=self.fake.page, token=LINK_TOKEN)),  # exists, shared with another integration
+                 ('not-a-page', dict(page=database, token=LINK_TOKEN)),
+                 ('no-write', dict(page=read_only, token=READ_ONLY_TOKEN))]
+        for reason, body in cases:
+            for action in ('verify', ''):
+                with self.subTest(reason=reason, action=action, body=body):
+                    status, answer = self.link(action, **body)
+                    self.assertEqual((status, answer['ok'], answer['reason']), (200, False, reason))
+        self.fake.rate_limited = 1
+        self.assertEqual(self.link('verify', page=self.team_page, token=LINK_TOKEN)[1]['reason'], 'rate-limited')
+        self.fake.fail_next = ('GET', '/pages/', 500)
+        self.assertEqual(self.link('verify', page=self.team_page, token=LINK_TOKEN)[1]['reason'], 'unreachable')
+        status, answer = self.link('verify', page=self.team_page, token=LINK_TOKEN)
+        self.assertEqual((status, answer['ok'], answer['check']),
+                         (200, True, dict(page=self.team_page, title='A팀 결정 기록', canWrite=True)))
+        self.assertEqual(self.fake.outline(self.team_page), [])  # the probe went to the trash again
+        self.assertEqual(len(self.fake.sent('DELETE')), 1)
+        self.assertEqual((self.rows(), self.status()), ([], dict(linked=False)))
+        for bad in ({'page': self.team_page, 'name': 'x'}, {'page': 3}, {'page': self.team_page, 'token': 7}):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.link('verify', **bad)[0], 400)
+        self.assertEqual(self.link('other', page=self.team_page)[0], 404)
+        self.assert_token_stays_out()
+
+    def test_link_then_approve_saves_to_the_team_page_and_unlink_stops_it(self):
+        address = f'https://www.notion.so/team/A-{self.team_page.replace("-", "")}?pvs=4'
+        status, answer = self.link(page=address, token=LINK_TOKEN)
+        self.assertEqual((status, answer['ok']), (200, True), answer)
+        notion = answer['notion']
+        self.assertEqual({k: notion[k] for k in ('linked', 'page', 'title', 'source', 'tokenSet', 'linkedBy')},
+                         dict(linked=True, page=self.team_page, title='A팀 결정 기록', source='team', tokenSet=True,
+                              linkedBy=self.users['Dana']))
+        self.assertTrue(notion['linkedByName'] and notion['linkedAt'])
+        self.assertEqual(self.settled()['state'], 'saved')  # written at once, before any change
+        self.assertEqual(self.fake.outline(self.team_page)[0].split('\n')[0], 'callout: SyncUp 팀 기록 — A팀')
+        self.share('d1', 'DB = PostgreSQL')
+        wait_until(lambda: any(line.startswith('bulleted_list_item: DB: DB = PostgreSQL')
+                               for line in self.fake.outline(self.team_page)))
+        self.assertEqual(self.settled('Alice')['state'], 'saved')  # every member sees the team's link
+        self.assertEqual(self.fake.outline(), [])  # the environment's page is not this team's
+
+        status, answer = self.link('unlink', user='Alice')
+        self.assertEqual((status, answer['ok'], answer['notion']), (200, True, dict(linked=False)))
+        self.assertEqual(self.rows(), [(self.teams['A'], self.team_page, '', False)])  # the token is gone
+        writes = len(self.fake.sent('PATCH'))
+        self.share('d2', 'DB = MySQL')
+        time.sleep(.8)
+        self.assertEqual((len(self.fake.sent('PATCH')), self.status()), (writes, dict(linked=False)))
+        self.assertEqual(self.link('verify', page=self.team_page)[1]['reason'], 'token-needed')  # not kept anywhere
+        self.assert_private_and_token_stay_out()
+
+    def assert_private_and_token_stay_out(self):
+        self.assert_token_stays_out()
+        for page in (self.team_page, self.fake.page):
+            text = '\n'.join(self.fake.outline(page))
+            for secret in (PRIVATE_SENTENCE, PRIVATE_SOURCE, LINK_TOKEN, TOKEN):
+                self.assertNotIn(secret, text)
+
+    def test_a_kept_token_is_reused_only_for_the_same_page(self):
+        self.assertTrue(self.link(page=self.team_page, token=LINK_TOKEN)[1]['ok'])
+        self.assertTrue(self.link('verify', page=self.team_page)[1]['ok'])
+        other = self.fake.new_page('다른 페이지', LINK_TOKEN)
+        self.assertEqual(self.link('verify', page=other)[1]['reason'], 'token-needed')
+        self.assertEqual(self.link(page=other)[1]['reason'], 'token-needed')
+        self.assertEqual(self.status()['page'], self.team_page)
+        self.assert_token_stays_out()
+
+    def test_the_environment_page_is_the_fallback_and_a_team_link_wins(self):
+        self.api.notion_target = NotionTarget(uuid.UUID(self.teams['A']), self.fake.page, TOKEN, api=self.origin)
+        self.assertEqual(self.status()['source'], 'env')
+        self.share('d1', 'DB = PostgreSQL')
+        wait_until(lambda: any('DB = PostgreSQL' in line for line in self.fake.outline()))
+        self.assertEqual(self.settled()['source'], 'env')
+        self.assertTrue(self.link(page=self.team_page, token=LINK_TOKEN)[1]['ok'])
+        self.assertEqual(self.settled()['source'], 'team')
+        self.share('d2', '저장 위치 = 팀 노션', user='Alice')
+        wait_until(lambda: any('저장 위치 = 팀 노션' in line for line in self.fake.outline(self.team_page)))
+        self.assertFalse(any('저장 위치 = 팀 노션' in line for line in self.fake.outline()))
+        status, answer = self.link('unlink')
+        self.assertEqual((answer['notion']['source'], answer['notion']['page']), ('env', self.fake.page))
+        self.assertEqual(self.link('unlink')[1]['notion']['source'], 'env')  # the environment link cannot be unlinked
+        self.share('d3', '발표 = 일요일')
+        wait_until(lambda: any('발표 = 일요일' in line for line in self.fake.outline()))
+        self.assertEqual(self.settled()['source'], 'env')
+        self.assert_private_and_token_stay_out()
+
+    def test_another_team_is_untouched_and_cannot_link_or_read(self):
+        b_page = self.fake.new_page('B팀 기록', OTHER_TOKEN)
+        for action in ('verify', '', 'unlink'):
+            with self.subTest(action=action):
+                body = {} if action == 'unlink' else dict(page=b_page, token=OTHER_TOKEN)
+                self.assertEqual(self.link(action, user='Bob', team='A', **body)[0], 403)
+        self.assertEqual(self.fake.sent('GET', '/pages/'), [])  # refused before Notion is asked
+        self.assertTrue(self.link(page=self.team_page, token=LINK_TOKEN)[1]['ok'])
+        self.assertEqual(self.status('Bob', 'B'), dict(linked=False))
+        self.assertTrue(self.link(user='Bob', team='B', page=b_page, token=OTHER_TOKEN)[1]['ok'])
+        self.assertEqual((self.status()['page'], self.status('Bob', 'B')['page']), (self.team_page, b_page))
+        self.settled('Bob', 'B')
+        self.assertEqual(self.link('unlink', user='Bob', team='B')[1]['notion'], dict(linked=False))
+        self.assertEqual(self.status()['page'], self.team_page)
+        self.assertTrue(self.link(user='Bob', team='B', page=b_page, token=OTHER_TOKEN)[1]['ok'])
+        with authorized(self.api_dsn, self.tokens['Alice'], self.teams['A']) as (c, user):
+            seen = c.execute('SELECT team_id::text FROM syncup.team_notion_links').fetchall()
+            self.assertEqual([row['team_id'] for row in seen], [self.teams['A']])
+            for query, args in [('INSERT INTO syncup.team_notion_links(team_id,page_id,token,actor) VALUES(%s,%s,%s,%s)',
+                                 (self.teams['B'], self.team_page, 'synthetic-forged-token-000000', user)),
+                                ('UPDATE syncup.team_notion_links SET token=%s, actor=%s',
+                                 ('synthetic-forged-token-000000', self.users['Bob'])),
+                                ('DELETE FROM syncup.team_notion_links', ())]:
+                with self.subTest(query=query), self.assertRaises(psycopg.errors.InsufficientPrivilege), c.transaction():
+                    c.execute(query, args)
+        self.assertEqual(sorted((r[0], r[1]) for r in self.rows()),
+                         sorted([(self.teams['A'], self.team_page), (self.teams['B'], b_page)]))
+        self.assert_token_stays_out()
+
+    def test_the_token_stays_out_of_answers_logs_and_diagnostics(self):
+        self.assertTrue(self.link(page=self.team_page, token=LINK_TOKEN)[1]['ok'])
+        self.settled()
+        self.fake.fail_next = ('PATCH', '/children', 400)
+        with self.assertLogs('syncup', 'WARNING') as logs, redirect_stderr(io.StringIO()) as err:
+            self.share('d1', 'DB = PostgreSQL')
+            self.assertEqual(self.settled()['state'], 'failed')
+            self.link('verify', page=self.team_page, token='synthetic-unknown-token-0000')
+        self.assertNotIn(LINK_TOKEN, '\n'.join(logs.output) + err.getvalue())
+        sent = [r for r in self.fake.requests if r[3] == 'Bearer ' + LINK_TOKEN]
+        self.assertTrue(sent)  # the token went to Notion, in its header, and nowhere else
+        self.assertTrue(all(LINK_TOKEN not in r[1] + r[2] for r in sent))
+        self.assert_private_and_token_stay_out()
+
+
 def load_tests(loader, tests, pattern):
-    plain_cases = [loader.loadTestsFromTestCase(case) for case in (PageBlocks, NotionSave, Settings, SaveScheduling)]
-    return unittest.TestSuite([*plain_cases, own_tests(NotionSyncTeam)])
+    plain_cases = [loader.loadTestsFromTestCase(case)
+                   for case in (PageBlocks, NotionSave, Settings, SaveScheduling, PageAddress, NotionRelay)]
+    return unittest.TestSuite([*plain_cases, own_tests(NotionSyncTeam, NotionLinkTeam)])
 
 
 if __name__ == '__main__':
