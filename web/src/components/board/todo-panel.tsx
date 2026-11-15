@@ -28,7 +28,7 @@ export function TodoPanel({ todos, done, todoIds, onToggle }: {
 }) {
   return (
     <section className={cn(card, "p-5")} aria-label="할 일">
-      <h2 className="flex items-center gap-2 text-lg leading-[1.5] font-medium">
+      <h2 className="flex items-center gap-2 text-lg leading-[1.5] font-bold">
         할 일 <span className={cn(chip, "bg-brand-soft text-muted-foreground")}>{todos.length}</span>
       </h2>
       <ul className="mt-3 space-y-3">

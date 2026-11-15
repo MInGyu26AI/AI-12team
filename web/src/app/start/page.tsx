@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Brand } from "@/components/brand";
 import { LogoutButton } from "@/components/logout-button";
 import { readAccount, type Account } from "@/lib/auth-navigation";
+import { EnTitle } from "@/components/page-title";
 
 const field = "mt-2 w-full rounded-lg border bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-brand";
 
@@ -54,7 +55,7 @@ export default function StartPage() {
   return <main className="mx-auto max-w-2xl space-y-8 px-gutter py-12">
     <div className="flex items-center justify-between gap-4"><Brand />{account && <LogoutButton />}</div>
     <ol aria-label="시작 단계" className="flex gap-3 text-sm text-muted-foreground"><li className={!account ? "font-semibold text-brand" : ""}>1. GitHub 가입</li><li>→</li><li className={account && !created ? "font-semibold text-brand" : ""}>2. 팀 만들기</li><li>→</li><li>3. PC 연결</li></ol>
-    <div><h1 className="text-3xl font-bold">{created ? `${created}, 시작할 준비가 됐어요` : account ? `${account.name}님, 함께할 팀을 만드세요` : "팀의 첫 결정을 함께 모아보세요"}</h1>
+    <div><EnTitle>Let&apos;s get started.</EnTitle><h1 className="text-3xl font-bold">{created ? `${created}, 시작할 준비가 됐어요` : account ? `${account.name}님, 함께할 팀을 만드세요` : "팀의 첫 결정을 함께 모아보세요"}</h1>
       <p className="mt-3 text-muted-foreground">GitHub 계정으로 가입하고 팀을 만든 뒤, 사용하는 PC를 연결해요. 관리자 등록은 필요 없어요.</p></div>
     {error && <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">{error}</p>}
     {loading ? <p role="status">로그인 상태를 확인하고 있어요…</p> : created ? <section className="space-y-5 rounded-xl border bg-card p-6">
