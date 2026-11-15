@@ -12,6 +12,7 @@ import { BranchFilter } from "@/components/board/branch-filter";
 import { ConflictBanner } from "@/components/board/conflict-banner";
 import { ConflictChecks } from "@/components/board/conflict-checks";
 import { DecisionHistoryList } from "@/components/board/decision-history";
+import { BoardViewToggle, DecisionCarousel, useListOnly, type BoardView } from "@/components/board/decision-carousel";
 import { DecisionTimeline, TopicFilter, type Flag } from "@/components/board/decision-timeline";
 import { RepoStatusBar } from "@/components/board/repo-status";
 import { ResearchPanel } from "@/components/board/research-panel";
@@ -39,6 +40,8 @@ export default function BoardPage() {
   const [topic, setTopic] = useState<string | null>(null); // 왼쪽 세부 주제 필터
   const [branch, setBranch] = useState<string | null>(null); // 브랜치 필터 (syncup.json by_branch 가 있을 때)
   const [dialog, setDialog] = useState(false);
+  const [view, setView] = useState<BoardView>("carousel"); // 결정 보기: 기본 회전 보기 (폰 너비·움직임 줄이기면 목록만)
+  const listOnly = useListOnly();
 
   if (load.state !== "ready") {
     return <Shell>{load.state === "loading" ? <LoadingState /> : <ErrorState message={load.message} onRetry={reload} />}</Shell>;
@@ -138,13 +141,20 @@ export default function BoardPage() {
               <p>승인함에서 내용을 골라 올리면 여기에 쌓여요.</p>
             </EmptyState>
           ) : (
-            <DecisionTimeline
-              decisions={shown}
-              flagged={flagged}
-              saved={savedDecisions}
-              repoLinked={!!repo.status?.linked}
-              onOpenConflict={() => setDialog(true)}
-            />
+            <>
+              {!listOnly && <BoardViewToggle value={view} onChange={setView} />}
+              {view === "carousel" && !listOnly ? (
+                <DecisionCarousel decisions={shown} flagged={flagged} onOpenConflict={() => setDialog(true)} />
+              ) : (
+                <DecisionTimeline
+                  decisions={shown}
+                  flagged={flagged}
+                  saved={savedDecisions}
+                  repoLinked={!!repo.status?.linked}
+                  onOpenConflict={() => setDialog(true)}
+                />
+              )}
+            </>
           )}
           <DecisionHistoryList />
         </div>
