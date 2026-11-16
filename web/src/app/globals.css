@@ -224,3 +224,10 @@
 @supports (overflow: clip) {
   .roll-cell { overflow-x: visible; overflow-y: clip; }
 }
+
+/* 첫 화면 롤 링크 오른쪽 카드의 단계 그림(roll-steps.tsx): 단계를 바꾸면 200ms 페이드. 움직임 줄이기면 바로 바뀐다 */
+@keyframes stageArtFade { from { opacity: 0; } to { opacity: 1; } }
+.stage-art-fade { animation: stageArtFade 200ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .stage-art-fade { animation: none; }
+}
