@@ -41,7 +41,6 @@ const PRIVACY = [
 
 const h2 = "text-[clamp(24px,2.6vw,34px)] leading-[1.3] font-bold break-keep";
 const primary = "inline-flex h-12 items-center gap-2 bg-ink px-6 text-[15px] text-white transition-colors hover:bg-ink-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
-const secondary = "inline-flex h-12 items-center gap-2 border border-ink bg-white/60 px-6 text-[15px] text-ink transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
   return [
@@ -150,10 +149,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
             {signedIn ? (
               <Link href="/dashboard" className={primary}>대시보드로 가기 <ArrowRight aria-hidden className="size-4" /></Link>
             ) : (
-              <>
-                <Link href={START.href} className={primary}>{START.label} <ArrowRight aria-hidden className="size-4" /></Link>
-                <Link href="/guide" className={secondary}>이용 방법 보기</Link>
-              </>
+              <Link href={START.href} className={primary}>{START.label} <ArrowRight aria-hidden className="size-4" /></Link>
             )}
           </div>
           <p className="text-[13px] text-ink-3 break-keep">
