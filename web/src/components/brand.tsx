@@ -1,16 +1,15 @@
 import Link from "next/link";
 import { useId } from "react";
 
-// 로고 (시안 "로즈 & 올리브 수채화"): 진갈색 사각형 + 흰 Orbitron "S" + 오른쪽 위 4각 반짝이 별. 색은 currentColor (토큰을 따른다)
-export const SPARK_PATH = "M 97 14 C 99 28 102 31 114 33 C 102 35 99 38 97 52 C 95 38 92 35 80 33 C 92 31 95 28 97 14 Z";
+// 사각형 아이콘 (확정본 app/icon.svg 와 같은 path): 진갈색 둥근 사각형 + 흰 S(선) + 오른쪽 위 4각 별. 폰트 없이 path 로만 그린다. 사각형 색은 currentColor
+export const ICON_S_PATH = "M 86.5 40.5 L 50.5 40.5 Q 40.5 40.5 40.5 50.5 L 40.5 50.0 Q 40.5 60.0 50.5 60.0 L 69.5 60.0 Q 79.5 60.0 79.5 70.0 L 79.5 69.5 Q 79.5 79.5 69.5 79.5 L 33.5 79.5";
+export const SPARK_PATH = "M 99 4 C 100.428 16.92 103.08 19.572 116 21 C 103.08 22.428 100.428 25.08 99 38 C 97.572 25.08 94.92 22.428 82 21 C 94.92 19.572 97.572 16.92 99 4 Z";
 
 export function LogoMark({ className = "size-10", style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg viewBox="0 0 120 120" aria-hidden className={`shrink-0 text-ink ${className}`} style={style}>
       <rect width="120" height="120" rx="14" fill="currentColor" />
-      <text x="54" y="88" textAnchor="middle" fill="#ffffff" style={{ fontFamily: "var(--font-brand)", fontWeight: 900, fontSize: 72 }}>
-        S
-      </text>
+      <path d={ICON_S_PATH} fill="none" stroke="#ffffff" strokeWidth="14" strokeLinejoin="round" />
       <path d={SPARK_PATH} fill="#ffffff" />
     </svg>
   );

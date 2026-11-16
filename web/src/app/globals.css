@@ -11,12 +11,11 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* 글꼴은 layout.tsx 에서 next/font 로 불러온 변수.
-     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로고 Orbitron 900 */
+     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로고는 글꼴 없이 path */
   --font-sans: var(--font-noto-sans-kr), "Noto Sans KR", -apple-system, system-ui, sans-serif;
   --font-display: var(--font-inter-tight), "Inter Tight", system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --font-serif: var(--font-instrument-serif), "Instrument Serif", Georgia, serif;
-  --font-brand: var(--font-orbitron), Orbitron, system-ui, sans-serif;
   --font-heading: var(--font-sans);
   --color-ring: var(--ring);
   --color-input: var(--input);
