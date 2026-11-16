@@ -10,8 +10,8 @@ import { BurstIcon } from "@/components/ui/burst-icon";
 import { Sentences } from "@/components/ui/sentences";
 
 export const metadata: Metadata = {
-  title: "이용 방법 · Sync up",
-  description: "팀 연결부터 팀 결정 기록까지, Sync up을 쓰는 6단계",
+  title: "이용 방법 · SyncUp",
+  description: "팀 연결부터 팀 결정 기록까지, SyncUp을 쓰는 6단계",
 };
 
 const FAQ = [
@@ -40,7 +40,7 @@ export default function GuidePage() {
         <div className="mx-auto max-w-content px-gutter pt-16 pb-12 text-center">
           <EnTitle>How it works.</EnTitle><h1 className="mt-5 text-3xl font-bold break-keep sm:text-4xl">6단계면 팀 결정이 하나로 모여요</h1>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground break-keep">
-            <Sentences>{"한 번 설정해 두면 평소처럼 AI와 대화하기만 하면 돼요. 단계마다 버튼을 누르면 해당 화면으로 바로 가요."}</Sentences>
+            한 번 설정해 두면 평소처럼 AI와 대화하기만 하면 돼요.
           </p>
         </div>
       </section>

@@ -14,7 +14,7 @@ import { Sentences } from "@/components/ui/sentences";
 // 두 모드의 차이는 전부 CSS 클래스(motion-safe:)라서, 서버가 그린 HTML 이 이미 슬라이드 배치이고 불러온 뒤 배치가 튀지 않는다.
 // JS 는 "지금 어느 단계인지"(data-state)와 "화면이 낮을 때 줄이는 비율"(--fit, --fit-all)만 정한다.
 
-export type StepMark = { label?: string; index?: number; sub: string };
+export type StepMark = { index?: number }; // 단계 번호(01~04). 없으면(첫 장 한눈에 보기) 번호 줄을 그리지 않는다
 
 export interface FeatureStep {
   id: string; // 바로가기(#approve 등)가 가리키는 id. 구역 시작 위치의 표지(sentinel)에 붙는다
@@ -28,17 +28,15 @@ export interface FeatureStep {
 }
 
 function StepLine({ step }: { step: StepMark }) {
+  if (!step.index) return null;
   return (
     <p className="flex flex-wrap items-center gap-3 text-[12px]">
-      <span className="label-mono text-ink">{step.label ?? `0${step.index} / 04`}</span>
-      {step.index && (
-        <span aria-hidden className="flex gap-1">
-          {[1, 2, 3, 4].map((i) => (
-            <span key={i} className={cn("h-[3px] w-6", i === step.index ? "bg-ink" : "bg-blush-deep")} />
-          ))}
-        </span>
-      )}
-      <span className="button-mono text-ink-3">{step.sub}</span>
+      <span className="label-mono text-ink">{`0${step.index} / 04`}</span>
+      <span aria-hidden className="flex gap-1">
+        {[1, 2, 3, 4].map((i) => (
+          <span key={i} className={cn("h-[3px] w-6", i === step.index ? "bg-ink" : "bg-blush-deep")} />
+        ))}
+      </span>
     </p>
   );
 }
@@ -200,7 +198,7 @@ export function FeatureStory({ steps }: { steps: FeatureStep[] }) {
             <div data-inner className={INNER}>
               <div data-fit className={cn("lg:w-[472px] lg:shrink-0", TEXT_MOTION)}>
                 <StepLine step={s.step} />
-                <h2 className="mt-6">
+                <h2 className="mt-6 first:mt-0">
                   <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">{s.en}</span>
                   <span className="mt-4 block text-xl leading-[1.4] font-bold break-keep text-ink sm:text-2xl">{s.title}</span>
                 </h2>

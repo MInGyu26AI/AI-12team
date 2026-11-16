@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Clause, ContactList, LegalDocument, Numbered, Para, type ListItem } from "@/components/legal/legal-document";
 
 export const metadata: Metadata = {
-  title: "이용약관 · Sync up",
+  title: "이용약관 · SyncUp",
   description: "SyncUp 베타 서비스의 이용 조건과 운영팀·이용자의 권리와 의무",
 };
 

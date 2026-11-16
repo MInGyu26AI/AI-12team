@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Bullets, Clause, ContactList, DataTable, LegalDocument, Para, Sub } from "@/components/legal/legal-document";
 
 export const metadata: Metadata = {
-  title: "개인정보 처리방침 · Sync up",
+  title: "개인정보 처리방침 · SyncUp",
   description: "SyncUp이 처리하는 개인정보 항목, 외부 전송(국외 이전), 보유 기간과 파기 절차",
 };
 

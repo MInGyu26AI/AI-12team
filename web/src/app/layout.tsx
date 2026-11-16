@@ -12,7 +12,7 @@ const instrumentSerif = Instrument_Serif({ weight: "400", style: "italic", subse
 const orbitron = Orbitron({ weight: "900", subsets: ["latin"], display: "swap", variable: "--font-orbitron" });
 
 export const metadata: Metadata = {
-  title: "Sync up · 싱크업",
+  title: "SyncUp · 싱크업",
   description: "팀원마다 다른 AI를 써도 팀의 결정은 하나로 — 대학생 팀플을 위한 AI 공유 메모리",
 };
 
