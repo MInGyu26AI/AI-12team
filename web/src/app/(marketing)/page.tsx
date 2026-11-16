@@ -23,12 +23,12 @@ const STEPS: RollStep[] = [
 
 
 const HOW = [
-  { title: START.step, body: START.href === "/team/new" ? "팀장이 팀을 만들고 링크로 팀원을 불러요" : "GitHub로 로그인하고 팀을 만들거나 초대로 참여해요", tag: "처음 한 번 · 팀장" },
-  { title: "브라우저 확장 연결", body: "Chrome에 확장 프로그램을 추가해요", tag: "처음 한 번 · 모두", link: true },
-  { title: "싱크 맞추기", body: "ChatGPT 프로젝트 대화를 SyncUp으로 가져와요", tag: "대화할 때마다" },
-  { title: "승인함에서 체크", body: "팀에 올릴 결정·할 일만 골라요", tag: "내가 직접", strong: true },
-  { title: "충돌 확인", body: "기존 결정과 다르면 SyncUp이 먼저 알려줘요", tag: "자동" },
-  { title: "팀 결정 기록", body: "누가, 언제, 왜 정했는지 한곳에 쌓여요", tag: "자동" },
+  { title: START.step, body: START.href === "/team/new" ? "팀장이 팀을 만들고 링크로 팀원을 불러요" : "GitHub로 로그인하고 팀을 만들거나 초대로 참여해요" },
+  { title: "브라우저 확장 연결", body: "Chrome에 확장 프로그램을 추가해요", link: true },
+  { title: "싱크 맞추기", body: "ChatGPT 프로젝트 대화를 SyncUp으로 가져와요" },
+  { title: "승인함에서 체크", body: "팀에 올릴 결정·할 일만 골라요" },
+  { title: "충돌 확인", body: "기존 결정과 다르면 SyncUp이 먼저 알려줘요" },
+  { title: "팀 결정 기록", body: "누가, 언제, 왜 정했는지 한곳에 쌓여요" },
 ];
 
 const INSTALL_STEPS = [
@@ -177,7 +177,6 @@ function HowTo() {
               </span>
               <span className="text-[15px] font-bold text-ink">{s.title}</span>
               <span className="max-w-[172px] text-[13px] text-ink-body break-keep">{s.body}</span>
-              <span className={cn("px-2 py-[3px] text-[11px] font-medium", s.strong ? "bg-ink text-white" : "bg-blush text-ink")}>{s.tag}</span>
               {s.link && (
                 <Link href="/install" className="text-xs font-medium hover:underline">
                   설치 방법 보기 →
