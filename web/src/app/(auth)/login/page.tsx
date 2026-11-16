@@ -1,9 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { LogoutButton } from "@/components/logout-button";
 import { loginDestination, readAccount, type Account } from "@/lib/auth-navigation";
 import { card, chip } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
@@ -30,12 +28,13 @@ export default function LoginPage() {
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/onboarding", { cache: "no-store", signal: controller.signal }).then(async response => {
-      if (response.ok) setAccount(readAccount(await response.json()));
+      // 이미 로그인돼 있으면 묻지 않고 가려던 화면(기본 대시보드)으로 바로 보낸다
+      if (response.ok) { setAccount(readAccount(await response.json())); location.replace(next); }
       else if (response.status !== 401) throw new Error("로그인 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
     }).catch(e => { if (!controller.signal.aborted) setError(e.message); })
       .finally(() => { if (!controller.signal.aborted) setChecking(false); });
     return () => controller.abort();
-  }, []);
+  }, [next]);
   const login = async () => {
     setBusy(true); setError("");
     try {
@@ -58,11 +57,7 @@ export default function LoginPage() {
         </div>
 
         {displayedError && <p role="alert" className="rounded-lg bg-sensitive-soft p-3 text-sm text-sensitive">{displayedError}</p>}
-        {account ? <div className="space-y-3">
-          <p className="text-sm">{account.name}님으로 로그인되어 있어요.</p>
-          <Link href={next} className={cn(provider, "bg-brand text-white hover:bg-brand-hover")}>계속하기</Link>
-          <LogoutButton className="w-full" />
-        </div> : <button type="button" disabled={busy || checking} onClick={login} className={cn(provider, "bg-brand text-white hover:bg-brand-hover disabled:cursor-wait disabled:opacity-60")}>
+        {account ? <p role="status" className="text-sm">{account.name}님으로 로그인되어 있어요. 이어서 이동하고 있어요…</p> : <button type="button" disabled={busy || checking} onClick={login} className={cn(provider, "bg-brand text-white hover:bg-brand-hover disabled:cursor-wait disabled:opacity-60")}>
           <Image src="/brand/github.svg" alt="" width={18} height={18} unoptimized className="brightness-0 invert" />
           {checking ? "로그인 상태 확인 중…" : busy ? "GitHub로 이동 중…" : "GitHub로 계속하기"}
         </button>}

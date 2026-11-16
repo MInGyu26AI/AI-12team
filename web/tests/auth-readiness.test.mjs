@@ -7,8 +7,9 @@ const { loginDestination, readAccount, connectionProblem } = load('@/lib/auth-na
 const alice = { id: '11111111-1111-4111-8111-111111111111', name: '동명 사용자', teams: [{ id: 'team-a', name: '팀 A' }] };
 
 test('OAuth return paths reject external, encoded and unsupported destinations', () => {
-  for (const path of ['/collect', '/review', '/board/repo', '/start', '/join/' + 'a'.repeat(43)]) assert.equal(loginDestination(path), path);
-  for (const path of ['https://evil.test', '//evil.test', '/\\evil.test', '/%2f%2fevil.test', '/login', '/api/onboarding', '/collect?next=https://evil.test', null, 42]) assert.equal(loginDestination(path), '/start');
+  for (const path of ['/dashboard', '/collect', '/review', '/board/repo', '/start', '/join/' + 'a'.repeat(43)]) assert.equal(loginDestination(path), path);
+  // 로그인 뒤 기본 화면은 대시보드 (첫 로그인이면 그 위에 팀 만들기 팝업)
+  for (const path of ['https://evil.test', '//evil.test', '/\\evil.test', '/%2f%2fevil.test', '/login', '/api/onboarding', '/collect?next=https://evil.test', null, 42]) assert.equal(loginDestination(path), '/dashboard');
 });
 
 test('a verified account, not the display name, must match the connected PC and team', () => {
