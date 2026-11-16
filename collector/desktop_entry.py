@@ -1,5 +1,9 @@
 """Desktop bundle entry; CLI/native-host commands keep the existing packaged-app protocol."""
 import sys
+from bundled_tls import configure
+
+configure()
+
 import syncup_entry
 import desktop
 

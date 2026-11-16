@@ -18,6 +18,8 @@
 !server/key_issue.py
 !server/team_invites.py
 !server/onboarding.py
+!server/ai_proxy.py
+!collector/privacy_rules.py
 !contract/secure_http.py
 !contract/diagnostics.py
 !contract/card_contract.py

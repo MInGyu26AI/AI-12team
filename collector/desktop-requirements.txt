@@ -1,0 +1,4 @@
+pyinstaller==6.11.1
+certifi==2026.10.23
+pyobjc-core==13.0; sys_platform == "darwin"
+pyobjc-framework-Cocoa==13.0; sys_platform == "darwin"
