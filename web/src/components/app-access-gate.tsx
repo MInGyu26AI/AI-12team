@@ -16,6 +16,10 @@ import { cn } from "@/lib/utils";
 import { EnTitle } from "@/components/page-title";
 
 type View = { kind: "checking" } | { kind: "ready"; account: Account } | { kind: "blocked"; message: string; account?: Account };
+type CheckResult =
+  | { kind: "login" }
+  | { kind: "ready"; account: Account }
+  | { kind: "failed"; transient: boolean; message: string; account?: Account };
 
 // The native host still enforces local access and the API enforces membership. This gate prevents the UI from
 // showing a different PC account's cached cards after a browser login or expired web session.
@@ -26,9 +30,42 @@ export function AppAccessGate({ children }: { children: React.ReactNode }) {
   // Production configuration rejects this flag; it never bypasses hosted account checks.
   if (USE_MOCK || process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return <><AppHeader /><main className="flex-1">{children}</main></>;
   if (publicFlow) return <><PublicHeader /><main className="flex-1">{children}</main></>;
-  return <CheckedApp key={pathname} pathname={pathname}>{children}</CheckedApp>;
+  return <CheckedApp pathname={pathname}>{children}</CheckedApp>;
 }
 
+// 요청 한도(429)·서버 오류(5xx)처럼 잠시 뒤 다시 하면 풀리는 응답. 401·403 같은 거절은 아니다
+export const isTransientStatus = (status: number) => status === 429 || status >= 500;
+export const checkFailureMessage = (status: number) => status === 429
+  ? "요청이 잠시 몰렸어요. 잠깐 기다렸다가 '다시 확인'을 눌러 주세요."
+  : "로그인 상태를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.";
+
+/** 로그인(/api/onboarding)과 PC 연결(collection.status)을 한 번 확인한다. 던지지 않고 결과로 돌려준다 (취소는 부른 쪽이 signal 로 거른다) */
+export async function checkAccess(signal: AbortSignal): Promise<CheckResult> {
+  let response: Response;
+  try { response = await fetch("/api/onboarding", { cache: "no-store", signal }); }
+  catch { return { kind: "failed", transient: true, message: checkFailureMessage(0) }; } // 네트워크 끊김
+  if (response.status === 401) return { kind: "login" };
+  if (!response.ok) return { kind: "failed", transient: isTransientStatus(response.status), message: checkFailureMessage(response.status) };
+  let account: Account | undefined;
+  try {
+    account = readAccount(await response.json());
+    const problem = connectionProblem(account, await rpc<ExtStatus>("collection.status"));
+    return problem ? { kind: "failed", transient: false, message: problem, account } : { kind: "ready", account };
+  } catch (error) {
+    return { kind: "failed", transient: false, account,
+      message: error instanceof ExtensionMissing ? "이 PC에 SyncUp을 연결하면 내 대화와 팀 기록을 볼 수 있어요." : (error as Error).message };
+  }
+}
+
+/** 확인 결과에 따른 다음 화면. 이미 열린(ready) 화면은 일시 실패 한 번으로 막지 않고, 다음 확인 때 다시 본다 */
+export function nextView(previous: View, result: CheckResult): View {
+  if (result.kind === "login") return { kind: "checking" };
+  if (result.kind === "ready") return result;
+  if (result.transient && previous.kind === "ready") return previous;
+  return { kind: "blocked", message: result.message, account: result.account };
+}
+
+// 쪽을 옮겨도(key 없음) 이미 열린 ready 화면은 버리지 않고, 새 쪽의 확인이 실패(일시 실패 제외)할 때만 막는다
 function CheckedApp({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const [view, setView] = useState<View>({ kind: "checking" });
   const [attempt, setAttempt] = useState(0);
@@ -38,22 +75,11 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
     const check = async () => {
       if (running) return;
       running = true;
-      let account: Account | undefined;
       try {
-        const response = await fetch("/api/onboarding", { cache: "no-store", signal: controller.signal });
-        if (response.status === 401) {
-          if (!controller.signal.aborted) { setView({ kind: "checking" }); location.replace(loginUrl(pathname)); }
-          return;
-        }
-        if (!response.ok) throw new Error("로그인 상태를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
-        account = readAccount(await response.json());
-        const status = await rpc<ExtStatus>("collection.status");
-        const problem = connectionProblem(account, status);
-        if (problem) throw new Error(problem);
-        if (!controller.signal.aborted) setView({ kind: "ready", account });
-      } catch (error) {
-        if (!controller.signal.aborted) setView({ kind: "blocked", account,
-          message: error instanceof ExtensionMissing ? "이 PC에 SyncUp을 연결하면 내 대화와 팀 기록을 볼 수 있어요." : (error as Error).message });
+        const result = await checkAccess(controller.signal);
+        if (controller.signal.aborted) return;
+        if (result.kind === "login") location.replace(loginUrl(pathname));
+        setView(previous => nextView(previous, result));
       } finally { running = false; }
     };
     void check();
@@ -63,7 +89,7 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
     return () => { controller.abort(); clearInterval(timer); window.removeEventListener("focus", focus); };
   }, [pathname, attempt]);
 
-  if (view.kind === "ready") return <WebAccountContext.Provider value={view.account}>
+  if (view.kind === "ready") return <WebAccountContext.Provider key={pathname} value={view.account}>
     <AppHeader /><main className="flex-1">{children}</main>
   </WebAccountContext.Provider>;
   return <><PublicHeader /><main className="mx-auto w-full max-w-xl px-gutter py-14">

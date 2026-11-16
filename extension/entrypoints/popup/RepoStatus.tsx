@@ -5,14 +5,14 @@ import { formatAgo, formatClock } from './time-format';
 export interface RepoStatusInfo {
   name: string;
   lastSavedAt: string | null; // ISO. 아직 한 번도 저장하지 않았으면 null
-  state?: 'saved' | 'saving' | 'failed';
+  state?: 'saved' | 'saving' | 'failed' | 'blocked'; // blocked: 비공개로 연결한 레포가 공개로 바뀌어 저장을 멈춤
 }
 
 export function RepoStatus({ repo, onOpen }: { repo: RepoStatusInfo | null | undefined; onOpen?: () => void }) {
   if (!repo) return null;
-  const failed = repo.state === 'failed';
+  const failed = repo.state === 'failed' || repo.state === 'blocked';
   const right =
-    repo.state === 'saving' ? '저장 중…' : failed ? '저장 실패' : repo.lastSavedAt ? `저장 ${formatClock(repo.lastSavedAt)}` : '아직 저장 전';
+    repo.state === 'saving' ? '저장 중…' : repo.state === 'blocked' ? '저장 멈춤 (공개로 바뀜)' : failed ? '저장 실패' : repo.lastSavedAt ? `저장 ${formatClock(repo.lastSavedAt)}` : '아직 저장 전';
   return (
     <button
       type="button"

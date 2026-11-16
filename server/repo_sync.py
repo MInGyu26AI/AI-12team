@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from ai.syncup_ai.team_state import build_state, dumps, render_markdown
 from diagnostics import failure
-from github_repo import GitHubError, last_commit, save, verify
+from github_repo import GitHubError, is_private, last_commit, save, verify
 from team_access import AccessError, authorized, team_lock
 from team_board import board, conflicts, done_todos
 from team_settings import clear_repo_link, read_repo_link, save_repo_link, state_team
@@ -33,6 +33,8 @@ REPO_NAME = re.compile(r'[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}')
 BRANCH_NAME = re.compile(r'(?![./])(?!.*(?:\.\.|//|/\.|/$|\.lock$))[A-Za-z0-9._/-]{1,200}')
 TOKEN_TEXT = re.compile(r'[\x21-\x7e]{20,255}')  # any GitHub token: printable ASCII without spaces
 LINK_CACHE_SECONDS = 60  # another server instance's link change is seen within this time
+# A link stored as private saves only while GitHub still says private; a 'still private' answer is reused this long.
+VISIBILITY_CACHE_SECONDS = 120
 # POST /teams/{id}/repo<tail>: the action and the fields its JSON body may have.
 LINK_ACTIONS = {(): ('link', ('repo', 'branch', 'token', 'acceptPublic')),
                 ('verify',): ('verify', ('repo', 'branch', 'token')),
@@ -134,6 +136,7 @@ class _Saves:
     # team -> how many times the repository it saves to has changed; a save records its outcome only when this
     # is still what it was when the save chose its repository, so an old repository's result never shows as the new one's
     generation: dict = field(default_factory=dict)
+    private_seen: dict = field(default_factory=dict)  # team -> (target, monotonic time) GitHub last said private
 
 
 _servers = weakref.WeakKeyDictionary()  # server -> _Saves; a stopped server's entry goes with it
@@ -205,9 +208,10 @@ def _remember(server, team_id, row):
     meta = {} if row is None else {k: row[k] for k in ('private', 'linkedBy', 'linkedByName', 'linkedAt')}
     key = uuid.UUID(str(team_id))
     with _lock:
-        before = _linked_locked(server, team_id)
+        before, old = _linked_locked(server, team_id), _links.get(server, {}).get(str(team_id))
         _links.setdefault(server, {})[str(team_id)] = _Link(target, meta, time.monotonic())
-        if _linked_locked(server, team_id) != before:
+        # consenting to a repository that became public (private now False) also clears its 'blocked' status
+        if _linked_locked(server, team_id) != before or (old and old.meta.get('private')) != meta.get('private'):
             saves = _saves(server)
             saves.status.pop(key, None)
             saves.generation[key] = saves.generation.get(key, 0) + 1
@@ -271,6 +275,10 @@ def _wait_then_save(server, target, job):
                 del running[team_id]
 
 
+class _BecamePublic(Exception):
+    """The repository was linked as private and GitHub now says it is public: nothing is committed."""
+
+
 def _save_and_record(server, target, job):
     """Rebuild and save to the repository the team is linked to once this save's turn comes (target only names the
     team; the link may have changed while it waited). The outcome goes to GET …/repo unless the link changed again
@@ -282,6 +290,10 @@ def _save_and_record(server, target, job):
             saves = _saves(server)
             generation = saves.generation.get(team_id, 0)
             known = (saves.status.get(team_id) or {}).get('commit')
+            link = _links.get(server, {}).get(str(team_id))
+            stored_private = link.meta.get('private') if link is not None and link.target == target else None
+            seen = saves.private_seen.get(team_id)
+            confirmed = seen is not None and seen[0] == target and time.monotonic() - seen[1] < VISIBILITY_CACHE_SECONDS
         if target is None:  # unlinked while waiting
             return
         latest = {}
@@ -291,19 +303,28 @@ def _save_and_record(server, target, job):
                 latest['state'], files = state_files(c, target)
             return files
         try:
+            # linked as private (no consent to public): commit only while GitHub still says private. A failed read
+            # raises and is a normal failed save, so nothing is committed while it cannot be confirmed.
+            if stored_private is True and not confirmed and not is_private(target):
+                raise _BecamePublic
+            if stored_private is True and not confirmed:
+                with _lock:
+                    _saves(server).private_seen[team_id] = (target, time.monotonic())
             commit = save(target, build, lambda previous: commit_message(previous, latest['state'], job.people))
             if commit:
                 result = dict(state='saved', commit=dict(sha=commit['sha'], url=commit.get('html_url'),
                                                          at=(commit.get('committer') or {}).get('date')))
             else:
                 result = dict(state='unchanged', commit=known or last_commit(target, FILES[0]))
+        except _BecamePublic:
+            result = dict(state='blocked', reason='became-public', commit=known)
         except Exception as error:  # a failed save never affects the team API; the next change tries again
             failure('repo_save', error, target.team_id)
             result = dict(state='failed', commit=known,
                           httpStatus=error.code if isinstance(error, GitHubError) else None)
         with _lock:
             saves = _saves(server)
-            if result['state'] == 'failed':  # these people are still named in the team's next commit, wherever it goes
+            if result['state'] in ('failed', 'blocked'):  # these people are still named in the team's next commit, wherever it goes
                 waiting = saves.waiting.get(team_id)
                 _credit(waiting.people if waiting else saves.unsaved.setdefault(team_id, {}), job.people)
             if saves.generation.get(team_id, 0) == generation:

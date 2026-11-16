@@ -3,10 +3,12 @@
 The short-lived credential has no card/invite/collector privileges. Supabase tokens are discarded here.
 The web BFF stores only our opaque credential in an HttpOnly cookie.
 """
+import collections
 import hashlib
 import json
 import re
 import secrets
+import threading
 import uuid
 
 import psycopg
@@ -15,8 +17,23 @@ from diagnostics import failure
 import key_issue
 from key_issue import Rejected
 
+# Anonymous requests and POSTs share LIMIT. Signed-in reads/sign-out (one indexed lookup each) never touch it, so junk
+# cannot starve the web gate's polling: each token gets its own window and all tokens share a larger cap (DB load).
 LIMIT = key_issue.WindowLimit(120, 60)
+SESSION_LIMIT = key_issue.WindowLimit(1200, 60)
+PER_SESSION, MAX_SESSIONS = (30, 60), 4096
 TOKEN = re.compile(r'[A-Za-z0-9_-]{43}')
+sessions, sessions_lock = collections.OrderedDict(), threading.Lock()
+
+
+def take_session(token):
+    with sessions_lock:
+        key = digest(token)
+        window = sessions.pop(key, None) or key_issue.WindowLimit(*PER_SESSION)
+        sessions[key] = window
+        while len(sessions) > MAX_SESSIONS:
+            sessions.popitem(last=False)
+    return window.take() and SESSION_LIMIT.take()
 ERRORS = {
     'unauthorized': (401, '로그인 시간이 지났어요. GitHub로 다시 로그인해 주세요.'),
     'inactive': (403, '사용이 중지된 계정이에요.'),
@@ -33,9 +50,13 @@ def digest(token):
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def checked_text(value, maximum):
-    if not isinstance(value, str) or not 1 <= len(value.strip()) <= maximum or any(ord(c) < 32 or ord(c) == 127 for c in value):
-        raise Rejected(400, '이름과 프로젝트 주제를 확인해 주세요.')
+def checked_text(value, maximum, message='이름을 확인해 주세요.', multiline=False):
+    if isinstance(value, str) and multiline:
+        value = value.replace('\r\n', '\n').replace('\r', '\n')
+    allowed = '\n\t' if multiline else ''
+    if not isinstance(value, str) or not 1 <= len(value.strip()) <= maximum or any(
+            (ord(c) < 32 and c not in allowed) or ord(c) == 127 for c in value):
+        raise Rejected(400, message)
     return value.strip()
 
 
@@ -98,8 +119,8 @@ def dispatch(issuer, dsn, method, path, authorization, data):
             except (ValueError, TypeError, AttributeError):
                 raise Rejected(400, '팀 생성 요청을 다시 시작해 주세요.') from None
             return answer(c.execute('SELECT syncup.onboarding_create_team(%s,%s,%s,%s) AS v',
-                          (digest(token), request_id, checked_text(data['name'], 80),
-                           checked_text(data['topic'], 1200))).fetchone()['v'])
+                          (digest(token), request_id, checked_text(data['name'], 80, '팀 이름을 확인해 주세요. (한 줄, 80자 이하)'),
+                           checked_text(data['topic'], 1200, '프로젝트 주제를 확인해 주세요. (1200자 이하)', multiline=True))).fetchone()['v'])
     raise Rejected(405, '지원하지 않는 요청이에요.')
 
 
@@ -110,7 +131,10 @@ def handle(handler):
     if issuer is None:
         return handler.reply(503, json.dumps({'error': 'GitHub 가입 준비 중이에요. 잠시 뒤 다시 방문해 주세요.'}), key_issue.JSON)
     try:
-        if not LIMIT.take():
+        authorization = handler.headers.get('Authorization', '')
+        token = authorization.removeprefix('Bearer ')
+        signed_in = authorization.startswith('Bearer ') and TOKEN.fullmatch(token) and handler.path == '/onboarding'
+        if not (take_session(token) if signed_in and handler.command in ('GET', 'DELETE') else LIMIT.take()):
             raise Rejected(*ERRORS['limited'])
         data = None
         if handler.command == 'POST':

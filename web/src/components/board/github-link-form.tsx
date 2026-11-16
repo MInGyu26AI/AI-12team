@@ -75,6 +75,7 @@ export function GithubLinkForm() {
       <div className="flex gap-2"><button className={buttonOutline} disabled={!repo.trim()} onClick={() => void run("verify")}>연결 확인</button><button className={buttonPrimary} disabled={!repo.trim()} onClick={() => void run("link")}>연결</button></div>
       {status?.linked && status.source === "team" && (confirmUnlink ? <div className="flex items-center gap-3 text-sm"><span>이 팀의 저장소 연결을 해제할까요?</span><button className={buttonOutline} onClick={() => void run("unlink")}>해제하기</button><button onClick={() => setConfirmUnlink(false)}>취소</button></div> : <button className="text-sm underline" onClick={() => setConfirmUnlink(true)}>연결 해제</button>)}
     </fieldset>
+    {status?.state === "blocked" && <p role="alert" className="text-sm text-alert-conflict">비공개로 연결한 저장소가 공개로 바뀌어 저장을 멈췄어요. 공개 동의 후 다시 연결하거나 저장소를 비공개로 되돌려 주세요.</p>}
     {status?.source === "env" && <p className="text-sm text-muted-foreground">현재 서버 기본 저장소를 사용하고 있어요. 팀별 저장소를 연결하면 우선 적용돼요.</p>}
     <p role={error ? "alert" : "status"} className={error ? "text-sm text-alert-conflict" : "text-sm text-muted-foreground"}>{message}</p>
     <Link href="/board/notion" className="text-sm underline">노션 페이지에 팀 기록 저장하기</Link>

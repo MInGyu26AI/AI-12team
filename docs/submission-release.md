@@ -1,9 +1,9 @@
 # 제출 통합본 배포
 
-공식 웹: https://syncup-live-murex.vercel.app
+공식 웹: https://syncup-ashen.vercel.app (확장 0.2.20부터 기본 주소. 설정에 이전 기본 주소 syncup-live-murex가 남아 있으면 확장이 새 주소로 읽는다. docs/auth-production-readiness.md 참고)
 팀 API: https://syncup-api-production-36de.up.railway.app
 통합 PR: https://github.com/MInGyu26AI/AI-12team/pull/16
-확장 버전: 0.2.19
+확장 버전: 0.2.19 (이 통합본을 낼 때의 버전. 아래 반영 순서의 0.2.19도 그때 기준이다. 지금 버전과 재배포 순서는 extension/package.json, docs/auth-production-readiness.md)
 
 ## 포함 기능
 
@@ -19,7 +19,7 @@
 
 1. 운영 Supabase의 `syncup` 스키마와 기존 데이터 수를 확인한다. `server/team_onboarding.sql`을 한 트랜잭션으로 적용한다. 새 테이블은 강제 RLS, API 역할의 직접 접근 금지, 처리 함수의 고정 search_path가 필요하다. 적용 후 테이블·함수 권한과 기존 사용자·팀·소속 수를 다시 확인한다.
 2. 팀 API를 통합 소스로 배포한다. `Dockerfile.cloud`와 `.dockerignore`에 `server/onboarding.py`가 포함돼 있어야 한다. `/healthz` 200, 인증 없는 `/me` 및 `/onboarding` 401을 확인한다.
-3. Supabase Redirect URLs에 `https://syncup-live-murex.vercel.app/start/callback?flow=*`를 추가한다. 기존 `/auth/callback` 및 필요한 기존 주소를 유지한다. 이 목록은 이번 작업의 최종 인계 기록에서 적용 여부를 확인한다.
+3. Supabase Redirect URLs에 `https://syncup-ashen.vercel.app/start/callback?flow=*`를 추가한다. 기존 `/auth/callback` 및 필요한 기존 주소를 유지한다. 이 목록은 이번 작업의 최종 인계 기록에서 적용 여부를 확인한다.
 4. Vercel Root Directory는 `web`, shared 디렉터리를 포함한 저장소 전체가 배포 소스다. `web/.env.example`의 운영 환경변수를 적용한다. 서비스 역할 키와 DB 접속 문자열은 웹에 넣지 않는다. NEXT_PUBLIC_USE_MOCK/NEXT_PUBLIC_LOCAL_BRIDGE는 false이며, SYNCUP_CONNECTION_FILE은 운영에서 비워 둔다.
 5. desktop-installers CI에서 같은 소스의 Apple Silicon·Intel Mac·Windows x64 앱을 만든다. ZIP 안의 확장 manifest 버전과 공개 확장 ZIP이 0.2.19인지 확인한다. 공개 다운로드 URL 3개를 웹 환경변수로 지정하고 웹을 배포한다.
 6. 새 사용자의 `/start` GitHub 가입→팀 생성, `/install` 설치, `/connect` PC 키, 수집 켜기→새 대화→개인 승인→팀 보드를 확인한다. 별도로 초대 링크 참여를 확인한다. 승인 전 카드는 팀에 없어야 한다.

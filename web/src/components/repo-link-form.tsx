@@ -138,6 +138,8 @@ export function checkOf(status: RepoStatus | null): RepoCheck {
       label: "저장 실패",
       detail: `권한이 없거나 연결이 끊겼어요${status.httpStatus ? ` (HTTP ${status.httpStatus})` : ""}. 팀장에게 토큰 권한을 확인해 달라고 하세요`,
     };
+  if (status.state === "blocked")
+    return { state: "error", label: "저장 멈춤", detail: "비공개로 연결한 레포가 공개로 바뀌었어요. 공개 동의 후 다시 연결하거나 레포를 비공개로 되돌려 주세요" };
   if (status.state === "saved" || status.state === "unchanged") return { state: "ok", label: "연결됨", detail: "팀 서버가 이 레포에 저장하고 있어요" };
   return { state: "ok", label: "연결됨", detail: "첫 저장을 기다리는 중이에요" };
 }

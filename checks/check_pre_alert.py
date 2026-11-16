@@ -2,6 +2,7 @@
 of them on the same topic is flagged for its owner only (collector/team_decisions.py)."""
 import repo_paths  # noqa: F401
 from datetime import datetime, timezone
+import http.client
 import json
 import re
 import unittest
@@ -77,6 +78,14 @@ class ClassifierInput(PreAlertFixture):
         self.assertIn('- 기존 팀 결정:\n  (없음)', self.prompt())
         self.assertEqual(len(cards), 1)
         self.assertIsNone(cards[0]['preAlert'])
+
+    def test_a_cut_off_team_answer_sends_an_empty_list_and_the_batch_still_runs(self):
+        def cut_off(path, data=None):
+            raise http.client.IncompleteRead(b'{"team_id"')  # not an OSError
+        self.pipeline.client.request = cut_off
+        cards = self.collect()
+        self.assertIn('- 기존 팀 결정:\n  (없음)', self.prompt())
+        self.assertEqual(len(cards), 1)
 
     def test_an_older_team_server_without_a_board_answer_sends_an_empty_list(self):
         self.board = None  # answers {'team_id': 'a', 'items': None}

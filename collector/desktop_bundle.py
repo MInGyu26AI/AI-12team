@@ -13,6 +13,16 @@ import sys
 import desktop_setup
 
 ROOT = Path(__file__).resolve().parents[1]
+WINDOWS_README = '''SyncUp (싱크업)
+
+1. 이 폴더를 통째로 원하는 곳에 두세요. (예: 문서 폴더)
+2. SyncUp.exe 를 실행하고 화면의 안내를 따르세요.
+
+_internal 폴더는 SyncUp.exe 가 실행될 때 쓰는 파일입니다 (Python 실행 환경과 Windows 기본 라이브러리 .dll).
+지우거나 옮기지 말고 SyncUp.exe 와 같은 폴더에 그대로 두세요. 직접 열 필요는 없습니다.
+
+설치 안내: 웹의 '내 PC 연결' 화면 (/install)
+'''
 
 
 def main():
@@ -47,6 +57,10 @@ def main():
         *(f'--paths={ROOT / p}' for p in ('collector', 'contract', '.')),
         *(f'--add-data={src}{os.pathsep}{dest}' for src, dest in data), '--exclude-module=psycopg',
         str(ROOT/'collector/desktop_entry.py')])
+    if sys.platform == 'win32':
+        # The unpacked folder shows SyncUp.exe next to _internal (the Python runtime and Windows DLLs it runs from).
+        # A BOM keeps the Korean text readable in older Notepad. checks/check_desktop_bundle.py checks this layout.
+        (ROOT/'dist/desktop/SyncUp/README.txt').write_text(WINDOWS_README, encoding='utf-8-sig', newline='\r\n')
 
 
 if __name__ == '__main__':

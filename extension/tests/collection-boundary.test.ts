@@ -42,3 +42,11 @@ it('다시 켤 때 중지 대기를 실행하지 않고 켬 설정을 저장한�
   expect(tab).not.toHaveBeenCalled();
   expect(rpc).toHaveBeenCalledWith('collection.configure', { autoCollect: true });
 });
+
+it('수집을 끄는 요청이 실패하면 중지 대기 중인 탭에 수집을 이어 가라고 알린다', async () => {
+  const tab = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue({ ok: true } as never);
+  vi.mocked(rpc).mockRejectedValueOnce(new Error('수집기 연결 실패'));
+  await expect(configureCollection({ autoCollect: false })).rejects.toThrow('수집기 연결 실패');
+  expect(tab).toHaveBeenLastCalledWith(7, { type: 'collection.cancelStop' });
+  expect(await collectionTransitionItem.getValue()).toBeNull();
+});

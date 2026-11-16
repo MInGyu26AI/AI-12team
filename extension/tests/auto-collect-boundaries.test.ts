@@ -100,3 +100,60 @@ it('질문 직후 중지 표시가 생기기 전에 꺼도 그 답변까지 기�
   await expect(stopping).resolves.toEqual({ ok: true });
   expect(sent.flat().map(m => m.id)).toEqual(['chatgpt:on-u', 'chatgpt:on-a']);
 });
+
+it('켜진 채로 지난 대화를 새로 열면 늦게 그려진 지난 메시지는 보내지 않고 그 뒤 새 대화만 저장한다', async () => {
+  document.body.innerHTML = '<main></main>';
+  start(); await tick(300);
+  add(user('past-u1') + assistant('past-a1') + user('past-u2') + assistant('past-a2'));
+  await tick(5000);
+  expect(sent).toEqual([]);
+  add(user('next-u') + assistant('next-a'));
+  await tick(4000);
+  expect(sent.flat().map(m => m.id)).toEqual(['chatgpt:next-u', 'chatgpt:next-a']);
+});
+
+it('중지 대기가 끝난 뒤 수집이 꺼지지 않아 취소되면 다시 새 대화를 저장한다', async () => {
+  const control = start(); await tick(2000);
+  await expect(control.prepareStop()).resolves.toEqual({ ok: true });
+  add(user('held-u') + assistant('held-a'));
+  await tick(4000);
+  expect(sent).toEqual([]); // 설정이 바뀌기 전 틈에는 보내지 않는다
+  control.cancelStop();
+  add(user('later-u') + assistant('later-a'));
+  await tick(4000);
+  expect(sent.flat().map(m => m.id)).toEqual(['chatgpt:held-u', 'chatgpt:held-a', 'chatgpt:later-u', 'chatgpt:later-a']);
+});
+
+it('설정이 스크립트보다 늦게 읽혀 꺼짐→켜짐으로 들어와도 늦게 그려진 지난 메시지는 보내지 않는다', async () => {
+  // 실제 content script 순서: 시작할 때는 설정을 아직 몰라 꺼진 상태, 몇 ms 뒤 설정을 읽고 activityChanged(false, true)
+  document.body.innerHTML = '<main></main>'; active = false;
+  const control = start(); await tick(5);
+  active = true; control.activityChanged(false, true);
+  await tick(300);
+  add(user('past-u1') + assistant('past-a1') + user('past-u2') + assistant('past-a2'));
+  await tick(5000);
+  expect(sent).toEqual([]);
+  add(user('next-u') + assistant('next-a'));
+  await tick(4000);
+  expect(sent.flat().map(m => m.id)).toEqual(['chatgpt:next-u', 'chatgpt:next-a']);
+});
+
+it('빈 지난 대화 주소에서 시작해 새 채팅으로 옮겨도 새 대화의 첫 질문과 답변을 저장한다', async () => {
+  document.body.innerHTML = '<main></main>';
+  start(); await tick(300);
+  try {
+    window.history.pushState(null, '', '/'); await tick(2500);
+    add(user('new-u') + assistant('new-a')); await tick(600);
+    window.history.pushState(null, '', '/c/new-id'); await tick(4000);
+    expect(sent.flat().map(m => m.id)).toEqual(['chatgpt:new-u', 'chatgpt:new-a']);
+  } finally { window.history.replaceState(null, '', '/c/boundaries'); }
+});
+
+it('수집을 끈 채 열어 둔 대화에서 켜면 이미 있던 메시지는 빼고 켠 뒤 질문만 저장한다 (늦은 기록 대기 없음)', async () => {
+  document.body.innerHTML = '<main></main>'; active = false;
+  const control = start(); await tick(300);
+  add(user('past-u') + assistant('past-a')); await tick(3000);
+  active = true; control.activityChanged(false, true);
+  add(user('on-u') + assistant('on-a')); await tick(4000);
+  expect(sent.flat().map(m => m.id)).toEqual(['chatgpt:on-u', 'chatgpt:on-a']);
+});
