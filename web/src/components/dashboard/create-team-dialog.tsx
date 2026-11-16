@@ -57,9 +57,12 @@ export function CreateTeamDialog({ open, name, onClose, onCreated }: {
       onClose={skip}
       title="팀 만들기"
       labelledBy="create-team-title"
+      size="large"
+      bodyClassName="px-8 py-7"
       footer={
-        <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-ink-3">건너뛰어도 사이드바 &lsquo;이용 방법&rsquo;에서 다시 열 수 있어요</p>
+        // 슬라이드 팝업의 아래 줄처럼 구분선과 안쪽 여백을 둔다 (전에는 가장자리에 붙어 답답했다)
+        <div className="flex min-h-20 shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-card-border px-8 py-4">
+          <p className="text-[13px] text-ink-3">건너뛰어도 사이드바 &lsquo;이용 방법&rsquo;에서 다시 열 수 있어요</p>
           <div className="flex gap-2">
             <button type="button" className={slideSecondary} onClick={skip}>건너뛰기</button>
             <button type="submit" form="create-team-form" className={slidePrimary} disabled={busy || !team.trim() || !topic.trim()}>
