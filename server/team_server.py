@@ -83,7 +83,8 @@ class TeamHandler(SecureHandler):
 
     def handle_api(self):
         if self.path in ('/onboarding', '/onboarding/login', '/onboarding/teams', '/onboarding/consent',
-                         '/onboarding/decline'):
+                         '/onboarding/decline', '/onboarding/profile', '/onboarding/profile/photo',
+                         '/onboarding/withdraw'):
             import onboarding
             return onboarding.handle(self)
         if self.path == '/keys':  # web login → key; authenticated by the login itself, not a key

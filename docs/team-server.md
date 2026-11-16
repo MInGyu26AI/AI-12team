@@ -103,6 +103,29 @@ python3 server/team_admin.py identity --provider github --subject <숫자 ID> --
 - 기록은 `syncup.onboarding_consents`(계정, 이용약관 버전, 처리방침 버전, 두 확인 값, `agreed_at`)에 버전별 한 줄. 같은 버전으로 다시 동의하면 처음 시각을 유지한다. 버전을 올리면 기존 계정도 `consent=null`이 되어 다시 동의해야 팀을 만들 수 있다. IP·브라우저 정보는 남기지 않는다.
 - 거절 삭제는 동의 기록이 하나라도 있거나 팀이 있는 계정은 하지 않는다. 키·키 발급 기록·초대 참여 기록처럼 다른 기능이 남긴 줄이 있어도 외래 키 때문에 지우지 않고 409를 준다.
 - 표는 강제 RLS, `syncup_api` 직접 접근 금지이고, `onboarding_consent`·`onboarding_decline` 함수만 실행한다. `migrate-integration`이 `team_onboarding.sql`을 다시 적용하므로 기존 DB도 같은 명령으로 올라간다.
+### 마이페이지: 프로필·사진·탈퇴
+
+모두 가입 세션(`Authorization: Bearer`)이 필요하고, 없거나 만료되면 401이다. 오류 본문은 `{"error":"<한국어 문장>"}`.
+
+| 요청 | 하는 일 |
+|---|---|
+| `GET /onboarding/profile` | `{name, school, major, grade, role, photo, github_avatar, updated_at}`. 동의 없이도 읽는다. `photo`는 `data:image/...;base64,...` 또는 `null`, `github_avatar`는 GitHub 숫자 ID로 만든 `https://avatars.githubusercontent.com/u/<id>?s=256` |
+| `PUT /onboarding/profile` | 본문은 정확히 `{name, school, major, grade, role}`. 같은 모양으로 응답. 현재 버전 동의가 없으면 403 |
+| `PUT /onboarding/profile/photo` | 본문 `{"image":"data:image/(png|jpeg|webp);base64,..."}`. 동의 필요(403). 이 경로만 요청 본문 한도가 약 420KB, 나머지는 8KB |
+| `DELETE /onboarding/profile/photo` | 사진을 지우고 프로필을 돌려준다 |
+| `POST /onboarding/withdraw` | 본문 `{"confirm":"<지금 이름>"}`. 이름이 다르면 400, 맞으면 `{"deleted":true}`. 동의 없이도 된다 |
+
+- 검증은 API와 SQL 함수·표 제약 양쪽에서 한다. `name` 1~40자(앞뒤 공백 제거, 제어문자 불가, `syncup.users.name`을 바꾼다), `school`·`major` 60자, `role` 80자 이하 한 줄, 빈 문자열·`null`은 `null`, `grade`는 `1학년·2학년·3학년·4학년·5학년 이상·대학원·기타` 또는 `null`. 틀리면 400.
+- 사진은 디코딩 후 300,000바이트 이하이고, 앞 바이트(PNG·JPEG·WebP)가 선언한 형식과 맞아야 한다. 아니면 400. 바이트와 형식은 `syncup.onboarding_profiles`(`photo` bytea, `photo_type`)에 저장한다.
+- 저장하는 것: `onboarding_profiles(user_id, school, major, grade, role, photo, photo_type, updated_at)` 한 줄. 이름은 `users`에 그대로 둔다. 표는 강제 RLS, `syncup_api` 직접 접근 금지이고 `onboarding_profile`·`onboarding_profile_save`·`onboarding_photo_set`·`onboarding_withdraw` 함수로만 접근한다.
+- 탈퇴(`onboarding_withdraw`, 한 트랜잭션, GitHub 계정·사용자 잠금 뒤 팀 잠금):
+  - 계정 줄은 남기고 `active=false`, 이름은 `탈퇴한 팀원`으로 바꾼다. 승인 카드·충돌 처리 기록·초대 기록이 이 줄을 가리키기 때문이다.
+  - GitHub 신원·가입 세션·동의 기록·프로필과 사진·가입 팀 기록·연결 키를 지운다. 같은 GitHub로 다시 로그인하면 새 계정이 생긴다.
+  - 다른 활성 팀원이 있는 팀은 소속만 빼고, 그 사람이 승인한 카드·결정·할 일은 `탈퇴한 팀원` 이름으로 남는다.
+  - 활성 팀원이 본인뿐인 팀(빠진 팀원 줄만 남은 팀 포함)은 카드·충돌·할 일·설정·노션/레포 연결·초대 링크와 함께 지운다.
+  - 팀에는 관리자 역할 열이 없어(초대 링크도 누구나 만든다) 관리자 넘기기는 없다.
+- **운영 배포 순서**: 새 표와 함수가 필요하다. 웹을 배포하기 전에 운영 DB를 백업한 뒤 `python3 server/team_admin.py migrate-integration`을 먼저 적용한다. 적용하지 않으면 서버가 시작 때 `verify`에서 막히고(`셀프 가입 스키마를 적용하세요`), 마이페이지 요청은 503이다.
+
 - 동의 검사는 웹 가입의 팀 만들기에만 있다. 초대 링크 참여·연결 키 발급(`POST /keys`)은 따로 동의를 확인하지 않는다.
 
 ## 서버 실행
