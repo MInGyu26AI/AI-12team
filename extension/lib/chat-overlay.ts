@@ -37,11 +37,12 @@ const TEMPLATE = `
     summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
     .maintenance { color: light-dark(#20232a, #eceef4); background: light-dark(#fff, #232428); }
     .tip { position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); width: 244px;
-      max-width: calc(100vw - 98px); box-sizing: border-box; padding: 11px 14px; border-radius: 12px; background: #172033;
-      color: #fff; box-shadow: 0 6px 24px #0003; opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
+      max-width: calc(100vw - 98px); box-sizing: border-box; padding: 10px 14px; border-radius: 0; background: #1D1A14;
+      border: 1px solid rgb(255 255 255 / .14); /* 각진 진갈색(잉크) 상자. 옅은 테두리는 다크 화면에서 상자를 구분해 준다 */
+      color: #fff; box-shadow: 0 8px 24px rgb(29 26 20 / .12); opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
     .tip strong, .tip span { display: block; } .tip strong { font-weight: 650; margin-bottom: 4px; }
     .tip::after { content: ''; position: absolute; left: 100%; top: 0; width: 14px; height: 100%; }
-    .tip span { color: #d4def0; font-size: 12px; font-weight: 400; }
+    .tip span { color: rgb(255 255 255 / .78); font-size: 12px; font-weight: 400; }
     .tool:hover .tip, .tool:focus-within .tip { opacity: 1; visibility: visible; pointer-events: auto; }
     .tool.dismissed .tip { opacity: 0; visibility: hidden; }
     .toast { max-width: min(280px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 12px; color: #fff;

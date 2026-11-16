@@ -287,3 +287,12 @@ describe('채팅 도구의 다크 모드 따라가기', () => {
     expect(ov.host.shadowRoot!.querySelector('style')!.textContent).toMatch(/\.wrap \{ color: light-dark\(#20232a, #ffffff\); \}/);
   });
 });
+
+describe('채팅 도구 툴팁 모양', () => {
+  it('툴팁은 각진 진갈색 상자다 (둥근 모서리 없음)', () => {
+    const ov = createChatOverlay({});
+    const tip = ov.host.shadowRoot!.querySelector('style')!.textContent!.match(/^\s*\.tip \{([^}]*)\}/m)![1];
+    expect(tip).toMatch(/border-radius: 0/);
+    expect(tip).toMatch(/background: #1D1A14/);
+  });
+});
