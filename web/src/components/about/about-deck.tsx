@@ -7,6 +7,7 @@ import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import { START } from "@/lib/start-link";
 import { useSignedIn } from "@/lib/use-signed-in";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 const PROBLEMS = [
   { title: "팀원마다 다른 AI", body: "누구는 ChatGPT, 누구는 Claude·Gemini. 무료 AI를 섞어 쓰면 대화가 각자 계정에 흩어져요." },
@@ -76,7 +77,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
               <li key={title} className={cn("py-5 md:pt-6 md:pb-0", i > 0 && "border-t border-card-border md:border-t-0 md:border-l md:pl-7", i < 2 && "md:pr-7")}>
                 <p className="font-mono text-[13px] text-ink-3">0{i + 1}</p>
                 <h3 className="mt-2.5 text-[clamp(18px,1.6vw,21px)] font-bold">{title}</h3>
-                <p className="mt-2.5 text-[15px] leading-[1.7] text-ink-body break-keep">{body}</p>
+                <p className="mt-2.5 text-[15px] leading-[1.7] text-ink-body break-keep"><Sentences>{body}</Sentences></p>
               </li>
             ))}
           </ol>
@@ -93,7 +94,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
               <div key={title} className={cn("p-6", tone)}>
                 <p className={cn("font-mono text-xs tracking-[0.14em]", label)}>차별점 {i + 1}</p>
                 <h3 className="mt-3 text-[clamp(19px,1.7vw,22px)] font-bold">{title}</h3>
-                <p className={cn("mt-3 text-sm leading-[1.7] break-keep", text)}>{body}</p>
+                <p className={cn("mt-3 text-sm leading-[1.7] break-keep", text)}><Sentences>{body}</Sentences></p>
               </div>
             ))}
           </div>
@@ -107,7 +108,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
           <div>
             <h2 className={h2}>AI가 대화를<br className="hidden md:block" /> 이렇게 나눠요</h2>
             <p className="mt-5 text-sm leading-[1.7] text-ink-2 break-keep">
-              AI가 추천만 한 내용이나 “~하면 어때?” 같은 제안은 결정으로 치지 않아요. 팀이 받아들였을 때만 결정이 돼요.
+              <Sentences>{"AI가 추천만 한 내용이나 “~하면 어때?” 같은 제안은 결정으로 치지 않아요. 팀이 받아들였을 때만 결정이 돼요."}</Sentences>
             </p>
           </div>
           <dl className="border-t border-ink">
@@ -130,7 +131,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
             {PRIVACY.map((line) => (
               <li key={line} className="flex gap-3 break-keep">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-ok" />
-                {line}
+                <span><Sentences>{line}</Sentences></span>
               </li>
             ))}
           </ul>
@@ -153,8 +154,8 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
             )}
           </div>
           <p className="text-[13px] text-ink-3 break-keep">
-            지금은 ChatGPT 웹을 지원하고, Claude·Gemini는 곧 지원해요.
-            {signedIn && " 이용 방법은 대시보드 사이드바에서 다시 볼 수 있어요."}
+            <span className="sentence">지금은 ChatGPT 웹을 지원하고, Claude·Gemini는 곧 지원해요.</span>
+            {signedIn && <span className="sentence"> 이용 방법은 대시보드 사이드바에서 다시 볼 수 있어요.</span>}
           </p>
         </div>
       ),

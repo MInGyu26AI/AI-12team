@@ -29,6 +29,7 @@ import { useBoard } from "@/lib/use-board";
 import { useTeam } from "@/lib/team";
 import { useRepo } from "@/lib/use-repo";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 // 피그마 6번: 팀 결정 기록 보드 (176:2 레포 미연결 · 182:2 연결 후).
 // 세 열: 왼쪽 브랜치·세부 주제 필터 · 가운데 결정 타임라인 + 이전 결정 이력 · 오른쪽 할 일 + 팀 목표·범위·규칙 + 조사·참고 (사용자 결정 11/15).
@@ -122,7 +123,7 @@ export default function BoardPage() {
       </PageTitle>
       {load.stale && (
         <p role="status" className="rounded-[12px] border border-alert-review-dot/50 bg-alert-review-soft px-4 py-2 text-sm text-alert-review">
-          연결이 잠시 끊겼어요. 마지막으로 받은 기록을 보여 주고 있고, 다시 연결되면 자동으로 새로 고쳐요.
+          <Sentences>{"연결이 잠시 끊겼어요. 마지막으로 받은 기록을 보여 주고 있고, 다시 연결되면 자동으로 새로 고쳐요."}</Sentences>
         </p>
       )}
       <DecisionHistoryList />

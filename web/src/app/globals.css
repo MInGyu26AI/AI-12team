@@ -146,7 +146,15 @@
   html {
     @apply font-sans;
   }
+  /* 본문 문단·제목: 한국어 단어 중간에서 끊지 않고, 두 줄이 되면 길이를 고르게 */
+  p, h1, h2, h3, h4, h5, h6 {
+    word-break: keep-all;
+    text-wrap: balance;
+  }
 }
+
+/* 한 문단에 문장이 여럿이면 문장마다 줄을 바꾼다 (components/ui/sentences.tsx) */
+.sentence { display: block; word-break: keep-all; text-wrap: balance; } /* 문단(p)이 아닌 목록·칸 안 문장도 외톨이 줄 없이 */
 
 /* 각진 구조: 레이어 밖 규칙이라 Tailwind 의 rounded-[12px] 같은 값보다 이긴다.
    동그라미는 크기가 정해진 rounded-full(아바타·점, size-*)만 남기고, 칩·버튼·카드 모서리는 모두 0 */

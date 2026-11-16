@@ -11,6 +11,7 @@ import { buttonOutline, buttonPrimary, card, chip } from "@/components/ui/surfac
 import { collectorLink, type CollectorLink } from "@/lib/local-collector";
 import type { useReviewCandidates, useReviewSelection } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 type Review = ReturnType<typeof useReviewCandidates>;
 type Selection = ReturnType<typeof useReviewSelection>;
@@ -61,7 +62,7 @@ const NO_CANDIDATE_TEXT: Record<CollectorLink, string> = {
 function NoCandidates({ link }: { link: CollectorLink }) {
   return (
     <EmptyState title="승인할 후보가 없어요">
-      <p className="break-keep">{NO_CANDIDATE_TEXT[link]}</p>
+      <p className="break-keep"><Sentences>{NO_CANDIDATE_TEXT[link]}</Sentences></p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         <Link href="/collect" className={buttonOutline}>
           대화 수집 상태

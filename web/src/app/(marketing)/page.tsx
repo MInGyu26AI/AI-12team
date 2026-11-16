@@ -8,6 +8,7 @@ import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import release from "@/lib/extension-release.json";
 import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 // 서비스 첫 화면. Hero(별의 일생 상자 + 영어 제목 + 4단계 롤 링크, 시안 "로즈 & 올리브 수채화") →
 // Section 0~4 (기능별 한 화면 · 왼쪽 글 + 오른쪽 제품 미리보기. 넓은 화면은 스크롤하면 슬라이드처럼 바뀐다, components/landing/feature-story.tsx) → 이렇게 사용해요 → Section 5 확장 설치 → (Footer 는 layout)
@@ -47,7 +48,7 @@ const FEATURES: FeatureStep[] = [
     en: "Every chat, one record.",
     step: { label: "한눈에 보기", sub: "팀 결정 기록" },
     title: <>팀원들의&nbsp; 대화가<br />한 곳에 모여요</>,
-    body: <>누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요.<br />주제·역할·작업별로 묶어서 보여 줘요.</>,
+    body: "누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요. 주제·역할·작업별로 묶어서 보여 줘요.",
     preview: <RecordPreview />,
   },
   {
@@ -133,10 +134,10 @@ function Hero() {
               <span className="font-mono text-[12px] tracking-[0.24em]">THINK UP</span>
             </p>
             <p className="text-[17px] leading-[1.65] font-medium break-keep text-ink">
-              ‘싱크’는 맞추다(Sync)이면서 떠올리다(Think)예요. 흩어진 대화가 모여 결정이 되고, 그 결정이 터져 다음 생각이 돼요.
+              <Sentences>{"‘싱크’는 맞추다(Sync)이면서 떠올리다(Think)예요. 흩어진 대화가 모여 결정이 되고, 그 결정이 터져 다음 생각이 돼요."}</Sentences>
             </p>
             <p className="text-[17px] leading-[1.65] break-keep text-ink-body">
-              프로젝트 대화에서 결정 · 할 일 · 조사만 골라 모아요. 내가 승인한 것만 팀과 나누고, 결정이 엇갈리면 먼저 알려드려요.
+              <Sentences>{"프로젝트 대화에서 결정 · 할 일 · 조사만 골라 모아요. 내가 승인한 것만 팀과 나누고, 결정이 엇갈리면 먼저 알려드려요."}</Sentences>
             </p>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <Link href={START.href} className={heroPrimary}>
@@ -191,7 +192,7 @@ function HowTo() {
             </li>
           ))}
         </ol>
-        <p className="text-[13px] text-ink-3">지금은 ChatGPT 웹을 지원해요. Claude와 Gemini는 준비 중이에요.</p>
+        <p className="text-[13px] text-ink-3"><Sentences>{"지금은 ChatGPT 웹을 지원해요. Claude와 Gemini는 준비 중이에요."}</Sentences></p>
       </div>
     </section>
   );
@@ -213,7 +214,7 @@ function Install() {
             <span className="mt-4 block text-xl font-bold text-ink sm:text-2xl">3단계면 준비 끝나요</span>
           </h2>
           <p className="mt-4 max-w-[480px] text-base text-ink-body break-keep sm:text-[17px]">
-            설치는 한 번만 하면 돼요. 그다음부터는 ChatGPT에서 평소처럼 대화하면 돼요.
+            <Sentences>{"설치는 한 번만 하면 돼요. 그다음부터는 ChatGPT에서 평소처럼 대화하면 돼요."}</Sentences>
           </p>
           <ol className="mt-8 space-y-5">
             {INSTALL_STEPS.map((s, i) => (
@@ -221,7 +222,7 @@ function Install() {
                 <span className="flex size-8 shrink-0 items-center justify-center border border-ink bg-glass font-mono text-[13px] text-ink">{String(i + 1).padStart(2, "0")}</span>
                 <span className="space-y-1">
                   <span className="block text-[17px] font-bold text-ink">{s.title}</span>
-                  <span className="block max-w-[430px] text-sm text-ink-body break-keep">{s.body}</span>
+                  <span className="block max-w-[430px] text-sm text-ink-body break-keep"><Sentences>{s.body}</Sentences></span>
                 </span>
               </li>
             ))}

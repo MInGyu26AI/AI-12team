@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 // 첫 화면 아래 기능 소개 5단계 (overview · approve · alert · conflict · record).
 // 움직임 줄이기 설정이 꺼져 있으면 화면 폭과 상관없이 "슬라이드"로 보인다:
@@ -203,7 +204,7 @@ export function FeatureStory({ steps }: { steps: FeatureStep[] }) {
                   <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">{s.en}</span>
                   <span className="mt-4 block text-xl leading-[1.4] font-bold break-keep text-ink sm:text-2xl">{s.title}</span>
                 </h2>
-                <p className={cn("mt-5 text-base leading-[1.7] text-ink-body break-keep sm:text-[17px]", s.bodyWidth)}>{s.body}</p>
+                <p className={cn("mt-5 text-base leading-[1.7] text-ink-body break-keep sm:text-[17px]", s.bodyWidth)}><Sentences>{s.body}</Sentences></p>
                 {s.cta}
               </div>
               <div data-fit className={cn("min-w-0 lg:flex-1", VISUAL_MOTION)}>
