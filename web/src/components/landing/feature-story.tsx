@@ -26,9 +26,6 @@ export interface FeatureStep {
   cta?: ReactNode;
 }
 
-// 단계 옆 원소 표기 (별의 일생: 수소 → 헬륨 → 탄소 → 철 → 초신성)
-const ELEMENT = ["", "H → He", "He → C", "Fe", "✦"];
-
 function StepLine({ step }: { step: StepMark }) {
   return (
     <p className="flex flex-wrap items-center gap-3 text-[12px]">
@@ -40,7 +37,6 @@ function StepLine({ step }: { step: StepMark }) {
           ))}
         </span>
       )}
-      {step.index && <span className="font-serif text-[15px] text-ink-2 italic">{ELEMENT[step.index]}</span>}
       <span className="button-mono text-ink-3">{step.sub}</span>
     </p>
   );
