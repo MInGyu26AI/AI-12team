@@ -11,6 +11,7 @@ import {
   type TabPing,
   type TabPingResult,
   type TabPrepareStop,
+  type TabCancelStop,
   type TabToast,
 } from '@/lib/messages';
 import { selectionMessage } from '@/lib/selection';
@@ -67,7 +68,7 @@ export default defineContentScript({
     };
     wireSendButtons(site, overlay, isReady, autoCollect.markSeen);
     listenForSync(site);
-    listenForPingAndToast(site, overlay, autoCollect.prepareStop);
+    listenForPingAndToast(site, overlay, autoCollect.prepareStop, autoCollect.cancelStop);
   },
 });
 
@@ -109,8 +110,12 @@ function wireSendButtons(site: SiteAdapter, overlay: ChatOverlay, isReady: () =>
 
 // 팝업의 상태 확인(ping)과 백그라운드의 화면 안내(toast). ping 은 sendResponse 로 바로 답한다
 // (Promise 를 돌려주는 답은 Chrome 148 미만에서 팝업에 닿지 않는다). toast 는 답하지 않는다
-function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay, prepareStop: () => Promise<{ ok: true } | { ok: false; error: string }>) {
-  browser.runtime.onMessage.addListener((msg: TabPing | TabToast | TabPrepareStop, sender, sendResponse) => {
+function listenForPingAndToast(site: SiteAdapter, overlay: ChatOverlay, prepareStop: () => Promise<{ ok: true } | { ok: false; error: string }>, cancelStop: () => void) {
+  browser.runtime.onMessage.addListener((msg: TabPing | TabToast | TabPrepareStop | TabCancelStop, sender, sendResponse) => {
+    if (msg?.type === 'collection.cancelStop' && sender.id === browser.runtime.id) {
+      cancelStop(); overlay.showToast('수집을 끄지 못해 계속 수집해요. 로컬 수집기 연결을 확인해 주세요.', 'error');
+      sendResponse({ ok: true }); return;
+    }
     if (msg?.type === 'collection.prepareStop' && sender.id === browser.runtime.id) {
       overlay.showToast('마지막 답변을 저장한 뒤 수집을 꺼요…', 'ok');
       void prepareStop().then(sendResponse);
