@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { ExtStatus } from "@shared/bridge";
 import { Brand } from "./brand";
-import { AppHeader } from "./app-header";
 import { LogoutButton } from "./logout-button";
-import { buttonOutline, buttonPrimary, card } from "./ui/surface";
+import { DashboardShell } from "./dashboard/shell";
+import type { PcState } from "./dashboard/context";
+import { PcRequiredPanel } from "./dashboard/pc-required";
+import { buttonOutline, card } from "./ui/surface";
 import { USE_MOCK } from "@/lib/api";
 import { connectionProblem, loginUrl, readAccount, type Account } from "@/lib/auth-navigation";
-import { WebAccountContext } from "@/lib/account-context";
+import { refreshCollector, useCollectorStatus } from "@/lib/local-collector";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
 import { cn } from "@/lib/utils";
 import { EnTitle } from "@/components/page-title";
@@ -21,6 +23,12 @@ type CheckResult =
   | { kind: "ready"; account: Account }
   | { kind: "failed"; transient: boolean; message: string; account?: Account };
 
+const PC_MISSING = "이 PC에 SyncUp을 연결하면 내 대화와 팀 기록을 볼 수 있어요.";
+// PC가 연결되지 않아도 여는 화면: 대시보드(팀 카드 + 연결 띠)와 대화 수집(연결 안내). 나머지는 틀 안에 'PC 연결 필요'를 보인다
+const pcOptional = (pathname: string) => pathname === "/dashboard" || pathname === "/collect";
+// 팀 만들기·초대 참여 화면은 사이드바 없이 헤더만
+const setupFlow = (pathname: string) => pathname.startsWith("/team/new") || pathname.startsWith("/join");
+
 // The native host still enforces local access and the API enforces membership. This gate prevents the UI from
 // showing a different PC account's cached cards after a browser login or expired web session.
 export function AppAccessGate({ children }: { children: React.ReactNode }) {
@@ -28,7 +36,7 @@ export function AppAccessGate({ children }: { children: React.ReactNode }) {
   const publicFlow = pathname === "/connect" || pathname === "/auth/callback" || pathname.startsWith("/join/");
   // The dedicated loopback launcher authenticates /api/local with its one-use HttpOnly session.
   // Production configuration rejects this flag; it never bypasses hosted account checks.
-  if (USE_MOCK || process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return <><AppHeader /><main className="flex-1">{children}</main></>;
+  if (USE_MOCK || process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return <LocalShell setup={setupFlow(pathname)}>{children}</LocalShell>;
   if (publicFlow) return <><PublicHeader /><main className="flex-1">{children}</main></>;
   return <CheckedApp pathname={pathname}>{children}</CheckedApp>;
 }
@@ -53,7 +61,7 @@ export async function checkAccess(signal: AbortSignal): Promise<CheckResult> {
     return problem ? { kind: "failed", transient: false, message: problem, account } : { kind: "ready", account };
   } catch (error) {
     return { kind: "failed", transient: false, account,
-      message: error instanceof ExtensionMissing ? "이 PC에 SyncUp을 연결하면 내 대화와 팀 기록을 볼 수 있어요." : (error as Error).message };
+      message: error instanceof ExtensionMissing ? PC_MISSING : (error as Error).message };
   }
 }
 
@@ -65,10 +73,19 @@ export function nextView(previous: View, result: CheckResult): View {
   return { kind: "blocked", message: result.message, account: result.account };
 }
 
-// 쪽을 옮겨도(key 없음) 이미 열린 ready 화면은 버리지 않고, 새 쪽의 확인이 실패(일시 실패 제외)할 때만 막는다
+/** 목업·로컬 브리지: 웹 로그인 없이 수집기 상태만으로 PC 연결을 보인다 */
+function LocalShell({ setup, children }: { setup: boolean; children: React.ReactNode }) {
+  const { available, checked } = useCollectorStatus();
+  const pc: PcState = !checked ? { kind: "checking" } : available ? { kind: "ok" } : { kind: "off", message: PC_MISSING };
+  return <DashboardShell account={null} pc={pc} recheck={() => void refreshCollector()} setup={setup}>{children}</DashboardShell>;
+}
+
+// 쪽을 옮겨도(key 없음) 틀(헤더·사이드바)과 이미 열린 화면을 버리지 않고, 새 쪽의 확인이 실패(일시 실패 제외)할 때만 바꾼다.
+// 로그인은 됐지만 PC 쪽이 막힌 경우(blocked + account)도 틀은 열고 PC 연결 안내를 보인다
 function CheckedApp({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const [view, setView] = useState<View>({ kind: "checking" });
   const [attempt, setAttempt] = useState(0);
+  const recheck = useCallback(() => setAttempt((n) => n + 1), []);
   useEffect(() => {
     const controller = new AbortController();
     let running = false;
@@ -79,7 +96,9 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
         const result = await checkAccess(controller.signal);
         if (controller.signal.aborted) return;
         if (result.kind === "login") location.replace(loginUrl(pathname));
-        setView(previous => nextView(previous, result));
+        // PC 미연결로 열려 있던 틀도 일시 실패 한 번으로 닫지 않는다
+        setView(previous => result.kind === "failed" && result.transient && previous.kind === "blocked" && previous.account
+          ? previous : nextView(previous, result));
       } finally { running = false; }
     };
     void check();
@@ -89,17 +108,21 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
     return () => { controller.abort(); clearInterval(timer); window.removeEventListener("focus", focus); };
   }, [pathname, attempt]);
 
-  if (view.kind === "ready") return <WebAccountContext.Provider key={pathname} value={view.account}>
-    <AppHeader /><main className="flex-1">{children}</main>
-  </WebAccountContext.Provider>;
+  const account = view.kind === "ready" ? view.account : view.kind === "blocked" ? view.account : undefined;
+  if (account) {
+    const pc: PcState = view.kind === "blocked" ? { kind: "off", message: view.message } : { kind: "ok" };
+    const open = pc.kind === "ok" || pcOptional(pathname);
+    return <DashboardShell account={account} pc={pc} recheck={recheck} setup={setupFlow(pathname)}>
+      {open ? children : <PcRequiredPanel name={account.name} message={pc.kind === "off" ? pc.message : ""} />}
+    </DashboardShell>;
+  }
   return <><PublicHeader /><main className="mx-auto w-full max-w-xl px-gutter py-14">
     <section className={cn(card, "space-y-5 p-7")}>
-      {view.kind === "checking" ? <p role="status">로그인과 PC 연결을 확인하고 있어요…</p> : <>
-        <EnTitle>Check your connection.</EnTitle><h1 className="text-xl font-bold">{view.account ? `${view.account.name}님, PC 연결을 확인해 주세요` : "연결을 확인해 주세요"}</h1>
+      {view.kind === "checking" ? <p role="status">로그인과 PC 연결을 확인하고 있어요…</p> : view.kind === "blocked" && <>
+        <EnTitle>Check your connection.</EnTitle><h1 className="text-xl font-bold">연결을 확인해 주세요</h1>
         <p role="alert" className="text-sm leading-relaxed text-muted-foreground">{view.message}</p>
         <div className="flex flex-wrap gap-2">
-          {view.account && <><Link href="/install" className={buttonPrimary}>내 PC 연결하기</Link><Link href="/connect" className={buttonOutline}>연결 계정 바꾸기</Link><Link href="/start" className={buttonOutline}>내 팀 확인</Link></>}
-          <button className={buttonOutline} onClick={() => { setView({ kind: "checking" }); setAttempt(n => n + 1); }}>다시 확인</button>
+          <button className={buttonOutline} onClick={() => { setView({ kind: "checking" }); recheck(); }}>다시 확인</button>
           <LogoutButton />
         </div>
       </>}

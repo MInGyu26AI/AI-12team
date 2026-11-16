@@ -33,7 +33,8 @@ export function StarIntro() {
   const [run, setRun] = useState(0);
   return (
     <div className="relative overflow-hidden border-[3.5px] border-ink" style={{ background: "rgb(255 255 255 / 0.42)" }}>
-      <div key={run} className="star-stage relative h-[420px] sm:h-[clamp(520px,62vw,640px)]">
+      {/* 높이: 넓은 화면(md 이상)은 화면 높이 − 헤더 65 − 위아래 여백 96 − 테두리 7 (420~640). 첫 화면에 상자가 다 들어오고 위아래 여백이 같다 */}
+      <div key={run} className="star-stage relative h-[420px] sm:h-[clamp(520px,62vw,640px)] md:h-[clamp(420px,calc(100svh-168px),640px)]">
         <Star size={40} style={{ top: 26, left: 30 }} />
         <Star size={18} outline style={{ top: 82, left: 84 }} />
         <Star size={30} style={{ bottom: 40, right: 46 }} />
@@ -66,7 +67,8 @@ export function StarIntro() {
           </div>
         ))}
 
-        <div data-anim style={{ animationName: "starWordmark" }} className={`${center} w-[min(820px,92%)]`}>
+        {/* 마지막 로고 묶음(워드마크 + 한 줄)은 상자 정가운데. 42%→50% 자리 차이는 번쩍임(starFlash)이 덮는 동안 바뀐다 */}
+        <div data-anim style={{ animationName: "starWordmark" }} className="absolute top-1/2 left-1/2 w-[min(820px,92%)] -translate-x-1/2 -translate-y-1/2">
           <BigWordmark
             className="w-full"
             orbitProps={{ strokeDasharray: 1400, strokeDashoffset: 0, style: { animationName: "starOrbit" }, ...({ "data-anim": "" } as object) }}
