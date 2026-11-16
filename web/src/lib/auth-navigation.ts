@@ -4,7 +4,7 @@ import { PRIVACY_VERSION, TERMS_VERSION } from "./legal";
  *  로그인 뒤 기본 화면은 대시보드다 (첫 로그인이면 대시보드 위에 팀 만들기 팝업이 뜬다) */
 export function loginDestination(value: unknown): string {
   if (typeof value !== "string" || value.length > 200 || /[\\%?#\s]/.test(value)) return "/dashboard";
-  return /^\/(?:dashboard|start|collect(?:\/paste)?|review|board(?:\/(?:record|repo|notion))?|team\/new|install|connect|join\/[A-Za-z0-9_-]{20,100})$/.test(value)
+  return /^\/(?:dashboard|start|me|collect(?:\/paste)?|review|board(?:\/(?:record|repo|notion))?|team\/new|install|connect|join\/[A-Za-z0-9_-]{20,100})$/.test(value)
     ? value : "/dashboard";
 }
 

@@ -1,39 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { ProfileMenu } from "@/components/dashboard/profile-menu";
 import { buttonVariants } from "@/components/ui/button";
-import { USE_MOCK } from "@/lib/api";
-import { consentUrl, needsConsent, readAccount, type Account } from "@/lib/auth-navigation";
+import { consentUrl, needsConsent } from "@/lib/auth-navigation";
 import { START } from "@/lib/start-link";
+import { useSignedIn } from "@/lib/use-signed-in";
 import { cn } from "@/lib/utils";
-
-/** 실제 모드에서 웹 로그인 여부. 목업은 웹 로그인이 없어 늘 null (버튼을 보인다) */
-function useSignedIn(): Account | null {
-  const [account, setAccount] = useState<Account | null>(null);
-  useEffect(() => {
-    if (USE_MOCK) return;
-    const controller = new AbortController();
-    fetch("/api/onboarding", { cache: "no-store", signal: controller.signal })
-      .then(async (r) => { if (r.ok) setAccount(readAccount(await r.json())); })
-      .catch(() => { /* 확인하지 못하면 로그인 전 화면 그대로 */ });
-    return () => controller.abort();
-  }, []);
-  return account;
-}
 
 const NAV = [
   { href: "/about", label: "서비스 소개" },
   { href: "/guide", label: "이용 방법" },
   { href: "/install", label: "브라우저 확장" },
 ];
+// 로그인한 사람은 이용 방법(대시보드 사이드바 '이용 방법')과 확장 설치(대화 수집 · PC 연결)를 대시보드에서 보므로 서비스 소개만 둔다
+const SIGNED_IN_NAV = NAV.filter(({ href }) => href === "/about");
 
 export function LandingHeader() {
   const pathname = usePathname();
   const account = useSignedIn();
+  const nav = account ? SIGNED_IN_NAV : NAV;
   // 약관 동의 전 계정은 프로필만 보이고, 대시보드로는 동의 화면을 거쳐 간다 (첫 화면에서 대시보드로 자동 이동하지도 않는다)
   const consentPending = !!account && needsConsent(account);
   // 로그인한 사람의 기본 화면은 대시보드: 첫 화면(/)으로 오면 대시보드로 보낸다. 서비스 소개·이용 방법·브라우저 확장은 그대로 볼 수 있다
@@ -44,7 +33,7 @@ export function LandingHeader() {
       <div className="mx-auto flex max-w-wide flex-wrap items-center gap-x-4 gap-y-2 px-gutter py-3 md:h-16 md:flex-nowrap md:px-8 md:py-0 lg:grid lg:grid-cols-[1fr_auto_1fr]">
         <Brand />
         <nav className="order-last flex w-full justify-center gap-6 md:order-none md:ml-auto md:w-auto md:gap-7 lg:ml-0">
-          {NAV.map(({ href, label }) => {
+          {nav.map(({ href, label }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
@@ -69,7 +58,7 @@ export function LandingHeader() {
               <Link href={consentPending ? consentUrl("/dashboard") : "/dashboard"} className={cn(buttonVariants({ variant: "outline" }), "h-10 rounded-md border-input px-3 sm:px-[18px]")}>
                 대시보드
               </Link>
-              <ProfileMenu name={account.name} detail="GitHub 로그인" myPage="/start" canLogout />
+              <ProfileMenu name={account.name} detail="GitHub 로그인" myPage="/me" canLogout />
             </>
           ) : (
             // 로그인 전: 로그인 입구는 '가입 / 로그인' 하나 (예전 '로그인' 글자 링크는 같은 화면으로 가서 뺐다)

@@ -24,8 +24,8 @@ type CheckResult =
   | { kind: "failed"; transient: boolean; message: string; account?: Account };
 
 const PC_MISSING = "이 PC에 SyncUp을 연결하면 내 대화와 팀 기록을 볼 수 있어요.";
-// PC가 연결되지 않아도 여는 화면: 대시보드(팀 카드 + 연결 띠)와 대화 수집(연결 안내). 나머지는 틀 안에 'PC 연결 필요'를 보인다
-const pcOptional = (pathname: string) => pathname === "/dashboard" || pathname === "/collect";
+// PC가 연결되지 않아도 여는 화면: 대시보드(팀 카드 + 연결 띠), 대화 수집(연결 안내), 마이페이지(PC와 상관없는 계정 화면). 나머지는 틀 안에 'PC 연결 필요'를 보인다
+const pcOptional = (pathname: string) => pathname === "/dashboard" || pathname === "/collect" || pathname === "/me";
 // 팀 만들기·초대 참여 화면은 사이드바 없이 헤더만
 const setupFlow = (pathname: string) => pathname.startsWith("/team/new") || pathname.startsWith("/join");
 

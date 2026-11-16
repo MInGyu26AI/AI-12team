@@ -28,7 +28,9 @@ export function json(value: unknown, status = 200) {
   return NextResponse.json(value, { status, headers: privateHeaders });
 }
 
-export async function smallBody(request: Request) {
+export async function smallBody(request: Request) { return boundedBody(request, 8192); }
+
+export async function boundedBody(request: Request, limit: number) {
   // Read bounded bytes even for chunked bodies; Content-Length alone is not a limit.
   const reader = request.body?.getReader();
   if (!reader) throw new Error("body");
@@ -39,14 +41,15 @@ export async function smallBody(request: Request) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 8192) { await reader.cancel(); throw new Error("body"); }
+      if (size > limit) { await reader.cancel(); throw new Error("body"); }
       chunks.push(value);
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } finally { reader.releaseLock(); }
 }
 
-type UpstreamPath = "/onboarding" | "/onboarding/login" | "/onboarding/teams" | "/onboarding/consent" | "/onboarding/decline";
+type UpstreamPath = "/onboarding" | "/onboarding/login" | "/onboarding/teams" | "/onboarding/consent" | "/onboarding/decline"
+  | "/onboarding/profile" | "/onboarding/profile/photo" | "/onboarding/withdraw";
 
 export async function upstream(path: UpstreamPath, method: string, token?: string, body?: unknown) {
   const response = await fetch(configuredOrigin(process.env.SYNCUP_TEAM_API_URL) + path, {
