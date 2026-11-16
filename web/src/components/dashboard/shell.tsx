@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { USE_MOCK } from "@/lib/api";
@@ -9,8 +10,10 @@ import type { Account } from "@/lib/auth-navigation";
 import { DashboardContext, type PcState } from "./context";
 import { CreateTeamDialog } from "./create-team-dialog";
 import { FlowSlidesDialog } from "./flow-slides";
-import { InstallSlidesDialog } from "./install-slides";
 import { Sidebar } from "./sidebar";
+
+// PC 연결 슬라이드(설치 캡처 이미지 포함)는 열 때만 불러온다: 첫 화면을 가볍게 하고, 접근 확인 시험이 Node 에서 이 틀을 불러와도 이미지 모듈을 끌어오지 않게
+const InstallSlidesDialog = dynamic(() => import("./install-slides").then((m) => m.InstallSlidesDialog), { ssr: false });
 
 type Dialog = "install" | "flow" | "team" | null;
 

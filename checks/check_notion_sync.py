@@ -419,6 +419,82 @@ class SaveScheduling(unittest.TestCase):
         self.assertLessEqual(len(saves), 3)
 
 
+class LinkChangeDuringSave(unittest.TestCase):
+    """A Notion save waiting behind another must go to the page linked when its turn comes, with that page's token and
+    blocks, and an old save never reports on a new link. Notion and the database are replaced; the link bookkeeping,
+    the save lock and the status are the real ones."""
+
+    ROW = dict(page=str(uuid.uuid4()), token=TOKEN, title='A', linkedBy='u', linkedByName='Dana',
+               linkedAt='2026-11-15T00:00:00+00:00')
+
+    def setUp(self):
+        self.team, self.server = uuid.uuid4(), Server(None)
+        self.server.dsn = None  # the database is replaced below
+        notion_sync._remember(self.server, self.team, self.ROW)
+        self.saved_to, self.started, self.release = [], threading.Event(), threading.Event()
+
+        def held_save(target, blocks, known):
+            self.saved_to.append((target.page_id, target.token, dict(known)))
+            known[target.page_id] = 'blocks'
+            if len(self.saved_to) == 1:
+                self.started.set()
+                self.release.wait(5)
+            return True
+        self.enterContext(patch.object(notion_sync, 'save', held_save))
+        self.enterContext(patch.object(notion_sync, 'authorized', lambda *args: nullcontext((None, None))))
+        self.enterContext(patch.object(repo_sync, 'team_state', lambda *args: {}))
+        self.enterContext(patch.object(notion_sync, 'page_blocks', lambda state: []))
+
+    def save_in_background(self, wait=True):
+        thread = threading.Thread(target=notion_sync._save_and_record,
+                                  args=(self.server, NotionTarget(self.team, self.ROW['page'], TOKEN),
+                                        notion_sync._Job('token')))
+        thread.start()
+        if wait:
+            self.assertTrue(self.started.wait(5))
+        return thread
+
+    def test_a_save_waiting_its_turn_goes_to_the_page_of_that_moment(self):
+        first = self.save_in_background()  # holds the save lock
+        second = self.save_in_background(wait=False)
+        time.sleep(.1)  # the second save now waits for the lock, having been asked for the old page
+        new = dict(self.ROW, page=str(uuid.uuid4()), token='synthetic-notion-token-2-DO-NOT-LOG')
+        notion_sync._remember(self.server, self.team, new)
+        self.release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual([(page, token) for page, token, _ in self.saved_to],
+                         [(self.ROW['page'], TOKEN), (new['page'], new['token'])])
+        self.assertEqual(self.saved_to[1][2], {})  # the old page's blocks are not reused
+        status = notion_status(self.server, self.team)
+        self.assertEqual((status['page'], status['state']), (new['page'], 'saved'))
+
+    def test_an_old_save_never_reports_on_the_new_link_and_unlinking_sends_nothing_more(self):
+        first = self.save_in_background()
+        notion_sync._remember(self.server, self.team, dict(self.ROW, page=str(uuid.uuid4())))
+        self.release.set()
+        first.join(5)
+        self.assertEqual(notion_status(self.server, self.team)['state'], 'unknown')
+        self.setUp()
+        first, second = self.save_in_background(), self.save_in_background(wait=False)
+        time.sleep(.1)
+        notion_sync._remember(self.server, self.team, None)
+        self.release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(len(self.saved_to), 1)
+        self.assertEqual(notion_status(self.server, self.team), dict(linked=False))
+
+    def test_rereading_the_same_link_keeps_the_status(self):
+        thread = self.save_in_background()
+        notion_sync._remember(self.server, self.team, dict(self.ROW))
+        self.release.set()
+        thread.join(5)
+        self.assertEqual(notion_status(self.server, self.team)['state'], 'saved')
+        self.save_in_background(wait=False).join(5)  # and the page's remembered blocks: the next save writes only changes
+        self.assertEqual(self.saved_to[1][2], {self.ROW['page']: 'blocks'})
+
+
 class NotionSyncTeam(TeamIsolation):
     """Team A is linked to the fake Notion page; team B is not."""
 
@@ -798,7 +874,8 @@ class NotionLinkTeam(TeamIsolation):
 
 def load_tests(loader, tests, pattern):
     plain_cases = [loader.loadTestsFromTestCase(case)
-                   for case in (PageBlocks, NotionSave, Settings, SaveScheduling, PageAddress, NotionRelay)]
+                   for case in (PageBlocks, NotionSave, Settings, SaveScheduling, LinkChangeDuringSave, PageAddress,
+                                NotionRelay)]
     return unittest.TestSuite([*plain_cases, own_tests(NotionSyncTeam, NotionLinkTeam)])
 
 
