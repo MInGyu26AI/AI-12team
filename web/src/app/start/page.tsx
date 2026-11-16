@@ -6,7 +6,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Brand } from "@/components/brand";
 import { LogoutButton } from "@/components/logout-button";
-import { readAccount, type Account } from "@/lib/auth-navigation";
+import { consentUrl, isConsentRefusal, readAccount, type Account } from "@/lib/auth-navigation";
 import { EnTitle } from "@/components/page-title";
 
 const field = "mt-2 w-full rounded-lg border bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-brand";
@@ -16,6 +16,7 @@ export default function StartPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [consentNeeded, setConsentNeeded] = useState(false); // 서버가 '먼저 약관에 동의해 주세요'(403)로 거절함
   const [team, setTeam] = useState("");
   const [topic, setTopic] = useState("");
   const [created, setCreated] = useState("");
@@ -34,7 +35,7 @@ export default function StartPage() {
   }, []);
 
   const create = async (event: React.FormEvent) => {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault(); setBusy(true); setError(""); setConsentNeeded(false);
     // Keep the request ID on uncertain failures, so a retry cannot create a duplicate team.
     if (!request.current) request.current = { id: crypto.randomUUID(), name: team.trim(), topic: topic.trim() };
     setRetrying(true);
@@ -44,6 +45,7 @@ export default function StartPage() {
       const data = await r.json();
       if (!r.ok) {
         if (r.status === 401) { setAccount(null); location.replace("/login?next=%2Fstart"); }
+        setConsentNeeded(isConsentRefusal(r.status, data.error));
         // Explicit validation/refusal did not create a team. Let the user correct the fields.
         if (r.status < 500) { request.current = null; setRetrying(false); }
         throw new Error(data.error);
@@ -57,7 +59,9 @@ export default function StartPage() {
     <ol aria-label="시작 단계" className="flex gap-3 text-sm text-muted-foreground"><li className={!account ? "font-semibold text-brand" : ""}>1. GitHub 가입</li><li>→</li><li className={account && !created ? "font-semibold text-brand" : ""}>2. 팀 만들기</li><li>→</li><li>3. PC 연결</li></ol>
     <div><EnTitle>Let&apos;s get started.</EnTitle><h1 className="text-3xl font-bold">{created ? `${created}, 시작할 준비가 됐어요` : account ? `${account.name}님, 함께할 팀을 만드세요` : "팀의 첫 결정을 함께 모아보세요"}</h1>
       <p className="mt-3 text-muted-foreground">GitHub 계정으로 가입하고 팀을 만든 뒤, 사용하는 PC를 연결해요. 관리자 등록은 필요 없어요.</p></div>
-    {error && <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">{error}</p>}
+    {error && <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
+      {error}{consentNeeded && <> <Link href={consentUrl("/start")} className="font-semibold underline">약관 동의하러 가기</Link></>}
+    </p>}
     {loading ? <p role="status">로그인 상태를 확인하고 있어요…</p> : created ? <section className="space-y-5 rounded-xl border bg-card p-6">
       <p className="flex gap-2"><Check className="text-brand" />팀과 프로젝트 주제가 저장됐어요.</p>
       <p>Mac 또는 Windows의 Chrome에서 확장과 SyncUp 연결 프로그램을 설치하면 대화를 모을 수 있어요.</p>

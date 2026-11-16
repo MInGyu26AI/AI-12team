@@ -46,7 +46,9 @@ export async function smallBody(request: Request) {
   } finally { reader.releaseLock(); }
 }
 
-export async function upstream(path: "/onboarding" | "/onboarding/login" | "/onboarding/teams", method: string, token?: string, body?: unknown) {
+type UpstreamPath = "/onboarding" | "/onboarding/login" | "/onboarding/teams" | "/onboarding/consent" | "/onboarding/decline";
+
+export async function upstream(path: UpstreamPath, method: string, token?: string, body?: unknown) {
   const response = await fetch(configuredOrigin(process.env.SYNCUP_TEAM_API_URL) + path, {
     method, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20000),
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },

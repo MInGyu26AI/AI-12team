@@ -11,7 +11,7 @@ import type { PcState } from "./dashboard/context";
 import { PcRequiredPanel } from "./dashboard/pc-required";
 import { buttonOutline, card } from "./ui/surface";
 import { USE_MOCK } from "@/lib/api";
-import { connectionProblem, loginUrl, readAccount, type Account } from "@/lib/auth-navigation";
+import { connectionProblem, consentUrl, loginUrl, needsConsent, readAccount, type Account } from "@/lib/auth-navigation";
 import { refreshCollector, useCollectorStatus } from "@/lib/local-collector";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,13 @@ export async function checkAccess(signal: AbortSignal): Promise<CheckResult> {
   }
 }
 
+/** 약관·처리방침에 아직(또는 바뀐 버전에) 동의하지 않은 계정이면 동의 화면 주소, 아니면 null.
+ *  PC 연결이 막힌 결과(failed)에도 계정은 있으므로 PC 상태와 상관없이 동의가 먼저다. checkAccess 의 판정은 그대로 두고 화면 쪽에서 쓴다 */
+export function consentRedirect(result: CheckResult, pathname: string): string | null {
+  const account = result.kind === "login" ? undefined : result.account;
+  return account && needsConsent(account) ? consentUrl(pathname) : null;
+}
+
 /** 확인 결과에 따른 다음 화면. 이미 열린(ready) 화면은 일시 실패 한 번으로 막지 않고, 다음 확인 때 다시 본다 */
 export function nextView(previous: View, result: CheckResult): View {
   if (result.kind === "login") return { kind: "checking" };
@@ -95,6 +102,9 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
       try {
         const result = await checkAccess(controller.signal);
         if (controller.signal.aborted) return;
+        // 동의하지 않은 계정에는 앱 화면(과 개인 카드)을 열지 않고 동의 화면으로 보낸다
+        const consent = consentRedirect(result, pathname);
+        if (consent) { location.replace(consent); setView({ kind: "checking" }); return; }
         if (result.kind === "login") location.replace(loginUrl(pathname));
         // PC 미연결로 열려 있던 틀도 일시 실패 한 번으로 닫지 않는다
         setView(previous => result.kind === "failed" && result.transient && previous.kind === "blocked" && previous.account
