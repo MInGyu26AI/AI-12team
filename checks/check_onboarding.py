@@ -182,6 +182,43 @@ class Onboarding(TeamIsolation):
         self.assertEqual(again['name'], '깃허브 표시 이름')
         self.assertEqual(self.call('GET', token=again['session'])[1]['id'], account['id'])
 
+    def test_multiline_topic_is_accepted_and_names_stay_single_line(self):
+        token = self.login()[1]['session']
+        status, body = self.call('POST', '/onboarding/teams', token, dict(request_id=str(uuid.uuid4()), name='팀\n이름', topic='주제'))
+        self.assertEqual((status, body['error']), (400, '팀 이름을 확인해 주세요. (한 줄, 80자 이하)'))
+        status, body = self.call('POST', '/onboarding/teams', token, dict(request_id=str(uuid.uuid4()), name='팀', topic='주제\x00'))
+        self.assertEqual((status, body['error']), (400, '프로젝트 주제를 확인해 주세요. (1200자 이하)'))
+        status, team = self.call('POST', '/onboarding/teams', token, dict(request_id=str(uuid.uuid4()), name='줄 팀', topic='목표\r\n- 범위\r\t규칙\n'))
+        self.assertEqual(status, 200)
+        with psycopg.connect(self.admin_dsn) as c:
+            self.assertEqual(c.execute('SELECT topic FROM syncup.onboarding_teams WHERE team_id=%s', (team['id'],)).fetchone()[0], '목표\n- 범위\n\t규칙')
+
+    def test_anonymous_flood_does_not_starve_signed_in_reads(self):
+        token = self.login()[1]['session']
+        saved = onboarding.LIMIT.calls.copy()
+        try:
+            while onboarding.LIMIT.take():
+                pass
+            self.assertEqual(self.call('GET')[0], 429)
+            self.assertEqual(self.call('GET', token=token)[0], 200)
+            self.assertEqual(self.team(token)[0], 429)  # POSTs stay on the shared window
+            unknown = secrets.token_urlsafe(32)
+            statuses = [self.call('GET', token=unknown)[0] for _ in range(onboarding.PER_SESSION[0] + 1)]
+            self.assertEqual((statuses[0], statuses[-1]), (401, 429))  # per-token cap on junk tokens
+            self.assertEqual(self.call('DELETE', token=token)[0], 200)
+        finally:
+            onboarding.LIMIT.calls.clear()
+            onboarding.LIMIT.calls.extend(saved)
+        saved = onboarding.SESSION_LIMIT.calls.copy()
+        try:
+            for _ in range(onboarding.MAX_SESSIONS + 5):
+                onboarding.take_session(secrets.token_urlsafe(32))
+            self.assertLessEqual(len(onboarding.sessions), onboarding.MAX_SESSIONS)
+            self.assertFalse(onboarding.take_session(secrets.token_urlsafe(32)))  # shared cap for unknown tokens
+        finally:
+            onboarding.SESSION_LIMIT.calls.clear()
+            onboarding.SESSION_LIMIT.calls.extend(saved)
+
     def test_migration_twice_keeps_account_team_and_membership(self):
         token = self.login()[1]['session']
         team = self.team(token)[1]
