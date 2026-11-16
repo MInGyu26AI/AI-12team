@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { ProfileMenu } from "@/components/dashboard/profile-menu";
@@ -18,10 +17,9 @@ const NAV = [{ href: "/about", label: "서비스 소개" }];
 export function LandingHeader() {
   const pathname = usePathname();
   const account = useSignedIn();
-  // 약관 동의 전 계정은 프로필만 보이고, 대시보드로는 동의 화면을 거쳐 간다 (첫 화면에서 대시보드로 자동 이동하지도 않는다)
+  // 약관 동의 전 계정은 대시보드 버튼이 동의 화면을 거쳐 간다
   const consentPending = !!account && needsConsent(account);
-  // 로그인한 사람의 기본 화면은 대시보드: 첫 화면(/)으로 오면 대시보드로 보낸다. 서비스 소개·이용 방법·브라우저 확장은 그대로 볼 수 있다
-  useEffect(() => { if (account && !consentPending && pathname === "/") location.replace("/dashboard"); }, [account, consentPending, pathname]);
+  // 로그인한 사람도 첫 화면(/)을 그대로 본다. 자동으로 대시보드로 보내지 않고, 오른쪽 위 "대시보드" 버튼을 눌러야 간다
   // 앱 헤더(app-header.tsx)와 같은 새 피그마 헤더 모양: 크림 바탕 · 아래 테두리 · 탭 글자 15px 보통 굵기 + 현재 탭 24×3px 남색 막대
   return (
     <header className="sticky top-0 z-30 border-b bg-canvas">
