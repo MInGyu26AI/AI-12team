@@ -6,7 +6,7 @@ import "./globals.css";
 // 시안 "로즈 & 올리브 수채화" 글꼴: 한글 본문 Noto Sans KR, 영어 큰 제목 Inter Tight 800, 작은 라벨 IBM Plex Mono,
 // 이탤릭 포인트 Instrument Serif, 로고 글자 Orbitron 900. 한글 글리프는 구글이 쪼갠 조각(unicode-range)으로 필요한 만큼만 내려받는다.
 const notoSansKr = Noto_Sans_KR({ weight: ["300", "400", "500", "700", "800"], subsets: ["latin"], display: "swap", variable: "--font-noto-sans-kr" });
-const interTight = Inter_Tight({ weight: "800", subsets: ["latin"], display: "swap", variable: "--font-inter-tight" });
+const interTight = Inter_Tight({ weight: ["700", "800"], subsets: ["latin"], display: "swap", variable: "--font-inter-tight" });
 const plexMono = IBM_Plex_Mono({ weight: ["400", "500"], subsets: ["latin"], display: "swap", variable: "--font-plex-mono" });
 const instrumentSerif = Instrument_Serif({ weight: "400", style: "italic", subsets: ["latin"], display: "swap", variable: "--font-instrument-serif" });
 const orbitron = Orbitron({ weight: "900", subsets: ["latin"], display: "swap", variable: "--font-orbitron" });
