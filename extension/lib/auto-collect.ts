@@ -129,11 +129,17 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
       if (baselinePath !== location.pathname) {
         const sameChat = site.isConversationPage() && continuesNewChat(messages);
         baselinePath = location.pathname;
-        newChat = null;
+        newChat = null; lateHistory = false; // 늦게 그려지는 지난 대화는 스크립트가 시작한 그 주소에서만 기다린다
         if (!sameChat) {
           baseline.clear(); excludedUsers.clear(); markBoundary(result);
           return;
         }
+      }
+      // 켜진 채로 지난 대화(/c/…)를 새로 열면 메시지가 스크립트보다 늦게 그려진다. 처음 읽힌 메시지는 지난 대화로 보고 보내지 않는다.
+      // 트레이드오프: 처음부터 빈 /c/ 화면에서 바로 한 첫 질문은 놓칠 수 있다 (지난 대화를 보내는 것보다 낫다)
+      if (lateHistory && messages.length) {
+        lateHistory = false; markBoundary(result);
+        return;
       }
       if (!site.isConversationPage()) {
         if (stopping && !stopping.awaiting && !pending.size) settleStop({ ok: true });
@@ -194,6 +200,7 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
   // Snapshot synchronously; a delayed baseline would swallow a question sent just after enabling.
   baselinePath = location.pathname;
   markBoundary();
+  let lateHistory = site.isConversationPage() && !site.extract().messages.length;
   const poll = () => {
     if (invalidated) return;
     observe();
@@ -211,7 +218,10 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
   const activityChanged = (wasActive: boolean, active: boolean) => {
     if (!wasActive && active) {
       stopping = null;
-      markBoundary(); // includes unfinished/pre-existing questions, not just finished answers
+      const result = site.extract();
+      // 설정을 처음 읽을 때도 꺼짐→켜짐으로 들어온다. 그때 화면이 아직 비어 있으면 늦게 그려질 지난 대화를 계속 기다린다
+      if (metadata(result).length) lateHistory = false;
+      markBoundary(result); // includes unfinished/pre-existing questions, not just finished answers
       signature = ''; readyAt = Infinity;
     } else if (!active && !stopping) {
       clearTimeout(timer);
@@ -224,6 +234,7 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
     clearTimeout(timer);
     if (baselinePath === null) baselinePath = location.pathname;
     const result = site.extract();
+    if (lateHistory && result.messages.length) { lateHistory = false; markBoundary(result); }
     if (!site.isConversationPage()) rememberNewChat();
     const observed = metadata(result);
     const lastUser = observed.findLast((m) => m.role === 'user');
@@ -239,10 +250,17 @@ export function startAutoCollect(ctx: ContentScriptContext, { site, overlay, isA
     void sendFresh().then(() => { if (!stopping?.settled) void sendFresh(); });
     return promise;
   };
+  // 백그라운드가 수집을 끄지 못했을 때(collection.configure 실패) 중지 대기를 풀고 수집을 이어 간다
+  const cancelStop = () => {
+    if (!stopping) return;
+    const current = stopping;
+    stopping = null; signature = ''; readyAt = Infinity;
+    if (!current.settled) { current.settled = true; current.resolve({ ok: false, error: '수집을 끄지 못해 계속 수집해요.' }); }
+  };
   ctx.onInvalidated(() => {
     invalidated = true; observer.disconnect();
     clearTimeout(timer); clearTimeout(pollTimer); clearTimeout(followTimer);
     settleStop({ ok: false, error: '페이지가 닫혀 마지막 답변 저장을 확인하지 못했어요.' });
   });
-  return { markSeen, activityChanged, prepareStop };
+  return { markSeen, activityChanged, prepareStop, cancelStop };
 }

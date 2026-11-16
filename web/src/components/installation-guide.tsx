@@ -34,7 +34,7 @@ export function InstallationGuide({ downloads, version }: { downloads: DesktopDo
   };
   return <div className="space-y-7">
     <section className="rounded-xl border bg-card p-6"><h2 className="text-lg font-semibold">1. 내 컴퓨터에 맞는 SyncUp 앱 받기</h2>
-      <p className="mt-2 text-sm text-muted-foreground">Python이나 개발 도구를 따로 설치할 필요 없어요. 받은 파일의 압축을 풀고 SyncUp 앱을 여세요.</p>
+      <p className="mt-2 text-sm text-muted-foreground">Python이나 개발 도구를 따로 설치할 필요 없어요. 받은 파일의 압축을 풀고 SyncUp 앱을 여세요. Windows는 폴더 안의 <b>SyncUp.exe</b>만 실행하면 돼요. 함께 있는 <code>_internal</code> 폴더(실행에 필요한 파일)는 지우거나 옮기지 말고 그대로 두세요.</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">{downloads.map(d => <div key={d.name} className="rounded-lg border p-4"><h3 className="font-semibold">{d.name}</h3><p className="mt-1 text-xs text-muted-foreground">{d.detail}</p>
         {d.url ? <a className="mt-4 inline-block font-semibold text-brand underline" href={d.url} rel="noreferrer">설치 파일 받기</a> : <p className="mt-4 text-sm text-muted-foreground">설치 파일 배포 준비 중</p>}</div>)}</div>
       {downloads.every(d => !d.url) && <p role="status" className="mt-4 text-sm">아직 설치 파일이 공개되지 않았어요. 가입과 팀 생성은 먼저 마칠 수 있어요. 다운로드가 준비된 뒤 이 페이지에서 계속해 주세요.</p>}

@@ -16,7 +16,9 @@ export interface RepoStatus {
   repo?: string; // owner/name
   branch?: string;
   files?: string[];
-  state?: "unknown" | "saved" | "unchanged" | "failed"; // unknown = 서버 시작 뒤 아직 확인 안 함
+  // unknown = 서버 시작 뒤 아직 확인 안 함, blocked = 비공개로 연결한 레포가 공개로 바뀌어 저장을 멈춤
+  state?: "unknown" | "saved" | "unchanged" | "failed" | "blocked";
+  reason?: "became-public"; // blocked 때
   pending?: boolean; // 저장 대기·진행 중
   commit?: RepoCommit | null;
   httpStatus?: number | null; // 실패 때
@@ -90,6 +92,8 @@ export function repoLine(s: RepoStatus | null, now = Date.now()): { tone: RepoTo
     const code = s.httpStatus ? ` (HTTP ${s.httpStatus})` : "";
     return { tone: "error", text: `${name} · 레포 저장 실패${code} · 다음 변경 때 다시 저장해요` };
   }
+  if (s.state === "blocked")
+    return { tone: "error", text: `${name} · 레포가 공개로 바뀌어 저장을 멈췄어요 · 공개 동의 후 다시 연결하거나 비공개로 되돌려 주세요` };
   if ((s.state === "saved" || s.state === "unchanged") && s.commit) {
     const when = s.commit.at ? ` · ${sinceText(s.commit.at, now)}` : "";
     return { tone: "ok", text: `${name} · 레포에 저장됨 ✓${when}` };

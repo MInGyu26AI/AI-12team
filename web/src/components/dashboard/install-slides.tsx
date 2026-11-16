@@ -129,7 +129,7 @@ function DownloadsSlide() {
           아직 설치 파일이 공개되지 않았어요. 다운로드가 준비된 뒤 다시 열어 계속해 주세요.
         </p>
       )}
-      <p className="text-[13px] text-ink-2">이 PC에 맞는 파일 하나만 받으면 돼요. 압축을 풀고 SyncUp 앱을 여세요.</p>
+      <p className="text-[13px] leading-relaxed text-ink-2">이 PC에 맞는 파일 하나만 받으면 돼요. 압축을 풀고 SyncUp 앱을 여세요. Windows는 폴더 안의 <b className="font-medium text-ink">SyncUp.exe</b>만 실행하면 돼요. 함께 있는 <code className="bg-blush/50 px-1 font-mono text-xs">_internal</code> 폴더(실행에 필요한 파일)는 지우거나 옮기지 말고 그대로 두세요.</p>
     </>
   );
 }

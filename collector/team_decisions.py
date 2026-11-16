@@ -9,6 +9,7 @@ import re
 import unicodedata
 
 from stable_ids import digest
+from team_client import TEAM_ERRORS
 
 # Team decisions sent with each batch (the latest approvals), and the length of each content line.
 MAX_DECISIONS = 30
@@ -44,7 +45,7 @@ def current_decisions(pipeline, team_id):
     [] when the team server cannot be read or answers in another shape, so classification goes on as before."""
     try:
         result = pipeline.client.request(f'teams/{team_id}/board')
-    except (OSError, ValueError):  # unreachable, HTTP error, or not JSON
+    except TEAM_ERRORS:  # unreachable, HTTP error, a cut-off answer, or not JSON
         return []
     if not isinstance(result, dict) or result.get('team_id') != team_id or not isinstance(result.get('items'), list):
         return []

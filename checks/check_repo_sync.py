@@ -438,6 +438,7 @@ class LinkChangeDuringSave(unittest.TestCase):
             return dict(sha=f'sha-{target.repo}-{len(self.saved_to)}', html_url=f'https://github.example/{target.repo}',
                         committer=dict(date='2026-11-15T00:00:00Z'))
         self.enterContext(patch.object(repo_sync, 'save', held_save))
+        self.enterContext(patch.object(repo_sync, 'is_private', lambda target: True))  # never the real GitHub
 
     def save_in_background(self):
         job = repo_sync._Job('token')
@@ -665,6 +666,34 @@ class RepoLinkTeam(TeamIsolation):
             self.settled()
         saved_to = {p.split('/')[3] for m, p, *_ in self.fake.requests if m == 'PATCH'}
         self.assertEqual(saved_to, {'new'})
+
+    def test_a_private_link_that_became_public_stops_saving_until_consent(self):
+        self.link(data=dict(repo='team/repo', token=WEB_TOKEN))
+        self.share('d1', 'DB = PostgreSQL')
+        self.assertEqual(self.settled()['state'], 'saved')
+        reads = lambda: sum(m == 'GET' and p.endswith('/repos/team/repo') for m, p, *_ in self.fake.requests)  # noqa: E731
+        before = reads()
+        self.share('d2', 'DB = MySQL')  # within the cache time: the 'still private' answer is reused
+        self.assertEqual(self.settled()['state'], 'saved')
+        self.assertEqual(reads(), before)
+        commits = len(self.fake.commits())
+        self.fake.info['private'] = False  # someone made it public on GitHub
+        with patch.object(repo_sync, 'VISIBILITY_CACHE_SECONDS', 0):
+            self.share('d3', 'DB = SQLite', user='Alice')
+            status = self.settled()
+            self.assertEqual((status['state'], status['reason'], status['private']), ('blocked', 'became-public', True))
+            self.assertEqual(len(self.fake.commits()), commits)
+            self.fake.info['private'] = True
+            self.fake.fail_next = ('GET', '/repos/', 502)  # visibility unknown: not committed, a normal failure
+            self.share('d4', 'DB = Oracle')
+            self.assertEqual(self.settled()['state'], 'failed')
+            self.assertEqual(len(self.fake.commits()), commits)
+            self.fake.info['private'] = False
+            self.assertTrue(self.link(data=dict(repo='team/repo', token=WEB_TOKEN, acceptPublic=True))[1]['ok'])
+            self.assertEqual((self.status()['state'], self.status()['private']), ('unknown', False))
+            self.share('d5', 'DB = DuckDB')
+            self.assertEqual(self.settled()['state'], 'saved')  # consented: public saves go on
+        self.assertTrue(any('Alice 승인' in m for m in self.fake.commits()[:2]), self.fake.commits())  # the blocked batch's people are named in the next commit
 
     def test_other_teams_can_neither_read_nor_change_it_even_in_sql(self):
         self.link(data=dict(repo='team/repo', token=WEB_TOKEN))

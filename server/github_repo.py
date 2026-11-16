@@ -106,6 +106,14 @@ def _previous_state(target, current):
     return previous if isinstance(previous, dict) else {}
 
 
+def is_private(target, timeout=VERIFY_TIMEOUT_SECONDS):
+    """Whether GitHub says the repository is private now; GitHubError when it cannot say."""
+    repo = call(target, 'GET', '', timeout=timeout)
+    if not isinstance(repo, dict) or not isinstance(repo.get('private'), bool):
+        raise GitHubError('GitHub 레포 정보 형식 오류')
+    return repo['private']
+
+
 def verify(target, timeout=VERIFY_TIMEOUT_SECONDS):
     """Whether `target.token` can commit to `target.branch`: (None, private) when it can, else (reason, private).
 
