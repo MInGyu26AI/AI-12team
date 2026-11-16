@@ -34,7 +34,13 @@ class Onboarding(TeamIsolation):
         code = self.supabase.login(challenge_of(verifier), user or self.identity)
         return self.call('POST', '/onboarding/login', data=dict(code=code, verifier=verifier, name=name))
 
-    def team(self, token, request_id=None, name='새 팀'):
+    def consent(self, token, **change):
+        return self.call('POST', '/onboarding/consent', token,
+                         dict(dict(terms='beta-0.1', privacy='beta-0.1', age14=True, transfer=True), **change))
+
+    def team(self, token, request_id=None, name='새 팀', consent=True):
+        if consent and len(token) == 43:
+            self.consent(token)  # same versions again keep the first agreed_at
         return self.call('POST', '/onboarding/teams', token,
                          dict(request_id=request_id or str(uuid.uuid4()), name=name, topic='합성 프로젝트'))
 
@@ -184,6 +190,7 @@ class Onboarding(TeamIsolation):
 
     def test_multiline_topic_is_accepted_and_names_stay_single_line(self):
         token = self.login()[1]['session']
+        self.consent(token)
         status, body = self.call('POST', '/onboarding/teams', token, dict(request_id=str(uuid.uuid4()), name='팀\n이름', topic='주제'))
         self.assertEqual((status, body['error']), (400, '팀 이름을 확인해 주세요. (한 줄, 80자 이하)'))
         status, body = self.call('POST', '/onboarding/teams', token, dict(request_id=str(uuid.uuid4()), name='팀', topic='주제\x00'))
@@ -218,6 +225,52 @@ class Onboarding(TeamIsolation):
         finally:
             onboarding.SESSION_LIMIT.calls.clear()
             onboarding.SESSION_LIMIT.calls.extend(saved)
+
+    def test_consent_gates_team_creation(self):
+        token = self.login()[1]['session']
+        self.assertIsNone(self.call('GET', token=token)[1]['consent'])
+        status, body = self.team(token, consent=False)
+        self.assertEqual((status, body['error']), (403, '먼저 이용약관과 개인정보 처리방침에 동의해 주세요.'))
+        status, body = self.consent(token, terms='beta-0.0')
+        self.assertEqual((status, body['error']), (409, '약관이 바뀌었어요. 화면을 새로고침해 다시 확인해 주세요.'))
+        for change in (dict(age14=False), dict(transfer='yes'), dict(extra=1)):
+            self.assertEqual(self.consent(token, **change)[0], 400, change)
+        self.assertIsNone(self.call('GET', token=token)[1]['consent'])
+        status, signed = self.consent(token)
+        self.assertEqual(status, 200)
+        self.assertEqual((signed['consent']['terms'], signed['consent']['privacy']), ('beta-0.1', 'beta-0.1'))
+        self.assertRegex(signed['consent']['at'], r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$')
+        self.assertEqual(signed['teams'], [])
+        time.sleep(1.1)
+        self.assertEqual(self.consent(token)[1]['consent'], signed['consent'])  # first timestamp kept
+        self.assertEqual(self.call('GET', token=token)[1]['consent'], signed['consent'])
+        self.assertEqual(self.team(token, consent=False)[0], 200)
+        with psycopg.connect(self.admin_dsn) as c:  # a newer document version requires consent again
+            c.execute("UPDATE syncup.onboarding_consents SET terms_version='beta-0.0'")
+        self.assertIsNone(self.call('GET', token=token)[1]['consent'])
+
+    def test_decline_deletes_only_a_fresh_account(self):
+        token = self.login()[1]['session']
+        other = self.login()[1]['session']  # a second session of the same account goes too
+        user = self.call('GET', token=token)[1]['id']
+        self.assertEqual(self.call('POST', '/onboarding/decline', token, {'x': 1})[0], 400)
+        self.assertEqual(self.call('POST', '/onboarding/decline', token, {}), (200, {'deleted': True}))
+        self.assertEqual(self.call('GET', token=other)[0], 401)
+        with psycopg.connect(self.admin_dsn) as c:
+            for table, column in (('users', 'id'), ('identities', 'user_id'), ('onboarding_sessions', 'user_id')):
+                self.assertEqual(c.execute(f'SELECT count(*) FROM syncup.{table} WHERE {column}=%s', (user,)).fetchone()[0], 0)
+        again = self.login()[1]['session']  # the same GitHub account can sign up afresh
+        self.assertNotEqual(self.call('GET', token=again)[1]['id'], user)
+        refused = (409, {'error': '이미 동의했거나 팀이 있는 계정은 여기서 지울 수 없어요. 문의처로 요청해 주세요.'})
+        self.consent(again)
+        self.assertEqual(self.call('POST', '/onboarding/decline', again, {}), refused)
+        member = self.login(github_user(9991020, 'member'))[1]['session']
+        member_id = self.call('GET', token=member)[1]['id']
+        with psycopg.connect(self.admin_dsn) as c:
+            c.execute('INSERT INTO syncup.memberships(team_id,user_id) VALUES (%s,%s)', (self.teams['A'], member_id))
+        self.assertEqual(self.call('POST', '/onboarding/decline', member, {}), refused)
+        self.assertEqual(self.call('GET', token=member)[0], 200)
+        self.assertEqual(self.call('POST', '/onboarding/decline', secrets.token_urlsafe(32), {})[0], 401)
 
     def test_migration_twice_keeps_account_team_and_membership(self):
         token = self.login()[1]['session']

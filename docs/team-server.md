@@ -86,6 +86,25 @@ python3 server/team_admin.py identity --provider github --subject <숫자 ID> --
 - `key_events`에 발급과 거절을 남긴다. 키·토큰·IP·공급자 사용자 ID는 넣지 않는다(등록 안 된 신원은 공급자 이름만). 관리 계정으로 조회한다.
 - `syncup_api`는 `tokens`·`identities`·`key_events`를 직접 읽거나 쓰지 못하고 두 함수만 실행한다. 다만 이 함수 때문에 `syncup_api` 비밀번호가 새면 등록된 팀원의 웹 키를 만들 수 있고, 그 키는 비밀번호를 바꿔도 남는다. 새면 비밀번호를 바꾸고 `revoke-tokens --via web`으로 웹 키를 모두 폐기한 뒤 각자 다시 받는다.
 
+## 웹 가입과 약관 동의
+
+웹 가입(`server/onboarding.py`, SQL은 `server/team_onboarding.sql`)은 GitHub 로그인 직후 30분짜리 가입 세션(`Authorization: Bearer`)을 준다. 이 세션은 연결 키가 아니다.
+
+| 요청 | 하는 일 |
+|---|---|
+| `POST /onboarding/login` | GitHub code·verifier로 계정을 만들거나 열고 가입 세션을 준다 |
+| `GET /onboarding` | `{id, name, teams, consent}`. `consent`는 현재 버전에 동의했으면 `{"terms","privacy","at"(UTC ISO8601)}`, 아니면 `null` |
+| `POST /onboarding/consent` | 본문은 정확히 `{"terms":"beta-0.1","privacy":"beta-0.1","age14":true,"transfer":true}`. 다른 키·값은 400, 버전이 서버 현재 값과 다르면 409. 응답은 `GET /onboarding`과 같다 |
+| `POST /onboarding/decline` | 본문 `{}`. 동의 기록도 팀(소속·직접 만든 팀)도 없는 계정이면 계정·GitHub 신원·가입 세션을 지우고 `{"deleted":true}`. 아니면 409 |
+| `POST /onboarding/teams` | 팀 만들기. 현재 버전 동의가 없으면 403 |
+| `DELETE /onboarding` | 로그아웃 |
+
+- 필수 4항목: 만 14세 이상, 이용약관, 개인정보 수집·이용(처리방침), 개인정보 국외 이전 안내 확인. 서버 현재 버전은 `onboarding.py`의 `TERMS_VERSION`·`PRIVACY_VERSION` 한 곳에만 둔다(`beta-0.1`).
+- 기록은 `syncup.onboarding_consents`(계정, 이용약관 버전, 처리방침 버전, 두 확인 값, `agreed_at`)에 버전별 한 줄. 같은 버전으로 다시 동의하면 처음 시각을 유지한다. 버전을 올리면 기존 계정도 `consent=null`이 되어 다시 동의해야 팀을 만들 수 있다. IP·브라우저 정보는 남기지 않는다.
+- 거절 삭제는 동의 기록이 하나라도 있거나 팀이 있는 계정은 하지 않는다. 키·키 발급 기록·초대 참여 기록처럼 다른 기능이 남긴 줄이 있어도 외래 키 때문에 지우지 않고 409를 준다.
+- 표는 강제 RLS, `syncup_api` 직접 접근 금지이고, `onboarding_consent`·`onboarding_decline` 함수만 실행한다. `migrate-integration`이 `team_onboarding.sql`을 다시 적용하므로 기존 DB도 같은 명령으로 올라간다.
+- 동의 검사는 웹 가입의 팀 만들기에만 있다. 초대 링크 참여·연결 키 발급(`POST /keys`)은 따로 동의를 확인하지 않는다.
+
 ## 서버 실행
 
 `SYNCUP_DATABASE_URL`에 `syncup_api` 연결 주소를 넣고 켠다. 비밀번호는 `api-db-password.key`의 값이다.

@@ -41,9 +41,15 @@ ERRORS = {
     'limited': (429, '로그인 횟수가 많아요. 잠시 뒤 다시 시도해 주세요.'),
     'team_limit': (409, '직접 만들 수 있는 팀은 계정당 3개예요. 기존 팀으로 계속해 주세요.'),
     'request_conflict': (409, '이전 요청과 내용이 달라요. 화면을 새로고침해 주세요.'),
+    'consent_required': (403, '먼저 이용약관과 개인정보 처리방침에 동의해 주세요.'),
+    'consent_outdated': (409, '약관이 바뀌었어요. 화면을 새로고침해 다시 확인해 주세요.'),
+    'keep': (409, '이미 동의했거나 팀이 있는 계정은 여기서 지울 수 없어요. 문의처로 요청해 주세요.'),
 }
+# The only place the current documents are named. A new version makes every account consent again (GET consent=null).
+TERMS_VERSION = PRIVACY_VERSION = 'beta-0.1'
 FUNCTIONS = ('syncup.open_onboarding(text,text,text,text)', 'syncup.onboarding_account(text)',
-             'syncup.onboarding_create_team(text,uuid,text,text)', 'syncup.close_onboarding(text)')
+             'syncup.onboarding_create_team(text,uuid,text,text)', 'syncup.close_onboarding(text)',
+             'syncup.onboarding_consent(text,text,text)', 'syncup.onboarding_decline(text)')
 
 
 def digest(token):
@@ -65,6 +71,25 @@ def answer(result):
     if outcome in ERRORS:
         raise Rejected(*ERRORS[outcome])
     return result
+
+
+def account(c, token):
+    result = answer(c.execute('SELECT syncup.onboarding_account(%s) AS v', (digest(token),)).fetchone()['v'])
+    result['consent'] = next((item for item in result.pop('consents', [])
+                              if item['terms'] == TERMS_VERSION and item['privacy'] == PRIVACY_VERSION), None)
+    return result
+
+
+def consent(c, token, data):
+    if not isinstance(data, dict) or set(data) != {'terms', 'privacy', 'age14', 'transfer'} \
+            or not all(isinstance(data[key], str) for key in ('terms', 'privacy')) \
+            or data['age14'] is not True or data['transfer'] is not True:
+        raise Rejected(400, '필수 항목 4개에 모두 동의해 주세요.')
+    if (data['terms'], data['privacy']) != (TERMS_VERSION, PRIVACY_VERSION):
+        raise Rejected(*ERRORS['consent_outdated'])
+    answer(c.execute('SELECT syncup.onboarding_consent(%s,%s,%s) AS v',
+                     (digest(token), TERMS_VERSION, PRIVACY_VERSION)).fetchone()['v'])
+    return account(c, token)
 
 
 def login(issuer, dsn, data):
@@ -107,7 +132,13 @@ def dispatch(issuer, dsn, method, path, authorization, data):
         raise Rejected(*ERRORS['unauthorized'])
     with key_issue._connect(dsn) as c:
         if path == '/onboarding' and method == 'GET':
-            return answer(c.execute('SELECT syncup.onboarding_account(%s) AS v', (digest(token),)).fetchone()['v'])
+            return account(c, token)
+        if path == '/onboarding/consent' and method == 'POST':
+            return consent(c, token, data)
+        if path == '/onboarding/decline' and method == 'POST':
+            if data != {}:
+                raise Rejected(400, '요청 내용을 확인해 주세요.')
+            return answer(c.execute('SELECT syncup.onboarding_decline(%s) AS v', (digest(token),)).fetchone()['v'])
         if path == '/onboarding' and method == 'DELETE':
             c.execute('SELECT syncup.close_onboarding(%s)', (digest(token),))
             return {'signed_out': True}
@@ -118,9 +149,12 @@ def dispatch(issuer, dsn, method, path, authorization, data):
                 request_id = uuid.UUID(data['request_id'])
             except (ValueError, TypeError, AttributeError):
                 raise Rejected(400, '팀 생성 요청을 다시 시작해 주세요.') from None
+            name = checked_text(data['name'], 80, '팀 이름을 확인해 주세요. (한 줄, 80자 이하)')
+            topic = checked_text(data['topic'], 1200, '프로젝트 주제를 확인해 주세요. (1200자 이하)', multiline=True)
+            if account(c, token)['consent'] is None:  # consent rows are never removed, so no race with the insert
+                raise Rejected(*ERRORS['consent_required'])
             return answer(c.execute('SELECT syncup.onboarding_create_team(%s,%s,%s,%s) AS v',
-                          (digest(token), request_id, checked_text(data['name'], 80, '팀 이름을 확인해 주세요. (한 줄, 80자 이하)'),
-                           checked_text(data['topic'], 1200, '프로젝트 주제를 확인해 주세요. (1200자 이하)', multiline=True))).fetchone()['v'])
+                          (digest(token), request_id, name, topic)).fetchone()['v'])
     raise Rejected(405, '지원하지 않는 요청이에요.')
 
 
@@ -158,7 +192,7 @@ def handle(handler):
 def verify(c):
     from team_access import DatabaseSetupError
     hint = '셀프 가입 스키마를 적용하세요 (migrate-integration).'
-    for name in ('onboarding_sessions', 'onboarding_teams'):
+    for name in ('onboarding_sessions', 'onboarding_teams', 'onboarding_consents'):
         table = c.execute('''SELECT relrowsecurity, relforcerowsecurity,
             has_table_privilege(current_user, oid, 'SELECT,INSERT,UPDATE,DELETE') AS direct
             FROM pg_class WHERE oid=to_regclass(%s)''', ('syncup.' + name,)).fetchone()

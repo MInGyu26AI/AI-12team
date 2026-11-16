@@ -138,6 +138,7 @@ class ServerUpgrade(TeamIntegration):
         with psycopg.connect(self.api_dsn) as c:
             signed = c.execute('SELECT syncup.open_onboarding(%s,%s,%s,%s)',
                                ('1002','4'*64,onboarding_digest,'합성 가입 사용자')).fetchone()[0]
+            c.execute("SELECT syncup.onboarding_consent(%s,'beta-0.1','beta-0.1')", (onboarding_digest,))
             created = c.execute('SELECT syncup.onboarding_create_team(%s,%s,%s,%s)',
                                 (onboarding_digest,'9e702b17-b61b-40c1-a633-22c303158399',
                                  '합성 가입 팀','합성 가입 주제')).fetchone()[0]
