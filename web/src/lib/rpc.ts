@@ -14,6 +14,10 @@ const EXTENSION_TIMEOUT_MS = 25000;
 // 싱크 맞추기는 확장이 ChatGPT 대화를 최대 20건 받는 동안(건마다 1~2초, 탭 요청마다 최대 20초) 끝나지 않으므로 더 오래 기다린다
 // (docs/sync-contract.md 5장 '웹의 대기 시간')
 const SYNC_NOW_TIMEOUT_MS = 150000;
+// 수집을 끄는 요청(collection.configure 의 autoCollect:false)은 확장이 열린 ChatGPT 탭마다 진행 중인 답변이 저장되기를
+// 최대 65초(extension/lib/collection-boundary.ts) 기다린 뒤 수집기를 부른다 (수집기 호출은 최대 20초, native_host.py COLLECTOR_TIMEOUT).
+// 25초에 끊으면 아직 끄는 중인데 연결 오류가 뜨므로, 그 둘을 합친 시간보다 길게 기다린다
+const STOP_COLLECTION_TIMEOUT_MS = 90000;
 // 확장이 요청을 받았다는 신호(rpc-ack)를 기다리는 시간. 확장은 받자마자 보내므로 이 안에 없으면 확장이 없다고 본다
 const EXTENSION_ACK_MS = 2000;
 
@@ -38,8 +42,13 @@ class RpcTimeout extends Error {
   }
 }
 
+// 요청마다 따로 정하지 않으면 25초. 수집을 끄는 요청만 길게 기다린다
+function defaultTimeoutMs(method: string, params: Record<string, unknown>): number {
+  return method === "collection.configure" && params.autoCollect === false ? STOP_COLLECTION_TIMEOUT_MS : EXTENSION_TIMEOUT_MS;
+}
+
 /** 로컬 수집기 RPC. NEXT_PUBLIC_LOCAL_BRIDGE=true 면 웹 서버의 /api/local, 아니면 확장(web-bridge 콘텐츠 스크립트)을 거친다 */
-export async function rpc<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = EXTENSION_TIMEOUT_MS): Promise<T> {
+export async function rpc<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = defaultTimeoutMs(method, params)): Promise<T> {
   const payload = { version: LOCAL_RPC_VERSION, method, params };
   if (process.env.NEXT_PUBLIC_LOCAL_BRIDGE === "true") return viaLocalRoute<T>(payload);
   return viaExtension<T>(payload, timeoutMs);
