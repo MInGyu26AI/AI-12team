@@ -114,8 +114,8 @@ export function InstallationGuide({ downloads, version }: { downloads: DesktopDo
     </div>
 
     <details className="group rounded-xl border border-card-border p-5 sm:p-6"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">자동 분류를 사용하려면<ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" /></summary>
-      <p className="mt-3 text-sm">현재 버전은 PC의 개인정보 검사 모델과 개인 OpenAI API 키를 사용해요. 준비되지 않으면 분류가 대기하므로 설치 완료와 분류 준비를 구분해서 확인하세요.</p>
-      <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm"><li><a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="underline">Ollama</a>를 설치하고 실행하세요.</li><li>Ollama에서 <code>gemma4:e4b-it-qat</code> 모델을 준비하세요. 터미널에서는 <code>ollama pull gemma4:e4b-it-qat</code>로 받을 수 있어요.</li><li>SyncUp 앱의 ‘자동 분류 준비’에 본인의 OpenAI API 키를 넣고 수집기를 실행하세요. 키는 이번 실행 동안만 사용하고 파일에 저장하지 않아요.</li></ol>
+      <p className="mt-3 text-sm">서버 AI 지원 앱은 개인 API 키 없이 분류할 수 있어요. 이 PC에서 개인정보 검사를 통과한 내용만 SyncUp 서버를 거쳐 OpenAI로 보내며, 중계 내용은 서버에 저장하지 않아요.</p>
+      <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm"><li><a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="underline">Ollama</a>를 설치하고 실행하세요.</li><li>Ollama에서 <code>gemma4:e4b-it-qat</code> 모델을 준비하세요. 터미널에서는 <code>ollama pull gemma4:e4b-it-qat</code>로 받을 수 있어요. 모델이 없으면 대화는 PC에 보류돼요.</li><li>SyncUp 앱에서 팀을 선택하고 개인 키 입력 없이 수집기를 실행하세요. 서버 AI가 준비되지 않았거나 사용 한도를 넘으면 분류 대기로 남아요.</li></ol>
     </details>
     <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground"><Smartphone aria-hidden="true" className="mt-0.5 size-4 shrink-0" />휴대폰에서는 가입과 팀 생성까지 할 수 있어요. 대화 수집은 Mac·Windows의 Chrome과 SyncUp 앱에서 이어가세요.</p>
   </div>;

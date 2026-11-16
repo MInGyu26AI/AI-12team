@@ -15,6 +15,7 @@ from psycopg.conninfo import conninfo_to_dict
 
 import key_issue
 import notion_sync
+import ai_proxy
 from repo_sync import target_from_env
 from team_access import DatabaseSetupError, verify_database
 from team_server import TeamHandler, TeamServer
@@ -80,6 +81,7 @@ def main():
         target, notion = save_targets()
         issuer = key_issue.issuer_from_env()
         verify_database(dsn, web_keys=issuer is not None)
+        ai_proxy.verify_enabled(dsn)
     except (SettingError, key_issue.SettingError, DatabaseSetupError) as error:
         raise SystemExit(str(error)) from None
     except (KeyError, ValueError, psycopg.Error):

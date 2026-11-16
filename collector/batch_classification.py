@@ -110,7 +110,13 @@ def _exclude_locally(pipeline, job, context):
 
 def _guarded_clients(pipeline, job, context, review):
     """AI clients that re-check the session before each request and refuse text the local review did not clear."""
-    llm, decider = pipeline.llm_factory(), pipeline.decider_factory()
+    from ai.syncup_ai.llm import from_env, decider_from_env
+    if (getattr(pipeline, 'server_ai', False) and pipeline.llm_factory is from_env
+            and pipeline.decider_factory is decider_from_env):
+        from team_ai import TeamAI
+        llm, decider = TeamAI(pipeline.client, job['team_id']), TeamAI(pipeline.client, job['team_id'])
+    else:
+        llm, decider = pipeline.llm_factory(), pipeline.decider_factory()
     guard = lambda: require_active(pipeline.db, job['team_id'], context['collectionStart'])
     llm.before_request = guard
     if decider:

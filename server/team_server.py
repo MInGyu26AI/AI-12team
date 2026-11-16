@@ -17,6 +17,7 @@ import uuid
 import psycopg
 
 import notion_sync
+import ai_proxy
 from conflict_checks import retry_check
 from conflict_resolution import resolve
 from conflict_scheduler import schedule
@@ -53,6 +54,7 @@ class TeamServer(http.server.ThreadingHTTPServer):
 
     def __init__(self, *args, **kwargs):
         self.checks_stop = threading.Event()
+        self.ai_slots = threading.BoundedSemaphore(4)
         self.repo_target = None  # repo_sync.RepoTarget when one team's state is saved to GitHub
         self.notion_target = None  # notion_sync.NotionTarget when one team's state is saved to a Notion page
         self.key_issuer = None  # key_issue.KeyIssuer when teammates get keys by logging in on the web
@@ -93,8 +95,10 @@ class TeamHandler(SecureHandler):
         try:
             parts, team_id = self.parse_path()
             token = self.bearer_token()
-            data = json.loads(self.body()) if self.command == 'POST' else None
-            if self.command == 'POST' and parts[2:3] == ['notion']:  # checks Notion outside any DB transaction
+            data = json.loads(self.body(limit=192*1024 if parts[2:3] == ['ai'] else 65536)) if self.command == 'POST' else None
+            if parts[2:3] == ['ai']:
+                result = ai_proxy.handle(self.server,token,team_id,self.command,parts[3:],data)
+            elif self.command == 'POST' and parts[2:3] == ['notion']:  # checks Notion outside any DB transaction
                 result = notion_sync.link_request(self.server, token, team_id, parts[3:], data)
             elif self.command == 'POST' and parts[2:3] == ['repo']:  # 7-1: checks GitHub outside any DB transaction
                 result = link_request(self.server, token, team_id, parts[3:], data)
@@ -104,6 +108,8 @@ class TeamHandler(SecureHandler):
                     if self.command == 'POST' and linked(self.server, team_id):
                         actor = c.execute('SELECT name FROM syncup.users').fetchone()['name']  # own row only (RLS)
             # Respond only after the transaction has committed, including idempotent retries.
+        except ai_proxy.ProxyError as error:
+            status, result = error.status, {'error': error.message}
         except AccessError as error:
             status, result = error.status, {'error': '접근할 수 없거나 허용되지 않은 요청입니다.'}
         except (ValueError, TypeError, KeyError, OverflowError):
@@ -114,7 +120,7 @@ class TeamHandler(SecureHandler):
             failure('team_api', error, team_id)
             status, result = 503, {'error': '팀 저장소를 확인할 수 없습니다.'}
         self.reply(status, json.dumps(result, ensure_ascii=False), 'application/json; charset=utf-8')
-        if status == 200 and team_id is not None:
+        if status == 200 and team_id is not None and parts[2:3] != ['ai']:
             # No worker runs on its own: any member's successful team request resumes that team's due checks.
             schedule(self.server, token, team_id)
             self.save_team_state(token, team_id, parts, actor)
@@ -230,6 +236,7 @@ def main():
         parser.error(str(error))
     try:
         verify_database(dsn, web_keys=issuer is not None)
+        ai_proxy.verify_enabled(dsn)
     except DatabaseSetupError as error:
         parser.error(str(error))
     except (ValueError, psycopg.Error):

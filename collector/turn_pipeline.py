@@ -6,6 +6,7 @@ then external AI), candidate_review (edit and approve), privacy_holds (held and 
 collection_settings and collection_status, team_relay (team requests); local_rpc dispatches RPC methods to them.
 """
 from contextlib import contextmanager
+import os
 import threading
 
 from ai.syncup_ai.config import load_env
@@ -31,6 +32,10 @@ class TurnPipeline:
             with connect(db) as c:
                 cache_profile(c, profile)
         load_env()
+        mode = os.environ.get('SYNCUP_AI_MODE', 'server')
+        if mode not in ('server', 'direct'):
+            raise ValueError('SYNCUP_AI_MODE must be server or direct')
+        self.server_ai = mode == 'server'
         # Every external AI request passes this on-device gate first; tests replace the classifier.
         self.privacy = local_privacy.Gate(classifier_from_env())
 

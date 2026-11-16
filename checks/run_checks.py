@@ -23,6 +23,7 @@ PY = sys.executable
 # server/requirements.txt (PostgreSQL); model = opt-in, needs Ollama with the default privacy model (privacy_model.DEFAULT_MODEL).
 CHECKS: list[tuple[str, list[str], str]] = [
     ('local', [PY, 'checks/check_pipeline.py'], '로컬 수집·배치·후보 저장·팀 요청 중계'),
+    ('local', [PY, 'checks/check_server_ai_local.py'], '서버 AI 전송 전 로컬 보류·개인 구간·세션 차단'),
     ('local', [PY, 'checks/check_sync_intake.py'], '계정 동기화 창·접수·화면 경로 중복 (docs/sync-contract.md 3장)'),
     ('local', [PY, 'checks/check_connectors.py'], '외부 서비스 연결 틀(메시지 변환·중복·토큰 파일·RPC·로컬 페이지)과 로컬 문자 인식 files.ocr'),
     ('local', [PY, 'checks/check_connector_notion.py'], '노션 연결(가짜 노션 서버: 설정·블록 변환·화자 규칙·커서·Retry-After·종단 간)'),
@@ -58,6 +59,7 @@ CHECKS: list[tuple[str, list[str], str]] = [
     ('team', [PY, 'checks/check_db_connection_recovery.py'], 'DB 연결 시간 초과·복구'),
     ('team', [PY, 'checks/check_db_operations.py'], 'DB 업그레이드·백업·복원'),
     ('team', [PY, 'checks/check_cloud_server.py'], '클라우드 HTTP 경계'),
+    ('team', [PY, 'checks/check_ai_proxy.py'], '서버 AI 인증·팀 격리·영속 사용량 제한·미승인 내용 비저장'),
     ('team', [PY, 'checks/check_web_keys.py'], '웹 로그인 키 발급: 가짜 Supabase → /keys → DB 함수·RLS → native host → 수집기'),
     ('team', [PY, 'checks/check_minimal_diagnostics.py'], '진단 기록 최소화'),
     ('team', [PY, 'checks/check_local_functional_http.py'], '네이티브 → 로컬 RPC → PostgreSQL → 다른 팀원'),

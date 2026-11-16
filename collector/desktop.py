@@ -122,6 +122,7 @@ class DesktopState:
             raise ValueError('AI 키 입력을 확인해 주세요.')
         desktop_setup.private_dir(self.root / 'web-project')
         env = child_environment()
+        env['SYNCUP_AI_MODE'] = 'direct' if api_key.strip() else 'server'
         if api_key.strip():
             env['OPENAI_API_KEY'] = api_key.strip()
         command = [str(self.executable), 'run', '--integrated', '--browser-only', '--start-paused',
@@ -157,6 +158,7 @@ class DesktopState:
 
 class SetupServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
+    request_queue_size = 16  # browser startup/reopen can connect concurrently before accept() runs
 
     def __init__(self, state):
         super().__init__(('127.0.0.1', 0), SetupHandler)

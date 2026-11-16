@@ -70,13 +70,13 @@ class TeamClient:
         self.user_id = None
         self.user_id = _uuid(user_id) if user_id is not None else self.me()['user_id']
 
-    def request(self, path, data=None):
+    def request(self, path, data=None, *, timeout=8):
         request = urllib.request.Request(self.api_url + path,
             None if data is None else json.dumps(data, ensure_ascii=False).encode(),
             {'Authorization': 'Bearer ' + self.token, 'Content-Type': 'application/json'})
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         try:
-            response = opener.open(request, timeout=8)
+            response = opener.open(request, timeout=timeout)
         except urllib.error.HTTPError as error:
             error.close()
             raise
