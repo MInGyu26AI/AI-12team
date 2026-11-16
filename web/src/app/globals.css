@@ -11,11 +11,12 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* 글꼴은 layout.tsx 에서 next/font 로 불러온 변수.
-     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로고는 글꼴 없이 path */
+     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로그인 후 영문 제목 Orbitron 900 · 로고는 글꼴 없이 path */
   --font-sans: var(--font-noto-sans-kr), "Noto Sans KR", -apple-system, system-ui, sans-serif;
   --font-display: var(--font-inter-tight), "Inter Tight", system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --font-serif: var(--font-instrument-serif), "Instrument Serif", Georgia, serif;
+  --font-brand: var(--font-orbitron), Orbitron, system-ui, sans-serif; /* 로그인 후 영문 제목(.app-shell .title-display) */
   --font-heading: var(--font-sans);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -181,21 +182,23 @@
 }
 
 /* ── 로그인 후 앱 틀 (components/dashboard/shell.tsx · 팝업): 랜딩은 그대로 두고 이 안에서만
-   글꼴 IBM Plex Sans KR, 테두리는 진갈색 12% 머리카락 선 1px, 영어 큰 제목은 같은 글꼴 700 ── */
+   테두리는 진갈색 12% 머리카락 선 1px. 한글 본문은 랜딩과 같은 Noto Sans KR(body 그대로),
+   굵은 영문 제목(Your teams. 등)은 로고와 같은 Orbitron. Orbitron 은 폭이 넓어 크기를 줄이고 줄바꿈을 허용한다 ── */
 .app-shell {
   --color-card-border: rgb(29 26 20 / 0.12);
   --color-border: rgb(29 26 20 / 0.12);
   --color-input: rgb(29 26 20 / 0.16);
   --border: rgb(29 26 20 / 0.12);
-  font-family: var(--font-plex-sans-kr), var(--font-noto-sans-kr), -apple-system, system-ui, sans-serif;
 }
 .app-shell .border {
   border-width: 1px;
 }
 .app-shell .title-display {
-  font-family: inherit;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-family: var(--font-brand);
+  font-weight: 900;
+  font-size: clamp(26px, 2.8vw, 38px);
+  letter-spacing: 0.01em;
+  line-height: 1.15;
 }
 
 /* ── 수채화 번짐 배경 (components/ui/watercolor-bg.tsx) ── */

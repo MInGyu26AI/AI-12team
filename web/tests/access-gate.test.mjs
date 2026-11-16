@@ -20,7 +20,7 @@ globalThis.window = {
   },
 };
 const { BRIDGE_FROM_EXT } = load("@shared/bridge");
-const { checkAccess, nextView, isTransientStatus } = load("@/components/app-access-gate");
+const { checkAccess, nextView, isTransientStatus, consentRedirect } = load("@/components/app-access-gate");
 const deliver = (data) => [...listeners].forEach((fn) => fn({ source: window, origin: location.origin, data: { source: BRIDGE_FROM_EXT, ...data } }));
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -131,4 +131,30 @@ test("열려 있던 화면도 막는 실패(계정 불일치·확장 없음·403
 test("확인에 성공하면 막힌 화면도 다시 열린다", () => {
   assert.deepEqual(nextView({ kind: "blocked", message: "x", account: alice }, ready()), ready());
   assert.deepEqual(nextView(ready(alice), ready(bob)), ready(bob));
+});
+
+// 약관·처리방침 동의: checkAccess·nextView 의 판정은 그대로이고, 화면이 결과의 계정을 보고 동의 화면으로 보낸다
+const consented = { terms: "beta-0.1", privacy: "beta-0.1", at: "2026-11-16T09:00:00Z" };
+
+test("동의하지 않은 계정은 PC 연결 결과와 상관없이 동의 화면으로 보낸다", () => {
+  assert.equal(consentRedirect(ready(), "/board"), "/signup/consent?next=%2Fboard");
+  assert.equal(consentRedirect({ kind: "failed", transient: false, message: "계정이 달라요", account: alice }, "/collect"), "/signup/consent?next=%2Fcollect");
+  assert.equal(consentRedirect(ready({ ...alice, consent: null }), "/review"), "/signup/consent?next=%2Freview");
+  assert.equal(consentRedirect(ready({ ...alice, consent: { ...consented, terms: "beta-0.0" } }), "/dashboard"), "/signup/consent?next=%2Fdashboard");
+});
+
+test("허용되지 않은 주소에서 와도 동의 뒤에는 대시보드로만 돌아온다", () => {
+  assert.equal(consentRedirect(ready(), "/unknown/page"), "/signup/consent?next=%2Fdashboard");
+});
+
+test("동의한 계정, 로그인 안 됨, 계정 없는 실패는 동의 화면으로 보내지 않는다", () => {
+  assert.equal(consentRedirect(ready({ ...alice, consent: consented }), "/board"), null);
+  assert.equal(consentRedirect({ kind: "login" }, "/board"), null);
+  assert.equal(consentRedirect({ kind: "failed", transient: true, message: "잠시 뒤" }, "/board"), null);
+});
+
+test("동의 기록이 있는 계정의 확인 결과는 예전과 같다", async () => {
+  reply(200, { ...alice, consent: consented });
+  collectorStatus = { userId: alice.id, teamId: "team-a" };
+  assert.deepEqual(await checkAccess(signal), ready({ ...alice, consent: consented }));
 });

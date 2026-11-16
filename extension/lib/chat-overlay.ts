@@ -31,17 +31,18 @@ const TEMPLATE = `
       border-radius: 14px; cursor: pointer; color: #3159c9; background: #fff; box-shadow: 0 3px 12px #0002; font: inherit; }
     button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
     button:disabled { opacity: .35; cursor: default; }
-    .wrap { color: light-dark(#20232a, #eceef4); }
+    .wrap { color: light-dark(#20232a, #ffffff); } /* 다크 모드 아이콘은 흰색 */
     button, summary { width: 48px; height: 48px; border: 0; border-radius: 0; background: transparent;
       color: inherit; box-shadow: none; }
     summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
     .maintenance { color: light-dark(#20232a, #eceef4); background: light-dark(#fff, #232428); }
     .tip { position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%); width: 244px;
-      max-width: calc(100vw - 98px); box-sizing: border-box; padding: 11px 14px; border-radius: 12px; background: #172033;
-      color: #fff; box-shadow: 0 6px 24px #0003; opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
+      max-width: calc(100vw - 98px); box-sizing: border-box; padding: 10px 14px; border-radius: 0; background: #1D1A14;
+      border: 1px solid rgb(255 255 255 / .14); /* 각진 진갈색(잉크) 상자. 옅은 테두리는 다크 화면에서 상자를 구분해 준다 */
+      color: #fff; box-shadow: 0 8px 24px rgb(29 26 20 / .12); opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
     .tip strong, .tip span { display: block; } .tip strong { font-weight: 650; margin-bottom: 4px; }
     .tip::after { content: ''; position: absolute; left: 100%; top: 0; width: 14px; height: 100%; }
-    .tip span { color: #d4def0; font-size: 12px; font-weight: 400; }
+    .tip span { color: rgb(255 255 255 / .78); font-size: 12px; font-weight: 400; }
     .tool:hover .tip, .tool:focus-within .tip { opacity: 1; visibility: visible; pointer-events: auto; }
     .tool.dismissed .tip { opacity: 0; visibility: hidden; }
     .toast { max-width: min(280px, calc(100vw - 40px)); padding: 10px 14px; border-radius: 12px; color: #fff;
@@ -101,12 +102,16 @@ export function createChatOverlay(actions: OverlayActions = {}): ChatOverlay {
   host.id = 'syncup-root';
   const shadow = host.attachShadow({ mode: 'open' });
   // Match the page theme, including ChatGPT's explicit dark class. No animation timer.
+  // ChatGPT 는 화면을 그린 뒤에 dark 클래스를 붙이기도 해서, 한 번만 보면 다크 화면에서도 밝은 화면용 진한 아이콘이 남는다.
+  // 그래서 <html> 의 class·style·color-scheme 이 바뀔 때와 OS 설정이 바뀔 때 다시 맞춘다 (아이콘 모양·애니메이션은 그대로)
   const updateTheme = () => {
     const root = document.documentElement;
     const scheme = getComputedStyle(root).colorScheme;
     host.style.colorScheme = root.classList.contains('dark') ? 'dark' : root.classList.contains('light') ? 'light' : scheme || 'light dark';
   };
   updateTheme();
+  new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', updateTheme);
   shadow.innerHTML = TEMPLATE;
   mountLucianIcons(shadow);
   // The vendor's default hover also includes keyboard/touch. Disable those bindings

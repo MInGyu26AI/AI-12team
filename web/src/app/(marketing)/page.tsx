@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronDown, Download } from "lucide-react";
+import { FeatureStory, type FeatureStep } from "@/components/landing/feature-story";
 import { AlertPreview, ApprovePreview, ConflictPreview, PastePreview, PopupPreview, RecordPreview } from "@/components/landing/previews";
 import { RollSteps, type RollStep } from "@/components/landing/roll-steps";
 import { StagesMotion } from "@/components/landing/stages-motion";
@@ -9,7 +10,7 @@ import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 
 // 서비스 첫 화면. Hero(별의 일생 상자 + 영어 제목 + 4단계 롤 링크, 시안 "로즈 & 올리브 수채화") →
-// Section 0~4 (기능별 한 화면 높이 760 · 왼쪽 글 + 오른쪽 제품 미리보기) → 이렇게 사용해요 → Section 5 확장 설치 → (Footer 는 layout)
+// Section 0~4 (기능별 한 화면 · 왼쪽 글 + 오른쪽 제품 미리보기. 넓은 화면은 스크롤하면 슬라이드처럼 바뀐다, components/landing/feature-story.tsx) → 이렇게 사용해요 → Section 5 확장 설치 → (Footer 는 layout)
 
 // 4단계 롤 링크 (components/landing/roll-steps.tsx). 한국어 제목·설명은 예전 'SyncUp이 하는 일' 카드 그대로, 영어 단어·한 줄은 시안
 const STEPS: RollStep[] = [
@@ -39,55 +40,64 @@ const heroPrimary = "button-mono inline-flex h-12 items-center justify-center ga
 const heroOutline = "button-mono inline-flex h-12 items-center justify-center gap-2 border border-ink px-6 text-[14px] text-ink hover:bg-white";
 const primaryLg = "button-mono inline-flex h-12 items-center justify-center gap-2 border border-ink bg-ink px-6 text-[15px] text-white hover:bg-brand-hover";
 
+// 기능 소개 5단계 (피그마 Section 0~4). 글·미리보기 내용은 그대로, 보여 주는 방식(슬라이드 / 쌓기)은 FeatureStory 가 정한다
+const FEATURES: FeatureStep[] = [
+  {
+    id: "overview",
+    en: "Every chat, one record.",
+    step: { label: "한눈에 보기", sub: "팀 결정 기록" },
+    title: <>팀원들의&nbsp; 대화가<br />한 곳에 모여요</>,
+    body: <>누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요.<br />주제·역할·작업별로 묶어서 보여 줘요.</>,
+    preview: <RecordPreview />,
+  },
+  {
+    id: "approve",
+    en: "Only what you approve.",
+    step: { index: 1, sub: "프로젝트 대화 · 승인 후 공유" },
+    title: <>프로젝트 대화만 모으고,<br />공유는 내가 정해요</>,
+    body: "ChatGPT 프로젝트 대화에서 결정·할 일·조사 후보를 찾아요. 내가 체크한 것만 팀에 올라가요. 승인하지 않은 내용은 팀에 보이지 않아요.",
+    bodyWidth: "max-w-[430px]",
+    preview: <ApprovePreview />,
+  },
+  {
+    id: "alert",
+    en: "Clashes, flagged first.",
+    step: { index: 2, sub: "대화 중 실시간 알림" },
+    title: <>대화하는 그 자리에서<br />어긋난 결정을 알려줘요</>,
+    body: "ChatGPT 웹에서 기존 팀 결정과 다른 내용이 나오면 바로 알림이 떠요. 대화를 멈추지 않고 확인할 수 있어요.",
+    bodyWidth: "max-w-[260px]",
+    preview: <AlertPreview />,
+  },
+  {
+    id: "conflict",
+    en: "Side by side, settled.",
+    step: { index: 3, sub: "결정 충돌 해결" },
+    title: <>엇갈린 결정은<br />그 자리에서 정리해요</>,
+    body: "기존 결정을 유지할지, 새 결정으로 바꿀지 바로 정해요.",
+    bodyWidth: "max-w-[230px]",
+    preview: <ConflictPreview />,
+  },
+  {
+    id: "record",
+    en: "Burst into the record.",
+    step: { index: 4, sub: "팀 결정 기록" },
+    title: <>언제, 누가, 왜 정했는지<br />한 곳에서 이어 써요</>,
+    body: "팀 기록을 복사해 새 AI 대화에 붙여 넣으면 팀의 맥락이 그대로 이어져요.",
+    bodyWidth: "max-w-[300px]",
+    preview: <PastePreview />,
+    cta: (
+      <Link href={START.href} className={cn(primaryLg, "mt-9")}>
+        {START.label}
+      </Link>
+    ),
+  },
+];
+
 export default function LandingPage() {
   return (
     <>
       <Hero />
-      <Feature
-        id="overview"
-        en="Every chat, one record."
-        step={{ label: "한눈에 보기", sub: "팀 결정 기록" }}
-        title={<>팀원들의&nbsp; 대화가<br />한 곳에 모여요</>}
-        body={<>누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요.<br />주제·역할·작업별로 묶어서 보여 줘요.</>}
-        preview={<RecordPreview />}
-      />
-      <Feature
-        id="approve"
-        en="Only what you approve."
-        step={{ index: 1, sub: "프로젝트 대화 · 승인 후 공유" }}
-        title={<>프로젝트 대화만 모으고,<br />공유는 내가 정해요</>}
-        body="ChatGPT 프로젝트 대화에서 결정·할 일·조사 후보를 찾아요. 내가 체크한 것만 팀에 올라가요. 승인하지 않은 내용은 팀에 보이지 않아요."
-        bodyWidth="max-w-[430px]"
-        preview={<ApprovePreview />}
-      />
-      <Feature
-        id="alert"
-        en="Clashes, flagged first."
-        step={{ index: 2, sub: "대화 중 실시간 알림" }}
-        title={<>대화하는 그 자리에서<br />어긋난 결정을 알려줘요</>}
-        body="ChatGPT 웹에서 기존 팀 결정과 다른 내용이 나오면 바로 알림이 떠요. 대화를 멈추지 않고 확인할 수 있어요."
-        bodyWidth="max-w-[260px]"
-        preview={<AlertPreview />}
-      />
-      <Feature
-        id="conflict"
-        en="Side by side, settled."
-        step={{ index: 3, sub: "결정 충돌 해결" }}
-        title={<>엇갈린 결정은<br />그 자리에서 정리해요</>}
-        body="기존 결정을 유지할지, 새 결정으로 바꿀지 바로 정해요."
-        bodyWidth="max-w-[230px]"
-        preview={<ConflictPreview />}
-      />
-      <Feature
-        id="record"
-        en="Burst into the record."
-        step={{ index: 4, sub: "팀 결정 기록" }}
-        title={<>언제, 누가, 왜 정했는지<br />한 곳에서 이어 써요</>}
-        body="팀 기록을 복사해 새 AI 대화에 붙여 넣으면 팀의 맥락이 그대로 이어져요."
-        bodyWidth="max-w-[300px]"
-        preview={<PastePreview />}
-        cta
-      />
+      <FeatureStory steps={FEATURES} />
       <HowTo />
       <Install />
     </>
@@ -148,61 +158,6 @@ function Hero() {
         <p className="flex items-center gap-2 text-[13px] text-ink-3">
           아래로 내리면 기능을 하나씩 보여드려요 <ChevronDown className="size-4" aria-hidden />
         </p>
-      </div>
-    </section>
-  );
-}
-
-type Step = { label?: string; index?: number; sub: string };
-
-// 단계 옆 원소 표기 (별의 일생: 수소 → 헬륨 → 탄소 → 철 → 초신성)
-const ELEMENT = ["", "H → He", "He → C", "Fe", "✦"];
-
-function StepLine({ step }: { step: Step }) {
-  return (
-    <p className="flex flex-wrap items-center gap-3 text-[12px]">
-      <span className="label-mono text-ink">{step.label ?? `0${step.index} / 04`}</span>
-      {step.index && (
-        <span aria-hidden className="flex gap-1">
-          {[1, 2, 3, 4].map((i) => (
-            <span key={i} className={cn("h-[3px] w-6", i === step.index ? "bg-ink" : "bg-blush-deep")} />
-          ))}
-        </span>
-      )}
-      {step.index && <span className="font-serif text-[15px] text-ink-2 italic">{ELEMENT[step.index]}</span>}
-      <span className="button-mono text-ink-3">{step.sub}</span>
-    </p>
-  );
-}
-
-// 기능 섹션 (피그마 Section 0~4): 위 구분선 · 넓은 화면 높이 760 · 왼쪽 글 472 + 오른쪽 미리보기 560
-function Feature({ id, en, step, title, body, bodyWidth, preview, cta }: {
-  id: string;
-  en: string; // 영어 큰 제목 (Inter Tight 800)
-  step: Step;
-  title: React.ReactNode;
-  body: React.ReactNode;
-  bodyWidth?: string;
-  preview: React.ReactNode;
-  cta?: boolean;
-}) {
-  return (
-    <section id={id} className="scroll-mt-16 border-t border-ink">
-      <div className="mx-auto flex max-w-[1280px] flex-col gap-12 px-gutter py-16 sm:px-10 lg:min-h-[760px] lg:flex-row lg:items-center lg:px-20 lg:py-0">
-        <div className="lg:w-[472px] lg:shrink-0">
-          <StepLine step={step} />
-          <h2 className="mt-6">
-            <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">{en}</span>
-            <span className="mt-4 block text-xl leading-[1.4] font-bold break-keep text-ink sm:text-2xl">{title}</span>
-          </h2>
-          <p className={cn("mt-5 text-base leading-[1.7] text-ink-body break-keep sm:text-[17px]", bodyWidth)}>{body}</p>
-          {cta && (
-            <Link href={START.href} className={cn(primaryLg, "mt-9")}>
-              {START.label}
-            </Link>
-          )}
-        </div>
-        <div className="flex min-w-0 flex-1 justify-center lg:justify-start">{preview}</div>
       </div>
     </section>
   );

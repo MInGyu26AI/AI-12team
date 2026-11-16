@@ -11,7 +11,7 @@ import type { PcState } from "./dashboard/context";
 import { PcRequiredPanel } from "./dashboard/pc-required";
 import { buttonOutline, card } from "./ui/surface";
 import { USE_MOCK } from "@/lib/api";
-import { connectionProblem, loginUrl, readAccount, type Account } from "@/lib/auth-navigation";
+import { connectionProblem, consentUrl, loginUrl, needsConsent, readAccount, type Account } from "@/lib/auth-navigation";
 import { refreshCollector, useCollectorStatus } from "@/lib/local-collector";
 import { ExtensionMissing, rpc } from "@/lib/rpc";
 import { cn } from "@/lib/utils";
@@ -24,8 +24,8 @@ type CheckResult =
   | { kind: "failed"; transient: boolean; message: string; account?: Account };
 
 const PC_MISSING = "이 PC에 SyncUp을 연결하면 내 대화와 팀 기록을 볼 수 있어요.";
-// PC가 연결되지 않아도 여는 화면: 대시보드(팀 카드 + 연결 띠)와 대화 수집(연결 안내). 나머지는 틀 안에 'PC 연결 필요'를 보인다
-const pcOptional = (pathname: string) => pathname === "/dashboard" || pathname === "/collect";
+// PC가 연결되지 않아도 여는 화면: 대시보드(팀 카드 + 연결 띠), 대화 수집(연결 안내), 마이페이지(PC와 상관없는 계정 화면). 나머지는 틀 안에 'PC 연결 필요'를 보인다
+const pcOptional = (pathname: string) => pathname === "/dashboard" || pathname === "/collect" || pathname === "/me";
 // 팀 만들기·초대 참여 화면은 사이드바 없이 헤더만
 const setupFlow = (pathname: string) => pathname.startsWith("/team/new") || pathname.startsWith("/join");
 
@@ -65,6 +65,13 @@ export async function checkAccess(signal: AbortSignal): Promise<CheckResult> {
   }
 }
 
+/** 약관·처리방침에 아직(또는 바뀐 버전에) 동의하지 않은 계정이면 동의 화면 주소, 아니면 null.
+ *  PC 연결이 막힌 결과(failed)에도 계정은 있으므로 PC 상태와 상관없이 동의가 먼저다. checkAccess 의 판정은 그대로 두고 화면 쪽에서 쓴다 */
+export function consentRedirect(result: CheckResult, pathname: string): string | null {
+  const account = result.kind === "login" ? undefined : result.account;
+  return account && needsConsent(account) ? consentUrl(pathname) : null;
+}
+
 /** 확인 결과에 따른 다음 화면. 이미 열린(ready) 화면은 일시 실패 한 번으로 막지 않고, 다음 확인 때 다시 본다 */
 export function nextView(previous: View, result: CheckResult): View {
   if (result.kind === "login") return { kind: "checking" };
@@ -95,6 +102,9 @@ function CheckedApp({ pathname, children }: { pathname: string; children: React.
       try {
         const result = await checkAccess(controller.signal);
         if (controller.signal.aborted) return;
+        // 동의하지 않은 계정에는 앱 화면(과 개인 카드)을 열지 않고 동의 화면으로 보낸다
+        const consent = consentRedirect(result, pathname);
+        if (consent) { location.replace(consent); setView({ kind: "checking" }); return; }
         if (result.kind === "login") location.replace(loginUrl(pathname));
         // PC 미연결로 열려 있던 틀도 일시 실패 한 번으로 닫지 않는다
         setView(previous => result.kind === "failed" && result.transient && previous.kind === "blocked" && previous.account
