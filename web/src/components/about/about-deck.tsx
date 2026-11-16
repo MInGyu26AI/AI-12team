@@ -7,6 +7,7 @@ import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import { START } from "@/lib/start-link";
 import { useSignedIn } from "@/lib/use-signed-in";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 const PROBLEMS = [
   { title: "팀원마다 다른 AI", body: "누구는 ChatGPT, 누구는 Claude·Gemini. 무료 AI를 섞어 쓰면 대화가 각자 계정에 흩어져요." },
@@ -15,11 +16,11 @@ const PROBLEMS = [
 ];
 
 const DIFFERENTIATORS = [
-  { title: "결정 충돌 감지", tone: "bg-ink text-white", label: "text-blush", text: "text-white/80",
+  { title: "결정 충돌 감지", tone: "bg-ink text-white", text: "text-white/80",
     body: "새로 올라온 결정을 같은 주제의 기존 결정과 비교해 같음·변경·충돌을 판정하고, 어긋나면 근거 문장과 함께 먼저 알려줘요." },
-  { title: "본인 승인 후 공유", tone: "bg-blush text-ink", label: "text-ink-2", text: "text-ink-body",
+  { title: "본인 승인 후 공유", tone: "bg-blush text-ink", text: "text-ink-body",
     body: "AI가 고른 후보는 내 승인함에만 쌓여요. 내가 체크한 카드만 팀에 올라가고, 원본 대화 전체는 팀 서버로 가지 않아요." },
-  { title: "설치 부담 없이 누구나", tone: "bg-ok-soft text-ink", label: "text-ok", text: "text-ink-body",
+  { title: "설치 부담 없이 누구나", tone: "bg-ok-soft text-ink", text: "text-ink-body",
     body: "브라우저 확장 하나면 ChatGPT 대화를 10회마다 자동으로 모아요. 확장을 못 써도 대화 붙여넣기·내보내기 파일로 쓸 수 있어요." },
 ];
 
@@ -31,12 +32,10 @@ const KINDS = [
 ];
 
 const PRIVACY = [
-  "설정한 범위의 대화에서 AI가 팀과 관련된 내용을 고르고, 내가 승인한 것만 팀에 공유해요.",
-  "처음 설정할 때 무엇을 수집하고 무엇을 외부 AI로 보내는지 먼저 안내해요.",
-  "전화번호·이메일·계좌·주민번호는 외부 AI로 보내기 전에 가려요. 기기 안 검사가 개인 내용으로 본 발화도 보내지 않지만, 이건 보조 장치예요.",
-  "대화 원문은 이 기기에만 남았다가, 그 대화 묶음의 처리가 모두 끝나고 7일이 지나면 지워져요.",
-  "팀 서버에는 내가 승인한 카드와 확인한 근거 문장만 올라가요.",
-  "수집 종료 시각이 지나면 새 대화 수집과 외부 전송을 멈춰요. 언제든 일시정지할 수 있어요.",
+  "설정한 범위의 대화에서 AI가 팀과 관련된 내용만 고르고, 내가 승인한 것만 팀에 공유해요.",
+  "전화번호·이메일·계좌·주민번호는 외부 AI로 보내기 전에 가려요.",
+  "대화 원문은 내 기기에만 남고, 처리가 끝나고 7일 뒤 지워져요.",
+  "수집 기간이 끝나면 자동으로 멈추고, 언제든 일시정지할 수 있어요.",
 ];
 
 const h2 = "text-[clamp(24px,2.6vw,34px)] leading-[1.3] font-bold break-keep";
@@ -57,7 +56,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
             </h1>
           </div>
           <div className="space-y-4 text-[clamp(15px,1.3vw,17px)] leading-[1.7] text-ink-body break-keep">
-            <p>Sync up은 무료 AI를 섞어 쓰는 대학생 해커톤·팀플 팀을 위한 공유 메모리예요.</p>
+            <p>SyncUp은 무료 AI를 섞어 쓰는 대학생 해커톤·팀플 팀을 위한 공유 메모리예요.</p>
             <p>
               각자의 AI 대화에서 팀에 필요한 <b className="font-bold text-ink">결정·조사·할 일</b>을 골라, 내가 승인한 것만 팀과 나누고, 결정이
               어긋나면 먼저 알려줘요.
@@ -76,7 +75,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
               <li key={title} className={cn("py-5 md:pt-6 md:pb-0", i > 0 && "border-t border-card-border md:border-t-0 md:border-l md:pl-7", i < 2 && "md:pr-7")}>
                 <p className="font-mono text-[13px] text-ink-3">0{i + 1}</p>
                 <h3 className="mt-2.5 text-[clamp(18px,1.6vw,21px)] font-bold">{title}</h3>
-                <p className="mt-2.5 text-[15px] leading-[1.7] text-ink-body break-keep">{body}</p>
+                <p className="mt-2.5 text-[15px] leading-[1.7] text-ink-body break-keep"><Sentences>{body}</Sentences></p>
               </li>
             ))}
           </ol>
@@ -87,13 +86,12 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
       label: "차별점",
       body: (
         <div className="space-y-8 lg:space-y-10">
-          <h2 className={h2}>Sync up은 이렇게 달라요</h2>
+          <h2 className={h2}>SyncUp은 이렇게 달라요</h2>
           <div className="grid gap-4 md:grid-cols-3">
-            {DIFFERENTIATORS.map(({ title, body, tone, label, text }, i) => (
+            {DIFFERENTIATORS.map(({ title, body, tone, text }) => (
               <div key={title} className={cn("p-6", tone)}>
-                <p className={cn("font-mono text-xs tracking-[0.14em]", label)}>차별점 {i + 1}</p>
-                <h3 className="mt-3 text-[clamp(19px,1.7vw,22px)] font-bold">{title}</h3>
-                <p className={cn("mt-3 text-sm leading-[1.7] break-keep", text)}>{body}</p>
+                <h3 className="text-[clamp(19px,1.7vw,22px)] font-bold">{title}</h3>
+                <p className={cn("mt-3 text-sm leading-[1.7] break-keep", text)}><Sentences>{body}</Sentences></p>
               </div>
             ))}
           </div>
@@ -107,7 +105,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
           <div>
             <h2 className={h2}>AI가 대화를<br className="hidden md:block" /> 이렇게 나눠요</h2>
             <p className="mt-5 text-sm leading-[1.7] text-ink-2 break-keep">
-              AI가 추천만 한 내용이나 “~하면 어때?” 같은 제안은 결정으로 치지 않아요. 팀이 받아들였을 때만 결정이 돼요.
+              <Sentences>{"AI가 추천만 한 내용이나 “~하면 어때?” 같은 제안은 결정으로 치지 않아요. 팀이 받아들였을 때만 결정이 돼요."}</Sentences>
             </p>
           </div>
           <dl className="border-t border-ink">
@@ -130,7 +128,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
             {PRIVACY.map((line) => (
               <li key={line} className="flex gap-3 break-keep">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-ok" />
-                {line}
+                <span><Sentences>{line}</Sentences></span>
               </li>
             ))}
           </ul>
@@ -152,10 +150,7 @@ function slides(signedIn: boolean): { label: string; body: ReactNode }[] {
               <Link href={START.href} className={primary}>{START.label} <ArrowRight aria-hidden className="size-4" /></Link>
             )}
           </div>
-          <p className="text-[13px] text-ink-3 break-keep">
-            지금은 ChatGPT 웹을 지원하고, Claude·Gemini는 곧 지원해요.
-            {signedIn && " 이용 방법은 대시보드 사이드바에서 다시 볼 수 있어요."}
-          </p>
+          {signedIn && <p className="text-[13px] text-ink-3 break-keep">이용 방법은 대시보드 사이드바에서 다시 볼 수 있어요.</p>}
         </div>
       ),
     },

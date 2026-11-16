@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronDown, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { FeatureStory, type FeatureStep } from "@/components/landing/feature-story";
 import { AlertPreview, ApprovePreview, ConflictPreview, PastePreview, PopupPreview, RecordPreview } from "@/components/landing/previews";
 import { RollSteps, type RollStep } from "@/components/landing/roll-steps";
@@ -8,6 +8,7 @@ import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import release from "@/lib/extension-release.json";
 import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 // 서비스 첫 화면. Hero(별의 일생 상자 + 영어 제목 + 4단계 롤 링크, 시안 "로즈 & 올리브 수채화") →
 // Section 0~4 (기능별 한 화면 · 왼쪽 글 + 오른쪽 제품 미리보기. 넓은 화면은 스크롤하면 슬라이드처럼 바뀐다, components/landing/feature-story.tsx) → 이렇게 사용해요 → Section 5 확장 설치 → (Footer 는 layout)
@@ -45,33 +46,33 @@ const FEATURES: FeatureStep[] = [
   {
     id: "overview",
     en: "Every chat, one record.",
-    step: { label: "한눈에 보기", sub: "팀 결정 기록" },
+    step: {},
     title: <>팀원들의&nbsp; 대화가<br />한 곳에 모여요</>,
-    body: <>누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요.<br />주제·역할·작업별로 묶어서 보여 줘요.</>,
+    body: "누가, 언제, 무엇을 정했는지 날짜순으로 쌓여요. 주제·역할·작업별로 묶어서 보여 줘요.",
     preview: <RecordPreview />,
   },
   {
     id: "approve",
     en: "Only what you approve.",
-    step: { index: 1, sub: "프로젝트 대화 · 승인 후 공유" },
+    step: { index: 1 },
     title: <>프로젝트 대화만 모으고,<br />공유는 내가 정해요</>,
-    body: "ChatGPT 프로젝트 대화에서 결정·할 일·조사 후보를 찾아요. 내가 체크한 것만 팀에 올라가요. 승인하지 않은 내용은 팀에 보이지 않아요.",
+    body: "ChatGPT 프로젝트 대화에서 결정·할 일·조사 후보를 찾아요. 내가 체크한 것만 팀에 올라가요.",
     bodyWidth: "max-w-[430px]",
     preview: <ApprovePreview />,
   },
   {
     id: "alert",
     en: "Clashes, flagged first.",
-    step: { index: 2, sub: "대화 중 실시간 알림" },
+    step: { index: 2 },
     title: <>대화하는 그 자리에서<br />어긋난 결정을 알려줘요</>,
-    body: "ChatGPT 웹에서 기존 팀 결정과 다른 내용이 나오면 바로 알림이 떠요. 대화를 멈추지 않고 확인할 수 있어요.",
+    body: "ChatGPT 웹에서 기존 팀 결정과 다른 내용이 나오면 바로 알림이 떠요.",
     bodyWidth: "max-w-[260px]",
     preview: <AlertPreview />,
   },
   {
     id: "conflict",
     en: "Side by side, settled.",
-    step: { index: 3, sub: "결정 충돌 해결" },
+    step: { index: 3 },
     title: <>엇갈린 결정은<br />그 자리에서 정리해요</>,
     body: "기존 결정을 유지할지, 새 결정으로 바꿀지 바로 정해요.",
     bodyWidth: "max-w-[230px]",
@@ -80,7 +81,7 @@ const FEATURES: FeatureStep[] = [
   {
     id: "record",
     en: "Burst into the record.",
-    step: { index: 4, sub: "팀 결정 기록" },
+    step: { index: 4 },
     title: <>언제, 누가, 왜 정했는지<br />한 곳에서 이어 써요</>,
     body: "팀 기록을 복사해 새 AI 대화에 붙여 넣으면 팀의 맥락이 그대로 이어져요.",
     bodyWidth: "max-w-[300px]",
@@ -132,11 +133,8 @@ function Hero() {
               <span aria-hidden className="font-serif text-[22px] italic">⟶</span>
               <span className="font-mono text-[12px] tracking-[0.24em]">THINK UP</span>
             </p>
-            <p className="text-[17px] leading-[1.65] font-medium break-keep text-ink">
-              ‘싱크’는 맞추다(Sync)이면서 떠올리다(Think)예요. 흩어진 대화가 모여 결정이 되고, 그 결정이 터져 다음 생각이 돼요.
-            </p>
             <p className="text-[17px] leading-[1.65] break-keep text-ink-body">
-              프로젝트 대화에서 결정 · 할 일 · 조사만 골라 모아요. 내가 승인한 것만 팀과 나누고, 결정이 엇갈리면 먼저 알려드려요.
+              <Sentences>{"프로젝트 대화에서 결정 · 할 일 · 조사만 골라 모아요. 내가 승인한 것만 팀과 나누고, 결정이 엇갈리면 먼저 알려드려요."}</Sentences>
             </p>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <Link href={START.href} className={heroPrimary}>
@@ -151,13 +149,10 @@ function Hero() {
 
         <div className="space-y-4">
           <p className="text-[13px] text-ink-3">
-            <span className="label-mono text-[11px]">What SyncUp does</span> · 누르면 바로 그 부분으로 이동해요
+            <span className="label-mono text-[11px]">What SyncUp does</span>
           </p>
           <RollSteps steps={STEPS} />
         </div>
-        <p className="flex items-center gap-2 text-[13px] text-ink-3">
-          아래로 내리면 기능을 하나씩 보여드려요 <ChevronDown className="size-4" aria-hidden />
-        </p>
       </div>
     </section>
   );
@@ -191,7 +186,6 @@ function HowTo() {
             </li>
           ))}
         </ol>
-        <p className="text-[13px] text-ink-3">지금은 ChatGPT 웹을 지원해요. Claude와 Gemini는 준비 중이에요.</p>
       </div>
     </section>
   );
@@ -212,16 +206,13 @@ function Install() {
             <span className="title-display block text-[clamp(36px,4.6vw,58px)] text-ink">Ready in three steps.</span>
             <span className="mt-4 block text-xl font-bold text-ink sm:text-2xl">3단계면 준비 끝나요</span>
           </h2>
-          <p className="mt-4 max-w-[480px] text-base text-ink-body break-keep sm:text-[17px]">
-            설치는 한 번만 하면 돼요. 그다음부터는 ChatGPT에서 평소처럼 대화하면 돼요.
-          </p>
           <ol className="mt-8 space-y-5">
             {INSTALL_STEPS.map((s, i) => (
               <li key={s.title} className="flex gap-4">
                 <span className="flex size-8 shrink-0 items-center justify-center border border-ink bg-glass font-mono text-[13px] text-ink">{String(i + 1).padStart(2, "0")}</span>
                 <span className="space-y-1">
                   <span className="block text-[17px] font-bold text-ink">{s.title}</span>
-                  <span className="block max-w-[430px] text-sm text-ink-body break-keep">{s.body}</span>
+                  <span className="block max-w-[430px] text-sm text-ink-body break-keep"><Sentences>{s.body}</Sentences></span>
                 </span>
               </li>
             ))}

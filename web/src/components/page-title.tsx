@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Sentences } from "@/components/ui/sentences";
 
 // 앱 화면 제목. display 가 있으면 시안 "로즈 & 올리브 수채화"의 영어 큰 제목(Inter Tight 800)을 h1 로 두고
 // 원래 한국어 제목은 그 아래 굵은 줄로, 설명은 그 아래에 그대로 둔다. actions 는 오른쪽 버튼 자리
@@ -21,7 +22,7 @@ export function PageTitle({ title, display, children, actions, className }: {
         ) : (
           <h1 className="text-2xl leading-[1.5] font-bold break-keep sm:text-[28px]">{title}</h1>
         )}
-        {children && <p className="text-[15px] leading-[1.5] text-ink-body break-keep">{children}</p>}
+        {children && <p className="text-[15px] leading-[1.5] text-ink-body break-keep"><Sentences>{children}</Sentences></p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>

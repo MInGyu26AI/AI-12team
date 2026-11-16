@@ -39,7 +39,7 @@ test('hint counts the unchecked items and flips when all four are agreed', () =>
 });
 
 test('the consent route sets its own tab title and stays out of search', () => {
-  assert.equal(page.metadata.title, '약관 동의 · Sync up');
+  assert.equal(page.metadata.title, '약관 동의 · SyncUp');
   assert.deepEqual(page.metadata.robots, { index: false });
   assert.match(renderToStaticMarkup(createElement(page.default)), /시작하기 전에 확인해 주세요/);
 });

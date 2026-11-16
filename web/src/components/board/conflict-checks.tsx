@@ -2,6 +2,7 @@
 
 import type { RelatedCard } from "@shared/types";
 import { Button } from "@/components/ui/button";
+import { Sentences } from "@/components/ui/sentences";
 
 type CheckStatus = NonNullable<RelatedCard["conflictCheckStatus"]>;
 const UNFINISHED: CheckStatus[] = ["pending", "running", "failed"];
@@ -18,7 +19,7 @@ export function ConflictChecks({ cards, onRetry }: { cards: RelatedCard[]; onRet
               {c.content} · {c.conflictCheckDetail || "기존 결정과 비교 중"}
             </p>
             <CheckProgress card={c} />
-            <p className="text-sm text-muted-foreground">아직 전체 검사가 끝나지 않았어요. 발견된 충돌은 먼저 표시합니다.</p>
+            <p className="text-sm text-muted-foreground"><Sentences>{"아직 전체 검사가 끝나지 않았어요. 발견된 충돌은 먼저 표시합니다."}</Sentences></p>
             {c.conflictCheckStatus === "failed" && (
               <Button variant="outline" onClick={() => onRetry(c.id)}>
                 남은 검사 재시도

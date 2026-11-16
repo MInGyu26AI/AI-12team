@@ -7,10 +7,11 @@ import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
 import { EnTitle } from "@/components/page-title";
 import { BurstIcon } from "@/components/ui/burst-icon";
+import { Sentences } from "@/components/ui/sentences";
 
 export const metadata: Metadata = {
-  title: "이용 방법 · Sync up",
-  description: "팀 연결부터 팀 결정 기록까지, Sync up을 쓰는 6단계",
+  title: "이용 방법 · SyncUp",
+  description: "팀 연결부터 팀 결정 기록까지, SyncUp을 쓰는 6단계",
 };
 
 const FAQ = [
@@ -39,7 +40,7 @@ export default function GuidePage() {
         <div className="mx-auto max-w-content px-gutter pt-16 pb-12 text-center">
           <EnTitle>How it works.</EnTitle><h1 className="mt-5 text-3xl font-bold break-keep sm:text-4xl">6단계면 팀 결정이 하나로 모여요</h1>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground break-keep">
-            한 번 설정해 두면 평소처럼 AI와 대화하기만 하면 돼요. 단계마다 버튼을 누르면 해당 화면으로 바로 가요.
+            한 번 설정해 두면 평소처럼 AI와 대화하기만 하면 돼요.
           </p>
         </div>
       </section>
@@ -59,10 +60,10 @@ export default function GuidePage() {
                     <ArrowRight />
                   </Link>
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground break-keep">{s.body}</p>
+                <p className="mt-2 text-sm text-muted-foreground break-keep"><Sentences>{s.body}</Sentences></p>
                 <p className="mt-3 flex items-start gap-2 bg-blush px-3 py-2 text-xs text-foreground/80 break-keep">
                   <BurstIcon className="mt-px size-3.5 text-ink" />
-                  <span>{s.tip}</span>
+                  <span><Sentences>{s.tip}</Sentences></span>
                 </p>
               </div>
             </li>
@@ -80,7 +81,7 @@ export default function GuidePage() {
                   <span className="mr-2 text-brand">Q.</span>
                   {f.q}
                 </summary>
-                <p className="mt-3 text-sm text-muted-foreground break-keep">{f.a}</p>
+                <p className="mt-3 text-sm text-muted-foreground break-keep"><Sentences>{f.a}</Sentences></p>
               </details>
             ))}
           </div>
