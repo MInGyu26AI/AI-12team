@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Instrument_Serif, Inter_Tight, Noto_Sans_KR, Orbitron } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans_KR, Instrument_Serif, Inter_Tight, Noto_Sans_KR, Orbitron } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -10,13 +10,15 @@ const interTight = Inter_Tight({ weight: "800", subsets: ["latin"], display: "sw
 const plexMono = IBM_Plex_Mono({ weight: ["400", "500"], subsets: ["latin"], display: "swap", variable: "--font-plex-mono" });
 const instrumentSerif = Instrument_Serif({ weight: "400", style: "italic", subsets: ["latin"], display: "swap", variable: "--font-instrument-serif" });
 const orbitron = Orbitron({ weight: "900", subsets: ["latin"], display: "swap", variable: "--font-orbitron" });
+// 로그인 후 앱 틀(.app-shell, globals.css)의 본문 글꼴. 한글 글리프는 Noto 처럼 구글이 쪼갠 조각으로 필요한 만큼만 받는다
+const plexSansKr = IBM_Plex_Sans_KR({ weight: ["400", "500", "700"], subsets: ["latin"], display: "swap", variable: "--font-plex-sans-kr" });
 
 export const metadata: Metadata = {
   title: "Sync up · 싱크업",
   description: "팀원마다 다른 AI를 써도 팀의 결정은 하나로 — 대학생 팀플을 위한 AI 공유 메모리",
 };
 
-const fontVars = [notoSansKr, interTight, plexMono, instrumentSerif, orbitron].map((f) => f.variable).join(" ");
+const fontVars = [notoSansKr, interTight, plexMono, instrumentSerif, orbitron, plexSansKr].map((f) => f.variable).join(" ");
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

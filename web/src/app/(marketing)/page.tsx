@@ -99,8 +99,12 @@ function Hero() {
   return (
     <section className="relative overflow-hidden">
       <WatercolorBg />
-      <div className="relative mx-auto flex max-w-[1280px] flex-col gap-12 px-gutter pt-10 pb-14 sm:px-10 lg:px-20 lg:pt-12">
-        <StarIntro />
+      <div className="relative mx-auto flex max-w-[1280px] flex-col gap-12 px-gutter pb-14 sm:px-10 lg:px-20">
+        {/* 첫 화면: 헤더(65px) 아래 남은 높이 안에서 상자를 위아래 가운데에 둔다 (위·아래 여백이 같다).
+            상자 높이는 star-intro.tsx 가 화면 높이에 맞춘다. -mb-12 는 gap-12 를 지워 제목까지 간격을 아래 여백(48px) 하나로 둔다 */}
+        <div className="-mb-12 flex flex-col justify-center pt-10 pb-12 md:min-h-[calc(100svh-65px)] md:pt-12">
+          <StarIntro />
+        </div>
 
         {/* 제목 영역: 왼쪽 영어 큰 제목 / 오른쪽 이름 뜻·설명·버튼 (아래 정렬, 좁으면 줄바꿈) */}
         <div className="flex flex-wrap items-end gap-x-12 gap-y-8">
