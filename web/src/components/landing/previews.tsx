@@ -18,7 +18,7 @@ function TagChip({ tag }: { tag: string }) {
   return <span className={cn("px-2 py-0.5 text-[11px] font-medium", TAG_CHIP[tag])}>{tag}</span>;
 }
 
-// 작은 SyncUp 아이콘: 새 로고(brand.tsx LogoMark — 진갈색 사각형 + 흰 Orbitron S + 반짝이 별)를 줄여 쓴다
+// 작은 SyncUp 아이콘: 새 로고(brand.tsx LogoMark — 진갈색 사각형 + 흰 S + 반짝이 별)를 줄여 쓴다
 export function MiniMark({ size = 22 }: { size?: number }) {
   return <LogoMark className="" style={{ width: size, height: size }} />;
 }

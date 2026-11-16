@@ -247,11 +247,11 @@ function ClassifySlide() {
           <>
             Ollama에서 <code className={code}>gemma4:e4b-it-qat</code> 모델을 준비하세요. 터미널에서는 <code className={code}>ollama pull gemma4:e4b-it-qat</code>로 받을 수 있어요.
           </>,
-          <>SyncUp 앱의 ‘자동 분류 준비’에 본인의 OpenAI API 키를 넣고 수집기를 실행하세요. 키는 이번 실행 동안만 사용하고 파일에 저장하지 않아요.</>,
+          <>SyncUp 앱에서 팀을 선택하고 수집기 실행을 누르세요. 자동 수집은 Chrome 확장 팝업에서 켜요.</>,
         ]}
       />
       <p className="text-[13px] leading-[1.6] text-ink-3">
-        현재 버전은 PC의 개인정보 검사 모델과 개인 OpenAI API 키를 사용해요. 준비되지 않으면 분류가 대기하므로 설치 완료와 분류 준비를 구분해서 확인하세요.
+        분류는 SyncUp이 제공하는 AI로 처리해요. 개인정보 검사를 통과한 내용만 SyncUp 서버를 거쳐 OpenAI로 보내며, 중계 내용은 서버에 저장하지 않아요. 모델이 준비되지 않았거나 사용 한도를 넘으면 분류가 대기해요.
       </p>
     </>
   );

@@ -11,12 +11,12 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* 글꼴은 layout.tsx 에서 next/font 로 불러온 변수.
-     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로고 Orbitron 900 */
+     본문 Noto Sans KR · 영어 큰 제목 Inter Tight 800 · 작은 라벨 IBM Plex Mono · 이탤릭 포인트 Instrument Serif · 로그인 후 영문 제목 Orbitron 900 · 로고는 글꼴 없이 path */
   --font-sans: var(--font-noto-sans-kr), "Noto Sans KR", -apple-system, system-ui, sans-serif;
   --font-display: var(--font-inter-tight), "Inter Tight", system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --font-serif: var(--font-instrument-serif), "Instrument Serif", Georgia, serif;
-  --font-brand: var(--font-orbitron), Orbitron, system-ui, sans-serif;
+  --font-brand: var(--font-orbitron), Orbitron, system-ui, sans-serif; /* 로그인 후 영문 제목(.app-shell .title-display) */
   --font-heading: var(--font-sans);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -218,50 +218,6 @@
   border-radius: 42% 58% 63% 37% / 41% 44% 56% 59% !important;
   animation: suBloom 2.8s cubic-bezier(0.2, 0.7, 0.2, 1) both, suMorph 16s ease-in-out 2.8s infinite alternate;
 }
-
-/* ── 첫 화면 "별의 일생" 8초 (components/landing/star-intro.tsx). 무대 위 요소마다 같은 8초 시간축에 % 로 나눈다 ── */
-.star-stage { --star-duration: 8s; }
-.star-stage [data-anim] { animation-duration: var(--star-duration); animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1); animation-fill-mode: both; animation-iteration-count: 1; }
-@keyframes starCore {
-  0% { width: 110px; height: 110px; border-width: 55px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); opacity: 1; }
-  18% { width: 120px; height: 120px; border-width: 60px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); }
-  37% { width: 180px; height: 180px; border-width: 36px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); }
-  56% { width: 250px; height: 250px; border-width: 46px; box-shadow: inset 0 0 0 22px var(--color-blush-deep); opacity: 1; }
-  64% { width: 34px; height: 34px; border-width: 17px; box-shadow: inset 0 0 0 0 var(--color-blush-deep); opacity: 1; }
-  66%, 100% { width: 34px; height: 34px; border-width: 17px; opacity: 0; }
-}
-@keyframes starBurst {
-  0%, 62% { transform: scale(0); opacity: 1; }
-  68% { transform: scale(1.6); opacity: 1; }
-  76%, 100% { transform: scale(9); opacity: 0; }
-}
-@keyframes starFlash {
-  0%, 64% { opacity: 0; }
-  68% { opacity: 1; }
-  79%, 100% { opacity: 0; }
-}
-@keyframes starWordmark {
-  0%, 72% { opacity: 0; transform: translateY(12px); }
-  82%, 100% { opacity: 1; transform: translateY(0); }
-}
-@keyframes starOrbit {
-  0%, 74% { stroke-dashoffset: 1400; }
-  90%, 100% { stroke-dashoffset: 0; }
-}
-@keyframes starSpark {
-  0%, 86% { transform: scale(0); }
-  90% { transform: scale(1.25); }
-  93%, 100% { transform: scale(1); }
-}
-@keyframes starTagline {
-  0%, 88% { opacity: 0; }
-  96%, 100% { opacity: 1; }
-}
-/* 단계 문구: 각 구간에서 8px 아래에서 올라오며(margin-top) 나타났다 사라진다. 가운데 정렬은 요소의 -translate-x-1/2 가 맡는다 */
-@keyframes starStage1 { 0% { opacity: 0; margin-top: 8px; } 3%, 15% { opacity: 1; margin-top: 0; } 18%, 100% { opacity: 0; margin-top: -4px; } }
-@keyframes starStage2 { 0%, 18% { opacity: 0; margin-top: 8px; } 21%, 34% { opacity: 1; margin-top: 0; } 37%, 100% { opacity: 0; margin-top: -4px; } }
-@keyframes starStage3 { 0%, 37% { opacity: 0; margin-top: 8px; } 40%, 53% { opacity: 1; margin-top: 0; } 56%, 100% { opacity: 0; margin-top: -4px; } }
-@keyframes starStage4 { 0%, 56% { opacity: 0; margin-top: 8px; } 58%, 62% { opacity: 1; margin-top: 0; } 64%, 100% { opacity: 0; margin-top: -4px; } }
 
 /* 첫 화면 롤 링크 글자 칸(roll-steps.tsx RollWord): 위아래만 자르고 좌우는 둔다. clip 미지원 브라우저는 hidden */
 .roll-cell { overflow: hidden; }

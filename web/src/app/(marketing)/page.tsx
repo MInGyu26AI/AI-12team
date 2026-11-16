@@ -3,7 +3,7 @@ import { ChevronDown, Download } from "lucide-react";
 import { FeatureStory, type FeatureStep } from "@/components/landing/feature-story";
 import { AlertPreview, ApprovePreview, ConflictPreview, PastePreview, PopupPreview, RecordPreview } from "@/components/landing/previews";
 import { RollSteps, type RollStep } from "@/components/landing/roll-steps";
-import { StarIntro } from "@/components/landing/star-intro";
+import { StagesMotion } from "@/components/landing/stages-motion";
 import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import release from "@/lib/extension-release.json";
 import { START } from "@/lib/start-link";
@@ -104,16 +104,16 @@ export default function LandingPage() {
   );
 }
 
-// 히어로 (시안 "로즈 & 올리브 수채화"): 수채화 번짐 위에 8초 "별의 일생" 상자 → 영어 큰 제목 + 한국어 설명 → 버튼 2개 → 4단계 롤 링크
+// 히어로 (시안 "로즈 & 올리브 수채화"): 수채화 번짐 위에 11초 4단계 애니메이션 상자 → 영어 큰 제목 + 한국어 설명 → 버튼 2개 → 4단계 롤 링크
 function Hero() {
   return (
     <section className="relative overflow-hidden">
       <WatercolorBg />
       <div className="relative mx-auto flex max-w-[1280px] flex-col gap-12 px-gutter pb-14 sm:px-10 lg:px-20">
         {/* 첫 화면: 헤더(65px) 아래 남은 높이 안에서 상자를 위아래 가운데에 둔다 (위·아래 여백이 같다).
-            상자 높이는 star-intro.tsx 가 화면 높이에 맞춘다. -mb-12 는 gap-12 를 지워 제목까지 간격을 아래 여백(48px) 하나로 둔다 */}
+            상자는 stages-motion 의 2:1 비율(1200×600). -mb-12 는 gap-12 를 지워 제목까지 간격을 아래 여백(48px) 하나로 둔다 */}
         <div className="-mb-12 flex flex-col justify-center pt-10 pb-12 md:min-h-[calc(100svh-65px)] md:pt-12">
-          <StarIntro />
+          <StagesMotion />
         </div>
 
         {/* 제목 영역: 왼쪽 영어 큰 제목 / 오른쪽 이름 뜻·설명·버튼 (아래 정렬, 좁으면 줄바꿈) */}

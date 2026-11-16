@@ -1,0 +1,65 @@
+/* 첫 화면 4단계 애니메이션 (components/landing/stages-motion.tsx). 확정본 syncup-stages-animation.html 의 CSS 그대로 — 11초, 끝나면 글씨 로고로 멈춘다.
+   바꾼 것: 무대 가운데 정렬 margin 은 페이지 레이아웃이 맡고, 글꼴은 next/font 변수 */
+.sv-scene *{transform-box:view-box;transform-origin:0 0}
+.sv-a{animation-duration:11s;animation-fill-mode:both;animation-timing-function:cubic-bezier(.45,0,.25,1)}
+.sv-faint{animation-name:svFaint}
+@keyframes svFaint{0%{opacity:0}6%{opacity:1}16%{opacity:1}22%,100%{opacity:0}}
+.sv-d1{animation-name:svD1}.sv-d2{animation-name:svD2}.sv-d3{animation-name:svD3}.sv-d4{animation-name:svD4}
+@keyframes svD1{0%{transform:translate(300px,170px) scale(0);fill:#a39a8e}6%{transform:translate(300px,170px) scale(1);fill:#a39a8e}12%,22%{transform:translate(300px,170px) scale(1.15);fill:#1d1a14;opacity:1}30%,32%{transform:translate(470px,260px) scale(1.25);fill:#1d1a14}34.5%{transform:translate(496.9px,237px) scale(1.25)}37%{transform:translate(527.5px,228px) scale(1.25)}39.5%{transform:translate(561.9px,233px) scale(1.25)}42%{transform:translate(594px,249px) scale(1.25);opacity:1}44%,100%{transform:translate(600px,252px) scale(1.25);opacity:0}}
+@keyframes svD2{0%{transform:translate(340px,350px) scale(0);fill:#a39a8e}6%{transform:translate(340px,350px) scale(1);fill:#a39a8e}12%,22%{transform:translate(340px,350px) scale(1.15);fill:#1d1a14;opacity:1}29%{opacity:1}30%,100%{transform:translate(470px,260px) scale(1.25);opacity:0}}
+@keyframes svD3{0%{transform:translate(880px,160px) scale(0);fill:#a39a8e}6%{transform:translate(880px,160px) scale(1);fill:#a39a8e}12%,22%{transform:translate(880px,160px) scale(1.15);fill:#1d1a14;opacity:1}30%,32%{transform:translate(730px,260px) scale(1.25);fill:#1d1a14}34.5%{transform:translate(703.1px,237px) scale(1.25)}37%{transform:translate(672.5px,228px) scale(1.25)}39.5%{transform:translate(638.1px,233px) scale(1.25)}42%{transform:translate(606px,249px) scale(1.25);opacity:1}44%,100%{transform:translate(600px,252px) scale(1.25);opacity:0}}
+.sv-d1,.sv-d3,.sv-star,.sv-orbit,.sv-eat{animation-timing-function:linear}
+.sv-eat{stroke-dasharray:100 100;animation-name:svEat}
+@keyframes svEat{0%,32%{stroke-dashoffset:0}42%,100%{stroke-dashoffset:-100}}
+@keyframes svD4{0%{transform:translate(910px,340px) scale(0);fill:#a39a8e}6%{transform:translate(910px,340px) scale(1);fill:#a39a8e}12%,22%{transform:translate(910px,340px) scale(1.15);fill:#1d1a14;opacity:1}29%{opacity:1}30%,100%{transform:translate(730px,260px) scale(1.25);opacity:0}}
+.sv-trails{animation-name:svTrails}
+@keyframes svTrails{0%,28%{opacity:0}32%{opacity:1}42%{opacity:1}46%,100%{opacity:0}}
+.sv-flash{animation-name:svFlash}
+@keyframes svFlash{0%,40%{transform:translate(600px,252px) scale(0)}43%{transform:translate(600px,252px) scale(34)}47%,100%{transform:translate(600px,252px) scale(0)}}
+.sv-merge{animation-name:svMerge}
+@keyframes svMerge{0%,43%{transform:translate(600px,260px) scale(0)}48%{transform:translate(600px,260px) scale(1)}55%{transform:translate(600px,260px) scale(1.12)}60%{transform:translate(600px,260px) scale(1);opacity:1}64%,100%{transform:translate(600px,260px) scale(1);opacity:0}}
+.sv-star{animation-name:svStar}
+@keyframes svStar{0%,62%{transform:translate(268.2px,332.6px) scale(16);opacity:0}64.00%{transform:translate(268.2px,332.6px) scale(16.0);opacity:1}64.58%{transform:translate(275.5px,359.9px) scale(16.4);opacity:1}65.17%{transform:translate(308.9px,371.1px) scale(16.8);opacity:1}65.75%{transform:translate(343.6px,377.4px) scale(17.2);opacity:1}66.33%{transform:translate(378.7px,381.6px) scale(17.7);opacity:1}66.92%{transform:translate(413.9px,384.5px) scale(18.1);opacity:1}67.50%{transform:translate(449.2px,386.5px) scale(18.5);opacity:1}68.08%{transform:translate(484.5px,387.8px) scale(18.9);opacity:1}68.67%{transform:translate(519.8px,388.4px) scale(19.3);opacity:1}69.25%{transform:translate(554.9px,388.4px) scale(19.8);opacity:1}69.83%{transform:translate(590.2px,387.9px) scale(20.2);opacity:1}70.42%{transform:translate(625.6px,386.9px) scale(20.6);opacity:1}71.00%{transform:translate(660.7px,385.4px) scale(21.0);opacity:1}71.58%{transform:translate(696.0px,383.3px) scale(21.4);opacity:1}72.17%{transform:translate(731.1px,380.6px) scale(21.8);opacity:1}72.75%{transform:translate(766.2px,377.2px) scale(22.2);opacity:1}73.33%{transform:translate(801.2px,371.9px) scale(22.7);opacity:1}73.92%{transform:translate(835.0px,362.0px) scale(23.1);opacity:1}74.50%{transform:translate(866.5px,346.4px) scale(23.5);opacity:1}75.08%{transform:translate(894.0px,324.3px) scale(23.9);opacity:1}75.67%{transform:translate(915.6px,296.5px) scale(24.3);opacity:1}76.25%{transform:translate(931.0px,264.8px) scale(24.8);opacity:1}76.83%{transform:translate(941.0px,230.9px) scale(25.2);opacity:1}77.42%{transform:translate(946.8px,196.1px) scale(25.6);opacity:1}78.00%{transform:translate(949.4px,161.0px) scale(26.0);opacity:1}78.4%,100%{transform:translate(949.4px,161.0px) scale(26);opacity:0}}
+.sv-reveal{animation-name:svReveal;animation-timing-function:linear}
+@keyframes svReveal{0%,100%{transform:none}}
+.sv-wm-s{animation-name:svWmS}
+@keyframes svWmS{0%,67%{opacity:0;transform:translate(0,0)}75%,83%{opacity:1;transform:translate(0,0)}89%,100%{opacity:0;transform:translate(244px,4px)}}
+.sv-wm-rest{animation-name:svWmRest}
+@keyframes svWmRest{0%,67%{opacity:0;transform:translate(0,0)}75%,82%{opacity:1;transform:translate(0,0)}87%,100%{opacity:0;transform:translate(40px,0)}}
+.sv-orbit{stroke-dasharray:100 130;animation-name:svOrbit}
+@keyframes svOrbit{0%,64%{stroke-dashoffset:104;visibility:hidden}64.1%{visibility:visible}78%,100%{stroke-dashoffset:0;visibility:visible}}
+.sv-pop{animation-name:svPop}
+@keyframes svPop{0%,78%{transform:translate(599.7px,265px) scale(1.3000) translate(-229px,-60px);animation-timing-function:cubic-bezier(.2,0,.2,1)}80.5%{transform:translate(599.7px,265px) scale(1.4040) translate(-229px,-60px);animation-timing-function:cubic-bezier(.4,0,.2,1)}85%,100%{transform:translate(599.7px,265px) scale(1.3000) translate(-229px,-60px)}}
+.sv-burst{animation-name:svBurst;animation-timing-function:cubic-bezier(.15,.7,.3,1)}
+@keyframes svBurst{0%,78%{transform:translate(498px,-20px) scale(.5);opacity:0}78.3%{opacity:1}83%,100%{transform:translate(498px,-20px) scale(2);opacity:0}}
+.sv-wstar{transform-box:fill-box;transform-origin:50% 50%}
+.sv-sp0{animation-name:svSp0;animation-timing-function:cubic-bezier(.15,.7,.3,1)}
+@keyframes svSp0{0%,78%{transform:translate(498px,-20px) scale(0);opacity:0}78.3%{opacity:1;transform:translate(498px,-20px) scale(11)}85%,100%{transform:translate(438px,-90px) scale(6);opacity:0}}
+.sv-sp1{animation-name:svSp1;animation-timing-function:cubic-bezier(.15,.7,.3,1)}
+@keyframes svSp1{0%,78%{transform:translate(498px,-20px) scale(0);opacity:0}78.3%{opacity:1;transform:translate(498px,-20px) scale(11)}85%,100%{transform:translate(568px,-70px) scale(6);opacity:0}}
+.sv-sp2{animation-name:svSp2;animation-timing-function:cubic-bezier(.15,.7,.3,1)}
+@keyframes svSp2{0%,78%{transform:translate(498px,-20px) scale(0);opacity:0}78.3%{opacity:1;transform:translate(498px,-20px) scale(11)}85%,100%{transform:translate(558px,35px) scale(6);opacity:0}}
+.sv-sp3{animation-name:svSp3;animation-timing-function:cubic-bezier(.15,.7,.3,1)}
+@keyframes svSp3{0%,78%{transform:translate(498px,-20px) scale(0);opacity:0}78.3%{opacity:1;transform:translate(498px,-20px) scale(11)}85%,100%{transform:translate(423px,0px) scale(6);opacity:0}}
+.sv-wmk{animation-name:svWmk}
+@keyframes svWmk{0%,68%{opacity:0}76%,100%{opacity:1}}
+.sv-wstar{animation-name:svWstar}
+@keyframes svWstar{0%,77.9%{opacity:0;transform:scale(1)}78%{opacity:1;transform:scale(1)}80%{transform:scale(1.9)}84%,100%{opacity:1;transform:scale(1)}}
+.sv-icon{animation-name:svIcon}
+@keyframes svIcon{0%,83%{transform:translate(356px,236px) scale(0) translate(-60px,-60px)}91%,100%{transform:translate(600px,240px) scale(1.4167) translate(-60px,-60px)}}
+.sv-word{animation-name:svWord}
+@keyframes svWord{0%,91%{opacity:0;transform:translate(0,14px)}97%,100%{opacity:1;transform:none}}
+.sv-cap{position:absolute;left:36px;top:30px;display:flex;flex-direction:column;gap:6px;opacity:0;animation-duration:11s;animation-fill-mode:both}
+.sv-c1{animation-name:svC1}.sv-c2{animation-name:svC2}.sv-c3{animation-name:svC3}.sv-c4{animation-name:svC4}.sv-c5{animation-name:svC5}
+@keyframes svC1{0%,2%{opacity:0}5%,19%{opacity:1}22%,100%{opacity:0}}
+@keyframes svC2{0%,22%{opacity:0}25%,42%{opacity:1}45%,100%{opacity:0}}
+@keyframes svC3{0%,45%{opacity:0}48%,59%{opacity:1}62%,100%{opacity:0}}
+@keyframes svC4{0%,62%{opacity:0}65%,79%{opacity:1}82%,100%{opacity:0}}
+@keyframes svC5{0%,84%{opacity:0}88%,100%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.sv-a,.sv-cap{animation:none !important}.sv-faint,.sv-d1,.sv-d2,.sv-d3,.sv-d4,.sv-trails,.sv-flash,.sv-merge,.sv-star,.sv-cap,.sv-burst,.sv-sp0,.sv-sp1,.sv-sp2,.sv-sp3{display:none}.sv-pop{transform:translate(302px,187px) scale(1.3)}}
+.sv-stage{position:relative;width:100%;aspect-ratio:1200/600;border:3.5px solid #1d1a14;background:rgba(255,255,255,.45);overflow:hidden}
+.sv-stage svg.sv-scene{position:absolute;inset:0;width:100%;height:100%}
+.sv-replay{position:absolute;right:24px;bottom:22px;font-family:var(--font-mono);font-size:12px;letter-spacing:.2em;padding:12px 16px;min-height:44px;background:rgba(255,255,255,.75);border:1.5px solid #1d1a14;cursor:pointer}
+
+/* 좁은 화면(웹에서 덧붙임): 무대를 4:3 으로 키워 장면(1200×520)이 가운데 오고, 위 빈칸에 문구·아래 빈칸에 REPLAY 가 들어가게 한다. 좌표·시간표는 그대로 */
+@media (max-width:640px){.sv-stage{aspect-ratio:4/3}.sv-cap{left:16px;top:14px;gap:2px}.sv-cap p:nth-child(2){font-size:20px !important}.sv-cap p:nth-child(3){font-size:12px !important}.sv-replay{right:10px;bottom:8px;padding:8px 12px;font-size:11px}}
