@@ -4,6 +4,7 @@ import { CheckCircle2, GitCompareArrows, Layers, MessagesSquare, ShieldCheck, Sh
 import { buttonVariants } from "@/components/ui/button";
 import { START } from "@/lib/start-link";
 import { cn } from "@/lib/utils";
+import { EnTitle } from "@/components/page-title";
 
 export const metadata: Metadata = {
   title: "서비스 소개 · Sync up",
@@ -48,8 +49,7 @@ export default function AboutPage() {
     <>
       <section className="bg-gradient-to-b from-brand-soft/80 to-background">
         <div className="mx-auto max-w-content px-gutter pt-16 pb-14 text-center">
-          <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-brand shadow-xs">서비스 소개</span>
-          <h1 className="mt-5 text-3xl leading-tight font-bold break-keep sm:text-4xl">
+          <EnTitle>What is SyncUp.</EnTitle><h1 className="mt-5 text-3xl leading-tight font-bold break-keep sm:text-4xl">
             흩어진 AI 대화 속 팀 결정을
             <br />
             하나의 기록으로

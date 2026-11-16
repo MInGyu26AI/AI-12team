@@ -46,7 +46,7 @@ export default function CollectPage() {
 
   return (
     <div className="mx-auto max-w-[860px] space-y-[18px] px-gutter py-10">
-      <PageTitle title="프로젝트 대화 수집">
+      <PageTitle display="Bring your chats in." title="프로젝트 대화 수집">
         브라우저 확장이 ChatGPT 프로젝트 대화를 모아 승인함으로 보내요. 팀에 바로 올라가지 않고, 내가 승인한 것만 공유돼요.
       </PageTitle>
       {collector.error && <p role="alert">{collector.error}</p>}
@@ -55,7 +55,7 @@ export default function CollectPage() {
       {/* 연결된 AI */}
       <section className={cn(card, "p-5")}>
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
-          <h2 className="text-base leading-[1.5] font-medium">연결된 AI</h2>
+          <h2 className="text-base leading-[1.5] font-bold">연결된 AI</h2>
           {link === "connected" ? (
             <span className={cn(chip, "bg-ok-soft text-ok")}>로컬 수집기 연결됨</span>
           ) : link === "extension-missing" ? (
@@ -116,7 +116,7 @@ export default function CollectPage() {
 
       {/* 수집 기준 */}
       <section className={cn(card, "space-y-3.5 p-5")}>
-        <h2 className="text-base leading-[1.5] font-medium">수집 기준</h2>
+        <h2 className="text-base leading-[1.5] font-bold">수집 기준</h2>
         {/* 묶음 크기는 팀 고정값 (shared/batch.ts). 수집기에 다른 값이 남아 있으면 확장이 기본값으로 되돌린다.
             피그마는 −/+ 칸이지만 고를 수 없는 값이라 숫자 칸만 둔다 */}
         <p className="flex flex-wrap items-center gap-2.5 text-[15px] leading-[1.5] font-medium">

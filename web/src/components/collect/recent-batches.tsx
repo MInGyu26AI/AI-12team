@@ -15,7 +15,7 @@ export function RecentBatches({ batches, pendingIds, emptyText }: {
 }) {
   return (
     <section className={cn(card, "p-5")}>
-      <h2 className="pb-2 text-base leading-[1.5] font-medium">최근 수집</h2>
+      <h2 className="pb-2 text-base leading-[1.5] font-bold">최근 수집</h2>
       {!batches?.length ? (
         <p className="border-t border-card-border py-6 text-center text-sm text-muted-foreground">{emptyText}</p>
       ) : (

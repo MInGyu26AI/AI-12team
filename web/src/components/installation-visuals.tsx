@@ -1,40 +1,71 @@
 import Image from "next/image";
 import type { CSSProperties } from "react";
 
+const extensionsScreenshot = "/installation/chrome-extensions-light.png";
+const extensionIdScreenshot = "/installation/chrome-syncup-id-light.png";
+const screenshotFrame = "relative bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink";
+
+function StepNumber({ number, size = "size-6 text-xs" }: { number: number; size?: string }) {
+  return (
+    <span aria-hidden="true" className={`grid shrink-0 place-items-center bg-ink font-mono font-semibold leading-none text-white ${size}`}>
+      {number}
+    </span>
+  );
+}
+
 function ScreenshotMark({ number, style }: { number: number; style: CSSProperties }) {
-  return <span aria-hidden="true" className="pointer-events-none absolute rounded-md border-2 border-brand sm:border-[3px]" style={style}>
-    <span className="absolute top-0 left-0 grid size-5 -translate-x-1/3 -translate-y-1/2 place-items-center rounded-full bg-brand text-[10px] font-bold text-white sm:size-6 sm:text-xs">{number}</span>
-  </span>;
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute border-[1.5px] border-ink" style={style}>
+      <span className="absolute bottom-full -left-px"><StepNumber number={number} size="size-3.5 text-[9px] sm:size-4 sm:text-[10px]" /></span>
+    </span>
+  );
 }
 
-// Actual Chrome captures; only annotations are rendered over the unchanged pixels.
-export function ChromeExtensionsVisual() {
-  return <figure>
-    <a href="/installation/chrome-extensions-light.png" target="_blank" rel="noreferrer" aria-label="Chrome 확장 설치 스크린샷 크게 보기" className="relative hidden overflow-hidden rounded-lg border border-card-border bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand sm:block">
-      <Image src="/installation/chrome-extensions-light.png" width={3040} height={340} unoptimized className="h-auto w-full" alt="라이트 모드 Chrome 확장 프로그램 화면. 오른쪽 위 개발자 모드와 왼쪽 아래 압축해제된 확장 프로그램 로드 버튼이 표시돼 있어요." />
-      <ScreenshotMark number={1} style={{ left: "88.5%", top: "12%", width: "11%", height: "26%" }} />
-      <ScreenshotMark number={2} style={{ left: "2%", top: "56%", width: "19.5%", height: "35%" }} />
-    </a>
-    <div className="space-y-4 sm:hidden">
-      <a href="/installation/chrome-extensions-light.png" target="_blank" rel="noreferrer" aria-label="개발자 모드 위치의 전체 스크린샷 보기" className="relative block rounded-lg border border-card-border bg-white p-3">
-        <span className="mb-2 block text-xs font-semibold">1. 오른쪽 위 개발자 모드</span>
-        <Image src="/installation/chrome-developer-mode-light.png" width={365} height={135} unoptimized className="mx-auto h-auto w-48" alt="Chrome의 개발자 모드 스위치가 켜진 실제 화면" />
-      </a>
-      <a href="/installation/chrome-extensions-light.png" target="_blank" rel="noreferrer" aria-label="확장 로드 버튼 위치의 전체 스크린샷 보기" className="relative block rounded-lg border border-card-border bg-white p-3">
-        <span className="mb-2 block text-xs font-semibold">2. 왼쪽 위 확장 프로그램 로드</span>
-        <Image src="/installation/chrome-load-unpacked-light.png" width={625} height={145} unoptimized className="h-auto w-full" alt="Chrome의 압축해제된 확장 프로그램 로드 버튼 실제 화면" />
-      </a>
-    </div>
-    <figcaption className="mt-3 text-xs leading-relaxed text-muted-foreground">실제 Chrome 스크린샷 · 누르면 크게 볼 수 있어요.</figcaption>
-  </figure>;
-}
+export function ChromeExtensionSteps() {
+  return (
+    <>
+      <figure className="mt-5">
+        <a href={extensionsScreenshot} target="_blank" rel="noreferrer"
+          className={`block border ${screenshotFrame}`}
+          aria-label="Chrome 확장 관리 화면 크게 보기 (새 탭)">
+          <Image src={extensionsScreenshot} width={3040} height={340} unoptimized className="h-auto w-full"
+            alt="Chrome 확장 관리 화면에서 오른쪽 위 개발자 모드와 왼쪽 위 확장 프로그램 로드 위치" />
+          <ScreenshotMark number={1} style={{ left: "88.5%", top: "13%", width: "11%", height: "25%" }} />
+          <ScreenshotMark number={2} style={{ left: "2%", top: "54%", width: "19.5%", height: "40%" }} />
+        </a>
+        <figcaption className="mt-2 text-xs leading-5 text-muted-foreground">화면을 누르면 크게 볼 수 있어요.</figcaption>
+      </figure>
 
-export function ExtensionIdVisual() {
-  return <figure>
-    <a href="/installation/chrome-syncup-id-light.png" target="_blank" rel="noreferrer" aria-label="SyncUp 확장 ID 스크린샷 크게 보기" className="relative block overflow-hidden rounded-lg border border-card-border bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand">
-      <Image src="/installation/chrome-syncup-id-light.png" width={1180} height={445} unoptimized className="h-auto w-full" alt="실제 Chrome의 싱크업 SyncUp 0.2.20 카드. 확장 설명 아래 ID 줄의 위치를 표시했어요." />
-      <ScreenshotMark number={3} style={{ left: "21.5%", top: "69%", width: "60%", height: "14%" }} />
-    </a>
-    <figcaption className="mt-3 text-xs leading-relaxed text-muted-foreground">실제 확장 카드의 ID 부분을 확대한 화면이에요. 화면 속 ID 대신 내 Chrome의 ID를 복사하세요. 누르면 크게 볼 수 있어요.</figcaption>
-  </figure>;
+      <ol role="list" className="mt-5 space-y-4 text-sm leading-6 break-keep text-ink-body">
+        <li className="flex items-start gap-3">
+          <StepNumber number={1} />
+          <p>오른쪽 위 <strong>개발자 모드</strong>를 켜세요.</p>
+        </li>
+        <li className="flex items-start gap-3">
+          <StepNumber number={2} />
+          <div className="min-w-0">
+            <p><strong>압축해제된 확장 프로그램 로드</strong>를 누르고, SyncUp 앱에서 열린 폴더를 선택하세요.</p>
+            <p className="mt-2 text-xs text-muted-foreground">설치 후에도 확장 폴더는 그대로 두세요.</p>
+          </div>
+        </li>
+        <li className="border-t pt-5">
+          <div className="flex items-start gap-3">
+            <StepNumber number={3} />
+            <p><strong>싱크업 SyncUp</strong> 카드의 <strong>ID 32자리</strong>를 SyncUp 앱에 붙여 넣고 <strong>백업하고 이 PC에 설치</strong>를 누르세요.</p>
+          </div>
+          <figure className="mt-3 max-w-lg">
+            <a href={extensionIdScreenshot} target="_blank" rel="noreferrer"
+              className={`block border ${screenshotFrame}`} aria-label="SyncUp 확장 ID 화면 크게 보기 (새 탭)">
+              <Image src={extensionIdScreenshot} width={1180} height={445} unoptimized className="h-auto w-full"
+                alt="Chrome의 싱크업 SyncUp 카드에서 설명 아래 ID가 표시된 위치" />
+              <ScreenshotMark number={3} style={{ left: "21.5%", top: "69%", width: "60%", height: "14%" }} />
+            </a>
+            <figcaption className="mt-2 text-xs leading-5 text-muted-foreground">
+              화면 속 ID는 예시예요. 내 Chrome에 표시된 ID를 복사하세요.
+            </figcaption>
+          </figure>
+        </li>
+      </ol>
+    </>
+  );
 }

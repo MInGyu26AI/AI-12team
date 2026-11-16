@@ -9,6 +9,7 @@ import { InviteJoin } from "./invite-join";
 import { JoinDone } from "@/components/join-done";
 import { buttonPrimary, card } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+import { EnTitle } from "@/components/page-title";
 
 const COLORS = ["#cde9f4", "#eadfcf", "#e3dcf2", "#fff3a6"]; // 새 디자인 아바타 파스텔 4색 (돌려가며 배정)
 
@@ -42,7 +43,7 @@ function DemoJoin({ code }: { code: string }) {
     <div className="mx-auto max-w-[460px] space-y-6 px-gutter py-16">
       <div className="space-y-2 text-center">
         <p className="text-[13px] font-medium text-muted-foreground">초대 코드 {decodeURIComponent(code)}</p>
-        <h1 className="text-2xl font-medium">{team.name}에 참여하기</h1>
+        <EnTitle>Join the team.</EnTitle><h1 className="text-2xl font-bold">{team.name}에 참여하기</h1>
         <p className="text-sm text-muted-foreground">{team.topic}</p>
       </div>
       <div className={cn(card, "space-y-4 rounded-2xl p-6")}>

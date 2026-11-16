@@ -64,7 +64,7 @@ export function GithubLinkForm() {
   }
 
   return <section className="space-y-4 rounded-[14px] border border-card-border bg-white p-6">
-    <h2 className="text-lg font-medium">팀 기록 저장소</h2>
+    <h2 className="text-lg font-bold">팀 기록 저장소</h2>
     <p className="text-sm text-muted-foreground">선택한 저장소에만 접근하는 GitHub 토큰을 사용해 주세요. Contents 읽기·쓰기 권한이 필요하며 토큰은 팀 서버에 보관돼요.</p>
     <fieldset disabled={busy || !loaded} className="space-y-4 disabled:opacity-60">
       <label className="block space-y-1"><span>저장소 주소</span><input className={input} value={repo} onChange={e => { setRepo(e.target.value); setAcceptPublic(false); }} placeholder="github.com/팀/저장소" /></label>

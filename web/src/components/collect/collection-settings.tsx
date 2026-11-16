@@ -26,7 +26,7 @@ export function CollectionSettings({ status, onChange, children }: {
   const known = !!status.teamId && !!status.teams?.some((t) => t.id === status.teamId);
   return (
     <section className={cn(card, "space-y-4 p-5")} aria-label="수집 설정">
-      <h2 className="text-base leading-[1.5] font-medium">수집 설정</h2>
+      <h2 className="text-base leading-[1.5] font-bold">수집 설정</h2>
       <label className="block space-y-1.5">
         <span className="text-[13px] font-medium">승인 대상 팀</span>
         <select

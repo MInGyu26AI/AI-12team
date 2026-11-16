@@ -4,72 +4,96 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SyncUp PC 연결</title>
 <style>
-  body { font:16px/1.6 system-ui,sans-serif; background:#f6f7fb; color:#182035; max-width:760px; margin:40px auto; padding:0 20px; }
-  h1 { font-size:30px; line-height:1.35; }
+  /* Match web/src/app/globals.css: rose & olive, dark ink, square controls. */
+  :root { --paper:#fbf8f3; --ink:#1d1a14; --body:#3a342b; --muted:#5c5348; --blush:#e9d6cf; --glass:rgb(255 255 255 / .72); --olive:rgb(185 196 138 / .35); --line:1.5px solid var(--ink); }
+  * { box-sizing:border-box; }
+  html { background:var(--paper); }
+  body { font:16px/1.7 -apple-system,BlinkMacSystemFont,"Noto Sans KR",system-ui,sans-serif; color:var(--ink); max-width:1000px; margin:0 auto; padding:32px 24px 56px; overflow-wrap:anywhere; }
+  body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background:radial-gradient(ellipse at 9% 22%,rgb(233 166 179 / .25),transparent 43%),radial-gradient(ellipse at 95% 58%,rgb(185 196 138 / .25),transparent 42%); }
+  .brand { display:flex; align-items:center; gap:12px; padding-bottom:24px; border-bottom:var(--line); font-size:22px; font-weight:850; letter-spacing:-.04em; }
+  .brand-mark { display:grid; place-items:center; width:40px; height:40px; background:var(--ink); color:white; font-size:26px; }
+  header { padding:44px 0 20px; }
+  .en-title { margin:0 0 14px; font-size:clamp(44px,9vw,86px); line-height:1; font-weight:850; letter-spacing:-.065em; }
+  h1 { font-size:26px; line-height:1.4; margin:0 0 14px; }
   h2 { margin:0 0 12px; }
-  section { background:white; border:1px solid #dce1ec; border-radius:16px; padding:24px; margin:20px 0; }
-  button { background:#4f46e5; color:white; border:0; border-radius:8px; padding:12px 18px; cursor:pointer; font:inherit; }
+  section { background:var(--glass); border:var(--line); padding:28px; margin:24px 0; }
+  button { background:var(--ink); color:white; border:var(--line); padding:12px 18px; cursor:pointer; font:inherit; font-weight:650; }
+  button:hover { background:var(--body); }
+  :is(button,a,input,select,summary):focus-visible { outline:2px solid var(--ink); outline-offset:4px; }
   button:disabled { opacity:.5; cursor:wait; }
-  button.secondary { background:#e9ecf5; color:#182035; }
-  input, select { box-sizing:border-box; width:100%; border:1px solid #c5ccda; border-radius:8px; padding:12px; font:inherit; margin:8px 0 16px; }
+  button.secondary { background:transparent; color:var(--ink); }
+  button.secondary:hover { background:var(--blush); }
+  input, select { width:100%; min-width:0; border:var(--line); border-radius:0; background:white; color:var(--ink); padding:12px; font:inherit; margin:8px 0 16px; }
   label { display:block; }
-  small { color:#536078; }
-  a { color:#4338ca; }
+  small { color:var(--muted); }
+  a { color:var(--ink); text-underline-offset:4px; }
+  details { border-top:var(--line); margin:20px 0; padding-top:16px; }
+  summary { cursor:pointer; font-weight:700; }
   .row { display:flex; gap:10px; flex-wrap:wrap; }
-  #message { white-space:pre-wrap; }
+  #message { white-space:pre-wrap; background:var(--blush); padding:12px 16px; border-left:4px solid var(--ink); }
+  #message:empty { display:none; }
+  #service { font-size:13px; color:var(--muted); }
   #service:empty, #message:empty, #folder-path:empty, #installed:empty, #connected:empty, #running:empty { margin:0; }
   #folder-path { overflow-wrap:anywhere; }
 
   .chrome-guide { margin:0 0 16px; }
-  .chrome-guide figcaption { margin-top:10px; font-size:.9375rem; color:#37445c; word-break:keep-all; }
+  .chrome-guide figcaption { margin-top:16px; font-size:.9375rem; color:var(--body); word-break:keep-all; }
   .chrome-shot { position:relative; }
-  .chrome-shot.card { max-width:406px; }
-  .chrome-shot img { display:block; width:100%; height:auto; border-radius:10px; }
-  .chrome-mark { position:absolute; box-sizing:border-box; border:2px solid #ffd76d; border-radius:6px; pointer-events:none; }
-  .chrome-mark.mode { inset:9.1% .5% auto 83.8%; height:24%; }
-  .chrome-mark.load { inset:46.2% auto auto 2.55%; width:27.2%; height:34.8%; }
-  .chrome-mark.id { inset:48.5% auto auto 21.8%; width:61.5%; height:13%; }
-  .chrome-mark::before { position:absolute; top:0; left:0; transform:translate(-35%,-55%); }
+  .chrome-shot { display:block; border:1px solid var(--ink); }
+  .chrome-shot.card { max-width:590px; }
+  .chrome-shot img { display:block; width:100%; height:auto; }
+  .chrome-mark { position:absolute; border:var(--line); pointer-events:none; }
+  .chrome-mark.mode { left:88.5%; top:13%; width:11%; height:25%; }
+  .chrome-mark.load { left:2%; top:54%; width:19.5%; height:40%; }
+  .chrome-mark.id { left:21.5%; top:69%; width:60%; height:14%; }
+  .chrome-mark::before { position:absolute; bottom:100%; left:-1px; }
   .chrome-mark[data-step]::before { content:attr(data-step); }
   .chrome-mark[data-step]::before, .chrome-steps li::before {
-    display:inline-grid; place-items:center; width:19px; height:19px; border-radius:50%;
-    background:#ffd76d; color:#3b2b04; font:750 .75rem/1 system-ui,sans-serif;
+    display:inline-grid; place-items:center; width:19px; height:19px;
+    background:var(--ink); color:white; font:750 .75rem/1 ui-monospace,monospace;
   }
   .chrome-steps { display:grid; gap:4px; margin:0; padding:0; list-style:none; counter-reset:chrome-step; }
   .chrome-steps li { display:grid; grid-template-columns:19px 1fr; align-items:baseline; gap:8px; word-break:keep-all; }
   .chrome-steps li::before { content:counter(chrome-step); counter-increment:chrome-step; }
-  .chrome-address { font-size:.92em; background:#eff1f7; border-radius:5px; padding:3px 6px; }
+  .chrome-address { font-size:.92em; background:var(--blush); padding:3px 6px; }
   .install-note { display:block; margin-top:12px; }
 
-  .collector-data { display:grid; grid-template-columns:1.15fr 1fr 1fr; margin:0 0 20px; border:1px solid #dce1ec; border-radius:12px; overflow:hidden; }
+  .collector-data { display:grid; grid-template-columns:1.15fr 1fr 1fr; margin:0 0 20px; border:var(--line); }
   .collector-data > div { padding:12px 14px; }
-  .collector-data > div + div { border-left:1px solid #dce1ec; }
-  .collector-data .local { background:#f0efff; }
-  .collector-data dt { margin-bottom:3px; color:#413899; font-size:.875rem; font-weight:750; }
+  .collector-data > div + div { border-left:var(--line); }
+  .collector-data .local { background:var(--olive); }
+  .collector-data dt { margin-bottom:3px; color:var(--ink); font-size:.875rem; font-weight:750; }
   .collector-data dd { margin:0; font-size:.9375rem; line-height:1.5; word-break:keep-all; overflow-wrap:anywhere; }
   .collector-data small { display:block; margin-top:4px; font-size:.8125rem; }
 
   @media (max-width:480px) {
-    body { margin:24px auto; padding:0 14px; }
-    h1 { font-size:26px; word-break:keep-all; }
+    body { padding:20px 16px 40px; }
+    header { padding:32px 0 16px; }
+    h1 { font-size:23px; word-break:keep-all; }
     h2 { font-size:20px; }
     section { padding:16px; }
     .collector-data { grid-template-columns:1fr; }
-    .collector-data > div + div { border-left:0; border-top:1px solid #dce1ec; }
+    .collector-data > div + div { border-left:0; border-top:var(--line); }
+    .chrome-mark::before { width:12px; height:12px; font-size:9px; }
   }
 </style>
+<body>
+<div class="brand"><span class="brand-mark" aria-hidden="true">S✦</span>SyncUp</div>
+<header><p class="en-title">CONNECT YOUR PC</p>
 <h1>이 PC를 SyncUp에 연결해요</h1>
 <p id="service"></p>
+</header>
+<main>
 <p id="message" role="status" aria-live="polite"></p>
 <section>
   <h2>1. Chrome 확장 설치</h2>
   <p>Chrome 주소창에 <code class="chrome-address">chrome://extensions</code>를 입력하세요.</p>
   <figure class="chrome-guide">
-    <div class="chrome-shot">
-      <img src="desktop-assets/chrome-extensions.png" width="1480" height="264" alt="개발자 모드를 켠 Chrome 확장 프로그램 화면. 오른쪽 위에 개발자 모드, 왼쪽 아래에 압축해제된 확장 프로그램 로드 버튼이 있어요.">
+    <a class="chrome-shot" href="desktop-assets/chrome-extensions.png" target="_blank" rel="noreferrer" aria-label="Chrome 확장 관리 화면 크게 보기 (새 탭)">
+      <img src="desktop-assets/chrome-extensions.png" width="3040" height="340" alt="Chrome 확장 관리 화면. 오른쪽 위 개발자 모드와 왼쪽 위 확장 프로그램 로드 버튼이 있어요.">
       <span class="chrome-mark mode" data-step="1" aria-hidden="true"></span>
       <span class="chrome-mark load" data-step="2" aria-hidden="true"></span>
-    </div>
+    </a>
     <figcaption>
       <ol class="chrome-steps" role="list">
         <li><span>오른쪽 위 <strong>개발자 모드</strong>를 켜세요.</span></li>
@@ -84,10 +108,10 @@
 <section>
   <h2>2. 연결 프로그램 설치</h2>
   <figure class="chrome-guide">
-    <div class="chrome-shot card">
-      <img src="desktop-assets/chrome-syncup-id.png" width="812" height="428" alt="Chrome에 설치된 싱크업 SyncUp 카드. 설명 아래의 ID 줄이 강조되어 있어요.">
-      <span class="chrome-mark id" aria-hidden="true"></span>
-    </div>
+    <a class="chrome-shot card" href="desktop-assets/chrome-syncup-id.png" target="_blank" rel="noreferrer" aria-label="SyncUp 확장 ID 화면 크게 보기 (새 탭)">
+      <img src="desktop-assets/chrome-syncup-id.png" width="1180" height="445" alt="Chrome에 설치된 싱크업 SyncUp 카드. 설명 아래의 ID 줄이 강조되어 있어요.">
+      <span class="chrome-mark id" data-step="3" aria-hidden="true"></span>
+    </a>
     <figcaption><strong>싱크업 SyncUp</strong> 카드에서 내 <strong>ID</strong>를 복사해 아래에 붙여넣으세요. 화면 속 ID는 예시예요.</figcaption>
   </figure>
   <label for="extension">SyncUp 확장 프로그램 ID</label>
@@ -123,4 +147,4 @@
   <p id="running"></p>
   <a id="collect" target="_blank" rel="noreferrer">웹에서 연결 확인하기</a>
 </section>
-<p>이 화면의 탭을 닫아도 앱은 실행 중이에요. 종료하려면 아래 버튼을 눌러 주세요.</p><button id="quit" class="secondary">수집기를 중지하고 앱 종료</button><script src="/app.js"></script></html>
+<p>이 화면의 탭을 닫아도 앱은 실행 중이에요. 종료하려면 아래 버튼을 눌러 주세요.</p><button id="quit" class="secondary">수집기를 중지하고 앱 종료</button></main><script src="/app.js"></script></body></html>

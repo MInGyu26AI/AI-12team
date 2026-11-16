@@ -5,10 +5,10 @@ import { repoLine, type RepoStatus, type RepoTone } from "@shared/repo";
 import { cn } from "@/lib/utils";
 
 const TONE: Record<RepoTone, string> = {
-  ok: "border-ok/30 bg-ok-soft text-ok",
-  busy: "border-brand/30 bg-brand-soft text-brand",
-  error: "border-alert-conflict/30 bg-alert-conflict-soft text-alert-conflict",
-  muted: "border-border bg-muted text-muted-foreground",
+  ok: "border-ink bg-glass text-ink",
+  busy: "border-ink bg-blush text-ink",
+  error: "border-ink bg-ink text-flare",
+  muted: "border-ink bg-glass text-ink-2",
 };
 
 // 팀 보드 맨 위(충돌 배너 아래) 레포 상태 바: "AI-12team · 레포에 저장됨 ✓ · 3분 전 · 커밋 a1b2c3d". 연결 안 된 팀이면 숨김

@@ -83,7 +83,7 @@ export function ConflictDialog({
             <TriangleAlert className={cn("size-[22px]", tone.text)} />
           </span>
           <div className="min-w-0 space-y-0.5 leading-[1.5]">
-            <h2 id="conflict-title" className="text-lg font-medium break-keep sm:text-[22px]">
+            <h2 id="conflict-title" className="text-lg font-bold break-keep sm:text-[22px]">
               {isChange ? "기존 결정에서 변경되었습니다. 변경안으로 진행할까요?" : "기존 팀 결정과 충돌하는 내용이 있어요"}
             </h2>
             <p className="text-sm text-muted-foreground break-keep">
@@ -192,10 +192,10 @@ function ResolutionActions({ isChange, pending, discussed, hasNext, viewingExist
         </>
       ) : (
         <>
-          <button type="button" className={buttonOutline} disabled={!!pending} onClick={() => onResolve("keep-existing")}>
+          <button type="button" className={cn(buttonOutline, "bg-transparent")} disabled={!!pending} onClick={() => onResolve("keep-existing")}>
             {label("keep-existing", "기존 유지")}
           </button>
-          <button type="button" className={buttonOutline} disabled={!!pending} onClick={() => onResolve("adopt-new")}>
+          <button type="button" className={cn(buttonOutline, "bg-white font-bold")} disabled={!!pending} onClick={() => onResolve("adopt-new")}>
             {label("adopt-new", "새 결정으로 변경")}
           </button>
           <button type="button" className={buttonOutline} disabled={!!pending} onClick={() => onResolve("both-valid")}>
@@ -210,27 +210,27 @@ function ResolutionActions({ isChange, pending, discussed, hasNext, viewingExist
   );
 }
 
-// 결정 카드 (피그마 152:357·152:368): 흰 면 · 2px 테두리 #e2d6c3 · 모서리 12.
-// 새 결정의 이름표는 단계 색: 충돌 = 빨강 칩, 확인 필요 = 노랑 테두리 + 글자, 변경 = 파랑 테두리 + 글자 (226:976 '결정 확인 카드')
+// 결정 카드: 기존 vs 새 결정 좌우 비교 (진갈색 1.5px 테두리 · 반투명 흰 바탕).
+// 새 결정의 이름표는 단계 모양: 충돌 = 진갈색 채움 + 복숭아 글자, 확인 필요 = 테두리, 변경 = 연분홍 (labels.ts ALERT_LEVEL 과 같다)
 const NEW_TONE: Record<AlertLevel, { border: string; label: string }> = {
-  conflict: { border: "border-card-border", label: "bg-alert-conflict-soft text-alert-conflict" },
-  review: { border: "border-alert-review-dot/50", label: "bg-alert-review-soft text-alert-review" },
-  change: { border: "border-alert-change/40", label: "bg-alert-change-soft text-alert-change" },
+  conflict: { border: "border-ink", label: "bg-ink text-flare" },
+  review: { border: "border-ink", label: "border border-ink text-ink" },
+  change: { border: "border-ink", label: "bg-blush text-ink" },
 };
 
 function Side({ label, card, tone, level }: { label: string; card: RelatedCard; tone: "old" | "new"; level: AlertLevel }) {
   const src = parseSource(card.source);
   return (
-    <div className={cn("min-w-0 space-y-2.5 rounded-[12px] border-2 bg-white p-5", tone === "old" ? "border-card-border" : NEW_TONE[level].border)}>
-      <span className={cn(chip, tone === "old" ? "bg-change-soft text-change" : NEW_TONE[level].label)}>{label}</span>
+    <div className={cn("min-w-0 space-y-2.5 border bg-glass p-5", tone === "old" ? "border-ink" : NEW_TONE[level].border)}>
+      <span className={cn(chip, tone === "old" ? "border border-ink text-ink" : NEW_TONE[level].label)}>{label}</span>
       <p className="text-lg leading-[1.5] font-medium break-keep sm:text-[22px]">{card.content}</p>
       <p className="flex flex-wrap items-center gap-2 text-[13px] leading-[1.5] font-medium text-muted-foreground">
         <Avatar name={card.owner} size="sm" className="size-6 text-[11px]" />
         {[card.owner, src.at && fmtMDHM(src.at), src.label].filter(Boolean).join(" · ")}
       </p>
-      <div className="space-y-1 rounded-md bg-canvas px-3.5 py-2.5 leading-[1.5]">
+      <div className="space-y-1 border-t border-ink/30 pt-2.5 leading-[1.5]">
         <p className="text-xs font-medium text-muted-foreground">근거 문장</p>
-        <p className="text-sm break-keep">“{card.sentence}”</p>
+        <p className="font-mono text-sm break-keep">“{card.sentence}”</p>
       </div>
     </div>
   );

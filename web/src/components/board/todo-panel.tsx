@@ -28,7 +28,7 @@ export function TodoPanel({ todos, done, todoIds, onToggle }: {
 }) {
   return (
     <section className={cn(card, "p-5")} aria-label="할 일">
-      <h2 className="flex items-center gap-2 text-lg leading-[1.5] font-medium">
+      <h2 className="flex items-center gap-2 text-lg leading-[1.5] font-bold">
         할 일 <span className={cn(chip, "bg-brand-soft text-muted-foreground")}>{todos.length}</span>
       </h2>
       <ul className="mt-3 space-y-3">
@@ -50,7 +50,7 @@ export function TodoPanel({ todos, done, todoIds, onToggle }: {
                       type="button"
                       onClick={() => void copyId(suId)}
                       title="ID 복사 · 커밋 메시지나 PR 제목에 넣으면 이 할 일과 연결돼요"
-                      className="mr-1.5 inline-flex translate-y-[-1px] items-center gap-[3px] rounded-[4px] bg-brand-soft px-[5px] py-0.5 align-middle text-[11px] leading-none font-medium text-muted-foreground hover:text-foreground"
+                      className="mr-1.5 inline-flex translate-y-[-1px] items-center gap-[3px] rounded-[4px] bg-blush px-[5px] py-0.5 align-middle font-mono text-[11px] leading-none font-medium text-ink hover:bg-blush-deep"
                     >
                       {suId}
                       <Copy className="size-2.5" aria-hidden />

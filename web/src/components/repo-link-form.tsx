@@ -39,7 +39,7 @@ export function RepoLinkForm({ url, branch, files = DEFAULT_FILES, check, locked
       <div className="flex items-center gap-2.5 px-6 py-5">
         <Image src="/brand/github.svg" alt="" width={20} height={20} unoptimized />
         <div className="space-y-0.5">
-          <h2 id="repo-form-title" className="text-[17px] font-medium">
+          <h2 id="repo-form-title" className="text-[17px] font-bold">
             연결할 레포
           </h2>
           <p className="text-xs text-text-tertiary break-keep">팀 레포 1개에만 권한을 준 토큰으로 연결해요. 토큰은 팀 서버에만 보관돼요.</p>

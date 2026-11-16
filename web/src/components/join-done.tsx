@@ -6,6 +6,7 @@ import type { Team } from "@shared/mock";
 import { AvatarStack } from "@/components/avatar";
 import { card } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+import { EnTitle } from "@/components/page-title";
 
 // 피그마 Page 9 · 3 팀 참여 완료 (318:3): 팀 정보 요약 · 다음 단계 3개 · 확장 설치 / 팀 화면으로
 const NEXT_STEPS = [
@@ -26,7 +27,7 @@ export function JoinDone({ team, me }: { team: Team; me: string }) {
           <Check className="size-6" aria-hidden />
         </span>
         <div className="space-y-1.5">
-          <h1 id="join-done-title" className="text-2xl leading-[1.5] font-medium break-keep">
+          <EnTitle>You&apos;re in.</EnTitle><h1 id="join-done-title" className="text-2xl leading-[1.5] font-bold break-keep">
             {team.name}에 참여했어요
           </h1>
           <p className="text-sm leading-[1.5] text-muted-foreground break-keep">
@@ -46,7 +47,7 @@ export function JoinDone({ team, me }: { team: Team; me: string }) {
         </dl>
 
         <div className="space-y-2.5">
-          <h2 className="text-sm leading-[1.5] font-medium">다음 단계</h2>
+          <h2 className="text-sm leading-[1.5] font-bold">다음 단계</h2>
           <ol className="space-y-2.5">
             {NEXT_STEPS.map((s, i) => (
               <li key={s.title} className="flex gap-3">

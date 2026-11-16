@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { RepoLinkForm, isRepoUrl, type RepoCheck } from "@/components/repo-link-form";
 import { USE_MOCK } from "@/lib/api";
 import { GithubLinkForm } from "@/components/board/github-link-form";
+import { EnTitle } from "@/components/page-title";
 
 export default function RepoLinkPage() {
   return (
@@ -15,7 +16,7 @@ export default function RepoLinkPage() {
           <ChevronLeft className="size-3.5" aria-hidden />
           팀 결정 기록으로
         </Link>
-        <h1 className="text-2xl font-medium sm:text-[28px]">GitHub 레포 연결</h1>
+        <EnTitle>Link your repo.</EnTitle><h1 className="text-2xl font-bold sm:text-[28px]">GitHub 레포 연결</h1>
         <p className="text-[13px] text-muted-foreground break-keep">팀 결정과 할 일을 GitHub 레포에도 저장해요. 팀당 한 번만 연결하면 돼요.</p>
       </div>
       {USE_MOCK ? <DemoRepoForm /> : <GithubLinkForm />}

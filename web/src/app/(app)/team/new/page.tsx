@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { TEAM_KINDS } from "@shared/mock";
 import { Avatar } from "@/components/avatar";
 import { InvitePanel } from "@/components/invite-panel";
-import { PageTitle } from "@/components/page-title";
+import { PageTitle, EnTitle } from "@/components/page-title";
 import { RegisteredTeamNotice } from "@/components/registered-team-notice";
 import { RepoLinkForm, isRepoUrl, type RepoCheck } from "@/components/repo-link-form";
 import { buttonOutline, buttonPrimary, card, chip } from "@/components/ui/surface";
@@ -70,12 +70,12 @@ function NewTeamForm() {
 
   return (
     <div className="mx-auto max-w-[760px] space-y-5 px-gutter py-10">
-      <PageTitle title="새 팀 만들기">
+      <PageTitle display="Start a team." title="새 팀 만들기">
         팀플이 시작되면 팀을 만들고 팀원을 초대하세요. 프로젝트 주제와 마감일은 AI가 대화를 분류하고 충돌을 찾는 기준이 돼요.
       </PageTitle>
 
       <section className={cn(card, "space-y-4 p-6")}>
-        <h2 className="text-base font-medium">팀 정보</h2>
+        <h2 className="text-base font-bold">팀 정보</h2>
         <Field label="팀 이름">
           <input value={form.name} onChange={set("name")} className={inputCls} placeholder="예: AI 해커톤 12팀" />
         </Field>
@@ -98,7 +98,7 @@ function NewTeamForm() {
 
       <section className="space-y-4 rounded-xl border bg-card p-6">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-medium">팀원 초대</h2>
+          <h2 className="text-base font-bold">팀원 초대</h2>
           <span className={cn(chip, "bg-brand-soft")}>초대 코드 {team.code}</span>
         </div>
         <div className="flex gap-2.5">
@@ -153,7 +153,7 @@ function RepoStep({ onBack, onSkip, onDone }: { onBack: () => void; onSkip: () =
         <button type="button" onClick={onBack} className="text-[13px] text-muted-foreground hover:text-foreground">
           새 팀 만들기 · 2/2 단계 (선택)
         </button>
-        <h1 className="text-2xl font-medium sm:text-[28px]">GitHub 레포도 연결할까요?</h1>
+        <EnTitle>Link your repo.</EnTitle><h1 className="text-2xl font-bold sm:text-[28px]">GitHub 레포도 연결할까요?</h1>
         <p className="text-[13px] text-muted-foreground break-keep">
           연결하면 팀이 승인한 결정과 할 일이 레포의 SYNCUP.md에도 저장돼요. 나중에 팀 결정 기록에서 연결해도 돼요.
         </p>

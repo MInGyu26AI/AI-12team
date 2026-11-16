@@ -12,12 +12,14 @@ import { BranchFilter } from "@/components/board/branch-filter";
 import { ConflictBanner } from "@/components/board/conflict-banner";
 import { ConflictChecks } from "@/components/board/conflict-checks";
 import { DecisionHistoryList } from "@/components/board/decision-history";
+import { BoardViewToggle, DecisionCarousel, useListOnly, type BoardView } from "@/components/board/decision-carousel";
 import { DecisionTimeline, TopicFilter, type Flag } from "@/components/board/decision-timeline";
 import { RepoStatusBar } from "@/components/board/repo-status";
 import { ResearchPanel } from "@/components/board/research-panel";
 import { TodoPanel } from "@/components/board/todo-panel";
 import { ConflictDialog } from "@/components/conflict-dialog";
 import { PageTitle } from "@/components/page-title";
+import { WatercolorBg } from "@/components/ui/watercolor-bg";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { buttonPrimary } from "@/components/ui/surface";
 import { USE_MOCK, api } from "@/lib/api";
@@ -38,6 +40,8 @@ export default function BoardPage() {
   const [topic, setTopic] = useState<string | null>(null); // 왼쪽 세부 주제 필터
   const [branch, setBranch] = useState<string | null>(null); // 브랜치 필터 (syncup.json by_branch 가 있을 때)
   const [dialog, setDialog] = useState(false);
+  const [view, setView] = useState<BoardView>("carousel"); // 결정 보기: 기본 회전 보기 (폰 너비·움직임 줄이기면 목록만)
+  const listOnly = useListOnly();
 
   if (load.state !== "ready") {
     return <Shell>{load.state === "loading" ? <LoadingState /> : <ErrorState message={load.message} onRetry={reload} />}</Shell>;
@@ -93,6 +97,7 @@ export default function BoardPage() {
   return (
     <Shell>
       <PageTitle
+        display="What we decided."
         title="팀 결정 기록"
         actions={
           <>
@@ -136,13 +141,20 @@ export default function BoardPage() {
               <p>승인함에서 내용을 골라 올리면 여기에 쌓여요.</p>
             </EmptyState>
           ) : (
-            <DecisionTimeline
-              decisions={shown}
-              flagged={flagged}
-              saved={savedDecisions}
-              repoLinked={!!repo.status?.linked}
-              onOpenConflict={() => setDialog(true)}
-            />
+            <>
+              {!listOnly && <BoardViewToggle value={view} onChange={setView} />}
+              {view === "carousel" && !listOnly ? (
+                <DecisionCarousel decisions={shown} flagged={flagged} onOpenConflict={() => setDialog(true)} />
+              ) : (
+                <DecisionTimeline
+                  decisions={shown}
+                  flagged={flagged}
+                  saved={savedDecisions}
+                  repoLinked={!!repo.status?.linked}
+                  onOpenConflict={() => setDialog(true)}
+                />
+              )}
+            </>
           )}
           <DecisionHistoryList />
         </div>
@@ -170,7 +182,12 @@ export default function BoardPage() {
 
 // 피그마 본문: 폭 1280 화면에서 좌우 40 · 위 32 (내용 폭 1200)
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-[1280px] space-y-5 px-gutter py-8 sm:px-10">{children}</div>;
+  return (
+    <div className="relative min-h-[calc(100dvh-4rem)] overflow-hidden">
+      <WatercolorBg />
+      <div className="relative mx-auto max-w-[1280px] space-y-5 px-gutter py-8 sm:px-10">{children}</div>
+    </div>
+  );
 }
 
 const topicOf = (c: RelatedCard) => c.topic_key ?? "기타";
