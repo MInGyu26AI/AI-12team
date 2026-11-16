@@ -7,7 +7,7 @@
 
 - macOS 또는 Windows ([지원 OS](#지원-os)), Python 3.11 이상, Rust 2024 edition을 빌드할 수 있는 `cargo`, Node.js와 npm. Windows에서 묶음(`syncup.exe`)을 쓰면 Python·Rust는 필요 없다
 - Ollama와 기본 개인정보 모델 ([개인정보 모델 준비](#개인정보-모델-준비))
-- `OPENAI_API_KEY`. 키와 다른 공급자 설정은 [ai/README.md 설정](../ai/README.md#설정)
+- 통합 수집기는 기본으로 서버 AI를 사용하며 개인 키가 필요 없다([서버 AI](server-ai.md)). 단독 수집기·직접 호출 모드에는 `OPENAI_API_KEY`가 필요하다. 키와 다른 공급자 설정은 [ai/README.md 설정](../ai/README.md#설정).
 - 팀 서버 주소와 개인 연결 키. 키는 배포 웹에서 GitHub로 로그인해 받거나([GitHub로 연결 키 받기](#github로-연결-키-받기)), 관리자가 발급한 파일을 쓴다([team-server.md](team-server.md)). 이 Mac에서 직접 띄우려면 [한 기기에서 써 보기](team-server.md#한-기기에서-써-보기)
 - Chrome (확장을 쓸 때)
 

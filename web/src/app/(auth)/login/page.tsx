@@ -1,16 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { loginDestination, readAccount, type Account } from "@/lib/auth-navigation";
+import { consentUrl, loginDestination, needsConsent, readAccount, type Account } from "@/lib/auth-navigation";
 import { card, chip } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { EnTitle } from "@/components/page-title";
 
 // GitHub account login works before installing the extension; PC connection is a separate step after signup.
-
-// 개인정보 처리방침은 팀 레포 문서로 연결한다 (웹에 따로 만든 약관 화면이 없다)
-const PRIVACY_URL = "https://github.com/MInGyu26AI/AI-12team/blob/main/docs/privacy.md";
 
 const provider = "flex w-full items-center justify-center gap-2.5 rounded-[10px] py-[13px] text-[15px] leading-[1.5] font-medium";
 const subscribe = () => () => {};
@@ -28,8 +26,8 @@ export default function LoginPage() {
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/onboarding", { cache: "no-store", signal: controller.signal }).then(async response => {
-      // 이미 로그인돼 있으면 묻지 않고 가려던 화면(기본 대시보드)으로 바로 보낸다
-      if (response.ok) { setAccount(readAccount(await response.json())); location.replace(next); }
+      // 이미 로그인돼 있으면 묻지 않고 가려던 화면(기본 대시보드)으로 바로 보낸다. 약관·처리방침에 아직 동의하지 않았다면 동의 화면을 먼저 거친다
+      if (response.ok) { const found = readAccount(await response.json()); setAccount(found); location.replace(needsConsent(found) ? consentUrl(next) : next); }
       else if (response.status !== 401) throw new Error("로그인 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
     }).catch(e => { if (!controller.signal.aborted) setError(e.message); })
       .finally(() => { if (!controller.signal.aborted) setChecking(false); });
@@ -73,12 +71,16 @@ export default function LoginPage() {
         <p className="text-xs leading-[1.5] text-muted-foreground break-keep">
           처음 로그인하면 계정이 자동으로 만들어져요. 로그인 후 팀을 만들거나 초대받은 팀에 참여할 수 있어요.
         </p>
-        <p className="text-xs leading-[1.5] text-muted-foreground">
-          계속하면{" "}
-          <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className="font-medium text-foreground underline">
+        <p className="border-t border-ink/15 pt-4 text-xs leading-[1.6] text-muted-foreground break-keep">
+          처음 로그인할 때 한 번, 다음 화면에서{" "}
+          <Link href="/terms" className="font-medium text-foreground underline">
+            이용약관
+          </Link>
+          과{" "}
+          <Link href="/privacy" className="font-bold text-foreground underline">
             개인정보 처리방침
-          </a>
-          에 동의하게 돼요.
+          </Link>{" "}
+          동의를 받아요.
         </p>
       </section>
     </div>

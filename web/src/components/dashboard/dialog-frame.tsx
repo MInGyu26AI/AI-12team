@@ -25,9 +25,12 @@ export function DialogFrame({
   labelledBy,
   scrollKey,
   bodyClassName = "p-6",
+  size = "default",
   children,
   footer,
 }: {
+  /** default: 슬라이드 팝업 720×520. large: 입력칸이 있는 팀 만들기 팝업 760×620 (창이 작으면 함께 줄어든다) */
+  size?: "default" | "large";
   open: boolean;
   onClose: () => void;
   /** 머리줄 제목 (예: PC 연결하기) */
@@ -112,7 +115,10 @@ export function DialogFrame({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         onKeyDown={trapTab}
-        className="flex h-full max-h-[520px] w-full max-w-[720px] flex-col border border-card-border bg-canvas text-ink shadow-[0_8px_24px_rgb(29_26_20/0.08)] outline-none"
+        className={cn(
+          "flex h-full w-full flex-col border border-card-border bg-canvas text-ink shadow-[0_8px_24px_rgb(29_26_20/0.08)] outline-none",
+          size === "large" ? "max-h-[620px] max-w-[760px]" : "max-h-[520px] max-w-[720px]",
+        )}
       >
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-card-border pr-3 pl-6">
           <p className="text-sm font-medium text-ink">

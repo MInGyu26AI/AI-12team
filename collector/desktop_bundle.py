@@ -1,7 +1,7 @@
 """Build a desktop setup app on the target OS; no secrets are accepted or bundled.
 
 python collector/desktop_bundle.py --web-url https://...vercel.app --team-api https://... --version <commit>
-Requires Python 3.12, PyInstaller 6.11.1 and the matching release scanner in bin/.
+Requires Python 3.12, desktop-requirements.txt and the matching release scanner in bin/.
 """
 import argparse
 import json
@@ -45,7 +45,9 @@ def main():
     config.write_text(json.dumps(dict(web_url=args.web_url, team_api=args.team_api, version=args.version,
                                      local_demo=args.local_demo)), encoding='utf-8')
     desktop_setup.read_config(work)
-    data = [(ROOT/'bin'/scanner, 'bin'), (ROOT/'ai/prompts', 'ai/prompts'),
+    import certifi
+    data = [(Path(certifi.where()), 'certs'),
+            (ROOT/'bin'/scanner, 'bin'), (ROOT/'ai/prompts', 'ai/prompts'),
             (ROOT/'web/public/syncup-extension.zip', '.'), (config, '.'),
             (ROOT/'collector/desktop.html', '.'), (ROOT/'collector/desktop.js', '.'),
             (ROOT/'collector/desktop-assets', 'desktop-assets')]
@@ -54,6 +56,8 @@ def main():
     PyInstaller.__main__.run(['--noconfirm', '--clean', '--onedir',
         '--console' if sys.platform == 'win32' else '--windowed', '--name', 'SyncUp',
         '--distpath', str(ROOT/'dist/desktop'), '--workpath', str(work/'pyinstaller'), '--specpath', str(work),
+        *(['--osx-entitlements-file', str(ROOT/'collector/desktop-macos-entitlements.plist')]
+          if sys.platform == 'darwin' else []),
         *(f'--paths={ROOT / p}' for p in ('collector', 'contract', '.')),
         *(f'--add-data={src}{os.pathsep}{dest}' for src, dest in data), '--exclude-module=psycopg',
         str(ROOT/'collector/desktop_entry.py')])

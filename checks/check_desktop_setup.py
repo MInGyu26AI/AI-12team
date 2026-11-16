@@ -13,7 +13,7 @@ from unittest.mock import patch
 import zipfile
 
 import desktop_setup
-from desktop import SetupServer, open_connection_in_chrome
+from desktop import DesktopState, SetupServer, open_connection_in_chrome
 
 
 class Registry:
@@ -33,6 +33,25 @@ class DesktopSetup(unittest.TestCase):
         self.root = self.home/'SyncUp'
         self.executable = self.home/'fake-executable'
         self.executable.write_text('synthetic executable, never run')
+
+    def test_start_without_personal_key_uses_server_and_direct_is_explicit(self):
+        import uuid
+        state = DesktopState.__new__(DesktopState)
+        state.root, state.executable, state.child = self.root, self.executable, None
+        with patch('desktop.key_setup.status', return_value={'keyPresent':True}), \
+             patch('desktop.subprocess.Popen') as spawn, \
+             patch('native_host.request',return_value={'ok':True}), \
+             patch.dict(os.environ,OPENAI_API_KEY='synthetic-parent-key',SYNCUP_AI_MODE='direct'):
+            spawn.return_value.poll.return_value = None
+            state.start(str(uuid.uuid4()))
+            env = spawn.call_args.kwargs['env']
+            self.assertEqual(env['SYNCUP_AI_MODE'],'server')
+            self.assertNotIn('OPENAI_API_KEY',env)
+            state.child = None
+            state.start(str(uuid.uuid4()),'synthetic-explicit-key')
+            env = spawn.call_args.kwargs['env']
+            self.assertEqual(env['SYNCUP_AI_MODE'],'direct')
+            self.assertEqual(env['OPENAI_API_KEY'],'synthetic-explicit-key')
 
     def test_mac_registration_preserves_old_manifest_and_exact_origin(self):
         target = self.home/'Library/Application Support/Google/Chrome/NativeMessagingHosts/com.syncup.collector.json'
@@ -136,6 +155,26 @@ class SetupHttp(unittest.TestCase):
         for headers in [ {'Origin':self.server.origin}, {'Cookie':cookie,'Origin':'https://evil.example'},
                          {'Cookie':cookie,'Origin':self.server.origin,'Host':'evil.example'} ]:
             self.assertEqual(self.call('POST','/install',headers,'{}')[0],403)
+
+    def test_reopen_renews_one_use_link_without_revoking_existing_tab(self):
+        first = self.server.browser_url().removeprefix(self.server.origin)
+        status, headers, _ = self.call('GET', first)
+        self.assertEqual(status, 303)
+        cookie = headers['Set-Cookie'].split(';')[0]
+        second = self.server.browser_url().removeprefix(self.server.origin)
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.call('GET', first)[0], 403)
+        self.assertEqual(self.call('GET', second)[0], 303)
+        self.assertEqual(self.call('GET', second)[0], 403)
+        self.assertEqual(self.call('GET', '/status', {'Cookie': cookie})[0], 200)
+
+    def test_bootstrap_can_only_be_consumed_once_concurrently(self):
+        from concurrent.futures import ThreadPoolExecutor
+        path = self.server.browser_url().removeprefix(self.server.origin)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            statuses = list(pool.map(lambda _: self.call('GET', path)[0], range(8)))
+        self.assertEqual(statuses.count(303), 1)
+        self.assertEqual(statuses.count(403), 7)
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

@@ -19,7 +19,7 @@ export function AppHeader() {
         <ProfileMenu
           name={name}
           detail={account ? "GitHub 로그인" : USE_MOCK ? "예시 모드 · 이 브라우저에만 저장" : undefined}
-          myPage={account ? "/start" : undefined}
+          myPage="/me"
           canLogout={!!account}
         />
       </div>

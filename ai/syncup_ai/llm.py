@@ -81,10 +81,13 @@ def _post(url: str, key: str, body: dict, timeout: float = 60) -> dict:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
-            return json.loads(res.read().decode("utf-8"))
+            raw = res.read(2 * 1024 * 1024 + 1)
+            if len(raw) > 2 * 1024 * 1024:
+                raise LLMError('AI response exceeds size limit')
+            return json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
         with e:
-            detail = e.read().decode("utf-8", "replace")[:300]
+            detail = e.read(1200).decode("utf-8", "replace")[:300]
         error = RetryableLLMError if e.code in RETRYABLE_STATUS else LLMError
         raise error(f"AI 서버 오류 {e.code}: {detail}", code=e.code) from e
     except urllib.error.URLError as e:
@@ -125,9 +128,10 @@ class OpenAICompatible:
 class OpenAIResponses:
     """OPENAI_API_KEY 기본 경로의 chat 모델 (POST /v1/responses)."""
 
-    def __init__(self, key: str, model: str = DEFAULT_CHAT_MODEL):
+    def __init__(self, key: str, model: str = DEFAULT_CHAT_MODEL, max_output_tokens: int | None = None):
         self.key = key
         self.model = model
+        self.max_output_tokens = max_output_tokens
         self.before_request = None
 
     def chat_json(self, system: str, user: str) -> dict:
@@ -141,6 +145,8 @@ class OpenAIResponses:
             "input": user,
             "text": {"format": {"type": "json_object"}},
         }
+        if self.max_output_tokens is not None:
+            body['max_output_tokens'] = self.max_output_tokens
         res = _post(f"{OPENAI_API}/responses", self.key, body)
         try:
             text = "".join(part["text"] for item in res["output"] for part in item.get("content", [])

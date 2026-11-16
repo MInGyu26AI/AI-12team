@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { input } from "@/components/ui/surface";
+import { consentUrl, isConsentRefusal } from "@/lib/auth-navigation";
 import { cn } from "@/lib/utils";
 import { DialogFrame, slidePrimary, slideSecondary } from "./dialog-frame";
 
@@ -24,6 +26,7 @@ export function CreateTeamDialog({ open, name, onClose, onCreated }: {
   const [busy, setBusy] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState("");
+  const [consentNeeded, setConsentNeeded] = useState(false); // 서버가 '먼저 약관에 동의해 주세요'(403)로 거절함
   const request = useRef<{ id: string; name: string; topic: string } | null>(null);
 
   const skip = () => {
@@ -32,7 +35,7 @@ export function CreateTeamDialog({ open, name, onClose, onCreated }: {
   };
 
   const create = async (event: React.FormEvent) => {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault(); setBusy(true); setError(""); setConsentNeeded(false);
     if (!request.current) request.current = { id: crypto.randomUUID(), name: team.trim(), topic: topic.trim() };
     setRetrying(true);
     try {
@@ -41,6 +44,7 @@ export function CreateTeamDialog({ open, name, onClose, onCreated }: {
       const data = await r.json();
       if (!r.ok) {
         if (r.status === 401) location.replace("/login?next=%2Fdashboard");
+        setConsentNeeded(isConsentRefusal(r.status, data.error));
         if (r.status < 500) { request.current = null; setRetrying(false); } // 거절은 팀을 만들지 않았다: 고쳐서 다시
         throw new Error(data.error);
       }
@@ -57,9 +61,12 @@ export function CreateTeamDialog({ open, name, onClose, onCreated }: {
       onClose={skip}
       title="팀 만들기"
       labelledBy="create-team-title"
+      size="large"
+      bodyClassName="px-8 py-7"
       footer={
-        <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-ink-3">건너뛰어도 사이드바 &lsquo;이용 방법&rsquo;에서 다시 열 수 있어요</p>
+        // 슬라이드 팝업의 아래 줄처럼 구분선과 안쪽 여백을 둔다 (전에는 가장자리에 붙어 답답했다)
+        <div className="flex min-h-20 shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-card-border px-8 py-4">
+          <p className="text-[13px] text-ink-3">건너뛰어도 사이드바 &lsquo;이용 방법&rsquo;에서 다시 열 수 있어요</p>
           <div className="flex gap-2">
             <button type="button" className={slideSecondary} onClick={skip}>건너뛰기</button>
             <button type="submit" form="create-team-form" className={slidePrimary} disabled={busy || !team.trim() || !topic.trim()}>
@@ -82,7 +89,12 @@ export function CreateTeamDialog({ open, name, onClose, onCreated }: {
           <h2 id="create-team-title" className="text-xl font-bold text-ink">{name}님, 함께할 팀을 만드세요</h2>
           <p className="text-[13px] text-ink-2">팀원에게 초대받았다면 받은 초대 링크를 열어 참여하면 돼요</p>
         </div>
-        {error && <p role="alert" className="bg-sensitive-soft p-3 text-sm text-sensitive">{error}</p>}
+        {error && (
+          <p role="alert" className="bg-sensitive-soft p-3 text-sm text-sensitive">
+            {error}
+            {consentNeeded && <> <Link href={consentUrl("/dashboard")} className="font-medium underline">약관 동의하러 가기</Link></>}
+          </p>
+        )}
         <form id="create-team-form" onSubmit={create} className="space-y-3">
           <label className="block space-y-2 text-[13px] font-medium text-ink">팀 이름
             <input required maxLength={80} value={team} disabled={busy || retrying} onChange={(e) => setTeam(e.target.value)} className={cn(input, "mt-2 border-input")} placeholder="예: 캠퍼스 길잡이" />

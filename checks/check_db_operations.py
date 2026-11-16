@@ -138,6 +138,9 @@ class ServerUpgrade(TeamIntegration):
         with psycopg.connect(self.api_dsn) as c:
             signed = c.execute('SELECT syncup.open_onboarding(%s,%s,%s,%s)',
                                ('1002','4'*64,onboarding_digest,'합성 가입 사용자')).fetchone()[0]
+            c.execute("SELECT syncup.onboarding_consent(%s,'beta-0.1','beta-0.1')", (onboarding_digest,))
+            c.execute("SELECT syncup.onboarding_profile_save(%s,%s,'합성대학교','합성학과','2학년','합성 역할')",
+                      (onboarding_digest,'합성 가입 사용자'))
             created = c.execute('SELECT syncup.onboarding_create_team(%s,%s,%s,%s)',
                                 (onboarding_digest,'9e702b17-b61b-40c1-a633-22c303158399',
                                  '합성 가입 팀','합성 가입 주제')).fetchone()[0]
@@ -148,6 +151,8 @@ class ServerUpgrade(TeamIntegration):
                       (self.teams['A'],'0123456789abcdef0123456789abcdef','synthetic-restore-notion-token-01',self.users['Dana']))
             c.execute("INSERT INTO syncup.team_repo_links(team_id,repo,token,actor) VALUES(%s,'team/repo',%s,%s)",
                       (self.teams['A'],'synthetic-restore-link-token-0001',self.users['Dana']))
+            # 서버 AI 사용량 기록 (ai_proxy.sql). 호출 시각과 사용자만 남는 표라 합성 한 줄이면 된다
+            c.execute('INSERT INTO syncup.ai_calls(user_id) VALUES(%s)', (self.users['Alice'],))
         before,_ = self.snapshot(self.admin_dsn)
         self.assertTrue(all(before.values()),'Every table (team_settings included) must contain synthetic records')
         self.admin('migrate-integration')

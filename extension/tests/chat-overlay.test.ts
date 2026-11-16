@@ -264,3 +264,35 @@ describe('"팀 기록 불러오기" 버튼', () => {
     expect(overlay.recordButton.disabled).toBe(false);
   });
 });
+
+// 0.2.20 아이콘·애니메이션은 그대로 두고, 다크 모드만 따라간다: ChatGPT 가 화면을 그린 뒤 dark 클래스를 붙여도 아이콘이 흰색이 되게
+describe('채팅 도구의 다크 모드 따라가기', () => {
+  afterEach(() => { document.documentElement.className = ''; document.body.innerHTML = ''; });
+
+  it('나중에 <html> 에 dark 가 붙거나 빠지면 다시 맞춘다', async () => {
+    document.documentElement.className = 'light';
+    const ov = createChatOverlay({});
+    document.body.append(ov.host);
+    expect(ov.host.style.colorScheme).toBe('light');
+    document.documentElement.className = 'dark';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ov.host.style.colorScheme).toBe('dark');
+    document.documentElement.className = 'light';
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ov.host.style.colorScheme).toBe('light');
+  });
+
+  it('다크 모드 아이콘 색은 흰색이다', () => {
+    const ov = createChatOverlay({});
+    expect(ov.host.shadowRoot!.querySelector('style')!.textContent).toMatch(/\.wrap \{ color: light-dark\(#20232a, #ffffff\); \}/);
+  });
+});
+
+describe('채팅 도구 툴팁 모양', () => {
+  it('툴팁은 각진 진갈색 상자다 (둥근 모서리 없음)', () => {
+    const ov = createChatOverlay({});
+    const tip = ov.host.shadowRoot!.querySelector('style')!.textContent!.match(/^\s*\.tip \{([^}]*)\}/m)![1];
+    expect(tip).toMatch(/border-radius: 0/);
+    expect(tip).toMatch(/background: #1D1A14/);
+  });
+});

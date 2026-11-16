@@ -39,6 +39,7 @@ def init(c, password_file):
     apply_sql(c, 'team_decisions.sql')
     apply_sql(c, 'team_upgrades.sql')
     apply_sql(c, 'team_onboarding.sql')
+    apply_sql(c, 'ai_proxy.sql')
 
 
 def migrate_integration(c):
@@ -73,6 +74,8 @@ def run(c, args):
     """Apply one subcommand; returns the new id for `user` and `team`."""
     if args.command == 'init':
         init(c, args.api_password_file)
+    elif args.command == 'migrate-ai':
+        apply_sql(c, 'ai_proxy.sql')
     elif args.command == 'migrate-integration':
         try:
             migrate_integration(c)
@@ -128,6 +131,7 @@ def parser():
     sub = p.add_subparsers(dest='command', required=True)
     sub.add_parser('init').add_argument('--api-password-file', type=Path, required=True)
     sub.add_parser('migrate-integration')
+    sub.add_parser('migrate-ai')
     for kind in ('user', 'team'):
         sub.add_parser(kind).add_argument('--name', required=True)
     member = sub.add_parser('member')
