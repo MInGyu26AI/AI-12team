@@ -61,8 +61,20 @@ export function InstallationGuide({ downloads, version }: { downloads: DesktopDo
       {ready && <Link href="/collect" className="mt-4 block font-semibold text-brand underline">연결 완료 · 대화 수집으로 가기</Link>}
     </section>
     <details className="rounded-xl border p-6"><summary className="cursor-pointer font-semibold">자동 분류를 사용하려면</summary>
-      <p className="mt-3 text-sm">서버 AI 지원 앱은 개인 API 키 없이 분류할 수 있어요. 이 PC에서 개인정보 검사를 통과한 내용만 SyncUp 서버를 거쳐 OpenAI로 보내며, 중계 내용은 서버에 저장하지 않아요.</p>
-      <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm"><li><a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="underline">Ollama</a>를 설치하고 실행하세요.</li><li>Ollama에서 <code>gemma4:e4b-it-qat</code> 모델을 준비하세요. 터미널에서는 <code>ollama pull gemma4:e4b-it-qat</code>로 받을 수 있어요. 모델이 없으면 대화는 PC에 보류돼요.</li><li>SyncUp 앱에서 팀을 선택하고 개인 키 입력 없이 수집기를 실행하세요. 서버 AI가 준비되지 않았거나 사용 한도를 넘으면 분류 대기로 남아요.</li></ol>
+      <p className="mt-3 text-sm leading-6">분류는 SyncUp이 제공하는 AI로 처리해요. 먼저 내 PC에서 개인정보를 검사할 수 있도록 Ollama와 검사 모델을 준비해 주세요.</p>
+      <ol className="mt-4 list-decimal space-y-5 pl-5 text-sm leading-6">
+        <li>
+          <p>내 컴퓨터에 맞는 Ollama를 설치하고 실행하세요.</p>
+          <a href="https://ollama.com/download" target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center border border-ink bg-ink px-4 py-2 font-semibold text-white hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink">Ollama 다운로드<span className="sr-only"> (새 탭)</span></a>
+        </li>
+        <li>
+          <p>터미널에서 아래 명령으로 개인정보 검사 모델을 내려받으세요.</p>
+          <pre className="mt-2 overflow-x-auto border bg-surface-soft p-3 text-sm"><code>ollama pull gemma4:e4b-it-qat</code></pre>
+          <p className="mt-2 text-xs text-muted-foreground">모델 다운로드가 끝날 때까지 기다려 주세요. 준비되지 않으면 대화는 PC에 보류돼요.</p>
+        </li>
+        <li>SyncUp 앱에서 팀을 선택하고 <strong>수집기 실행</strong>을 누르세요. 자동 수집은 Chrome 확장 팝업에서 켜요.</li>
+      </ol>
+      <p className="mt-4 text-xs leading-6 text-muted-foreground">개인정보 검사를 통과한 내용만 SyncUp 서버를 거쳐 OpenAI로 보내며, 중계 내용은 서버에 저장하지 않아요. 서버 AI가 준비되지 않았거나 사용 한도를 넘으면 분류가 대기해요.</p>
     </details>
     <p className="text-sm text-muted-foreground">휴대폰에서는 가입과 팀 생성까지 진행할 수 있지만, 대화 수집은 Mac·Windows의 Chrome과 SyncUp 앱이 필요해요.</p>
   </div>;
